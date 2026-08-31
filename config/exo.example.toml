@@ -1,0 +1,13 @@
+# r2b --ask overlay (local exo cluster). No cloud key is required.
+# Set `model` to an id returned by the exo server.
+
+[llm]
+provider = "exo"
+transport = "responses"
+model = "auto"
+api_key_env = ""
+base_url = "http://127.0.0.1:52415/v1"
+enable_fallback = false
+temperature = 0.2
+max_tokens = 4096
+compact_context = true

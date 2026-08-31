@@ -1,0 +1,37 @@
+__pycache__/
+*.pyc
+.venv/
+dist/
+*.egg-info/
+/~
+/${HOME}/
+.env
+.env.*
+config/local.toml
+.mypy_cache/
+.pytest_cache/
+coverage/
+.coverage
+.coverage.*
+.DS_Store
+web/frontend/node_modules/
+web/frontend/dist/
+web/frontend/.vite/
+web/frontend/.npm-cache/
+
+# Ghidra build outputs
+*.log
+output/
+
+.dry_run_env.*
+
+# Large local firmware test image (~31MB). Kept out of git history to avoid
+# bloating the repo; use Git LFS if this needs to be shared/versioned.
+/ax3000v2-up-us-ver1-1-2-P1-sign_2023-02-21_19.16.48.bin
+samples/firmware/
+# Host-copied aarch64 ELFs; regenerate with scripts/fetch_samples.sh. Manifest stays.
+samples/bin/arm64/vendor/
+work/
+
+# Accidental local dirs
+MagicMock/

@@ -1,0 +1,49 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: r2b-backend:latest
+    restart: unless-stopped
+    ports:
+      - "${R2B_WEB_PORT:-5050}:5050"
+    environment:
+      R2B_WEB_HOST: "0.0.0.0"
+      R2B_WEB_PORT: "${R2B_WEB_PORT:-5050}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      COMPILER_SERVICE_URL: "http://compiler:8080"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - compile-volume:/compile
+    depends_on:
+      - compiler
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: r2b-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${R2B_FRONTEND_PORT:-5173}:5173"
+    environment:
+      VITE_R2B_API_BASE: "http://backend:5050"
+
+  compiler:
+    build:
+      context: .
+      dockerfile: Dockerfile.compiler
+    image: r2b-compiler:latest
+    restart: unless-stopped
+    volumes:
+      - compile-volume:/compile
+    # Keep container running for exec-based compilation
+    command: ["tail", "-f", "/dev/null"]
+    user: compiler
+
+volumes:
+  compile-volume:

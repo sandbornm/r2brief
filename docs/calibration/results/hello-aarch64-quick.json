@@ -1,0 +1,491 @@
+{
+  "schema_version": "r2b.briefing.v1",
+  "prompt_id": "r2b.prompt.v2",
+  "binary": "/private/tmp/r2b-aarch64-cases/hello-pkg/usr/bin/hello",
+  "subject": {
+    "name": "hello",
+    "binary": "/private/tmp/r2b-aarch64-cases/hello-pkg/usr/bin/hello",
+    "format": "elf",
+    "arch": "arm64/64",
+    "os": "linux",
+    "subject_class": "linux_elf",
+    "function_count": 48,
+    "import_count": 60,
+    "dangerous_imports": [
+      "memcpy"
+    ],
+    "interesting_imports": [],
+    "risk_level": "medium",
+    "risk_factors": [
+      "3 potentially dangerous function(s)",
+      "2 suspicious string(s) found"
+    ],
+    "size_bytes": 68232,
+    "triage_scope": "focused",
+    "scope_warnings": [],
+    "stripped": true,
+    "issues": [],
+    "firmware_kind": "executable",
+    "wrapper_family": null,
+    "carved_count": 0
+  },
+  "summary": "hello looks like elf; arm64/64; 48 functions; imports memcpy. First region: Entry / entry.",
+  "regions": [
+    {
+      "id": "entry:entry",
+      "title": "Entry / entry",
+      "why": "Start of hello; establish calling convention and first callees before hunting bugs.",
+      "score": 89,
+      "tags": [
+        "entry",
+        "disasm"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "disasm",
+        "text": ";-- entry0:\n            ;-- pc:\n            0x00001c00      5f2403d5       bti c\n            0x00001c04      1d0080d2       mov x29, 0\n            0x00001c08      1e0080d2       mov x30, 0\n            0x00001c0c      e50300aa       mov x5, x0\n            0x00001c10      e10340f9       ldr x1, [sp]\n            0x00001c14      e2230091       add x2, sp, 8\n            0x00001c18      e6030091       mov x6, sp\n            0x00001c1c      e00000d0       adrp x0, 0x1f000",
+        "address": "0x1c00",
+        "function": "entry",
+        "artifact_id": null,
+        "xref": null
+      },
+      "ask": "REGION 1/2: Entry / entry (entry 0x1c00)\nBinary: hello arm64/64 elf\nWhy this region: Start of hello; establish calling convention and first callees before hunting bugs.\n\n```asm\n;-- entry0:\n            ;-- pc:\n            0x00001c00      5f2403d5       bti c\n            0x00001c04      1d0080d2       mov x29, 0\n            0x00001c08      1e0080d2       mov x30, 0\n            0x00001c0c      e50300aa       mov x5, x0\n            0x00001c10      e10340f9       ldr x1, [sp]\n            0x00001c14      e2230091       add x2, sp, 8\n            0x00001c18      e6030091       mov x6, sp\n            0x00001c1c      e00000d0       adrp x0, 0x1f000\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 addr=0x1c00 artifact=entry:entry xref=entry]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite\n...[truncated]",
+      "next_actions": [
+        "r2: `pdf @ 0x1c00` and list calls (`agc`).",
+        "If stripped, rename this function after the first identified callee."
+      ],
+      "evidence_refs": [
+        {
+          "action": 7,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "cfc96bf1a8bb22189b111e404ec35585faa1fc42bb9968c864abcbd0ae3e0073"
+        }
+      ]
+    },
+    {
+      "id": "imports:plt",
+      "title": "PLT / imported libc surface",
+      "why": "Dangerous or network imports are the cheapest cross-refs to follow.",
+      "score": 78,
+      "tags": [
+        "imports",
+        "plt",
+        "dangerous"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "memcpy",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:plt",
+        "xref": "memcpy"
+      },
+      "ask": "REGION 2/2: PLT / imported libc surface\nBinary: hello arm64/64 elf\nWhy this region: Dangerous or network imports are the cheapest cross-refs to follow.\n\n```text\nmemcpy\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:plt xref=memcpy]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.<name>` for each dangerous import.",
+        "Rank callers of system/strcpy/sprintf before reading random large functions."
+      ],
+      "evidence_refs": [
+        {
+          "action": 7,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "cfc96bf1a8bb22189b111e404ec35585faa1fc42bb9968c864abcbd0ae3e0073"
+        }
+      ]
+    }
+  ],
+  "overall_ask": "PROFESSIONAL TRIAGE \u2014 facts and region titles only. No lecture.\nBinary: hello\nFormat/arch: elf arm64/64\nFunctions: 48; imports: 60\nDangerous imports: memcpy\nAutoprofile risk: medium\nsubject_class: linux_elf\n\nRanked regions:\n1. Entry / entry @ entry 0x1c00 \u2014 Start of hello; establish calling convention and first callees before hunting bugs.\n2. PLT / imported libc surface \u2014 Dangerous or network imports are the cheapest cross-refs to follow.\n\nAnswer in exactly 6 bullets, each ending with a cite tag [tool= addr= artifact= xref=]:\n1. What is actually unusual (not 'it is firmware')\n2. Highest-leverage region and the claim it supports\n3. Best next ELF/function \u2014 prefer a carved child or named symbol over size\n4. What is still unknown (missing carve, stripped names, dead tool)\n5. Exact next r2 command or `r2b brief` on a child\n6. Exact next unpack step if this is still a wrapper; else 'already an ELF'\nRules: defensive only; no exploit steps; do not invent symbols; names/types you add are `proposed`.\n\nAnalyst next steps already queued:\n- This is already an ELF. Rank named symbols / entry; do not unsquash it.\n- r2: `axt @ sym.imp.memcpy` and brief that caller.\n- Open Entry / entry at 0x1c00 and send that region ask first.\n- Binary looks stripped: rename from Ghidra signatures before asking about 'unknown functions'.",
+  "next_steps": [
+    "This is already an ELF. Rank named symbols / entry; do not unsquash it.",
+    "r2: `axt @ sym.imp.memcpy` and brief that caller.",
+    "Open Entry / entry at 0x1c00 and send that region ask first.",
+    "Binary looks stripped: rename from Ghidra signatures before asking about 'unknown functions'."
+  ],
+  "provenance": {
+    "schema_version": "r2b.provenance.v1",
+    "producer": {
+      "name": "r2b",
+      "version": "0.1.0"
+    },
+    "input": {
+      "path": "/private/tmp/r2b-aarch64-cases/hello-pkg/usr/bin/hello",
+      "name": "hello",
+      "size_bytes": 68232,
+      "sha256": "ef8b324e9d8de673554fb5dad0a69ffc9e6c20b93e92fd088745b3243aaad843"
+    },
+    "plan": {
+      "quick": true,
+      "deep": false,
+      "run_angr": false,
+      "persist_trajectory": false,
+      "profile": "triage"
+    },
+    "config": {
+      "analysis": {
+        "enable_angr": false,
+        "enable_ghidra": false,
+        "enable_frida": false,
+        "enable_gef": false,
+        "gef_timeout": 60,
+        "gef_max_instructions": 10000,
+        "require_elf": false
+      },
+      "extract": {
+        "enable": false,
+        "extract_elf": false,
+        "timeout_s": 60,
+        "max_files": 200,
+        "max_bytes": 67108864,
+        "max_depth": 2
+      },
+      "performance": {
+        "parallel_functions": 4
+      },
+      "ghidra": {
+        "use_bridge": false,
+        "max_decompile_functions": 20,
+        "max_types": 100,
+        "max_strings": 200
+      }
+    },
+    "adapter_status": [
+      {
+        "adapter": "sniff",
+        "available": null,
+        "actions": [
+          1
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "binary_format",
+        "available": true,
+        "actions": [
+          2
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "autoprofile",
+        "available": true,
+        "actions": [
+          3
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "firmware",
+        "available": true,
+        "actions": [
+          4
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "libmagic",
+        "available": true,
+        "actions": [
+          5
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "runtime",
+        "available": null,
+        "actions": [
+          6
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "artifact_dag",
+        "available": true,
+        "actions": [
+          8
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "radare2",
+        "available": true,
+        "actions": [
+          7
+        ],
+        "status": "partial"
+      },
+      {
+        "adapter": "capstone",
+        "available": true,
+        "actions": [],
+        "status": "not_run"
+      },
+      {
+        "adapter": "dwarf",
+        "available": true,
+        "actions": [],
+        "status": "not_run"
+      }
+    ],
+    "actions": [
+      {
+        "sequence": 1,
+        "action": "sniff.quick",
+        "adapter": "sniff",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/sniff",
+        "output_sha256": "d0ad04cafb8f8ae972da6d5d1fd40898af69fc5a674908da566827dfc27c57d2",
+        "summary": {
+          "duration_ms": 69,
+          "keys": [
+            "file",
+            "hex_head",
+            "mode",
+            "path",
+            "readelf",
+            "sha256",
+            "size_bytes",
+            "strings",
+            "tools"
+          ]
+        }
+      },
+      {
+        "sequence": 2,
+        "action": "binary_format.quick",
+        "adapter": "binary_format",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/binary_format",
+        "output_sha256": "731fd29a5d572ea8b9e29d5605969825b5af74f087994fe10e5ab25ce1ac6cdf",
+        "summary": {
+          "duration_ms": 1,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "arch",
+            "bits",
+            "confidence",
+            "endianness",
+            "entrypoint",
+            "file_type",
+            "format",
+            "machine",
+            "parser",
+            "sections"
+          ]
+        }
+      },
+      {
+        "sequence": 3,
+        "action": "autoprofile.quick",
+        "adapter": "autoprofile",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/autoprofile",
+        "output_sha256": "3c5857d5e34f98109fad6e5f5924fbcc9353a38d4a193ac7637146b740c674a3",
+        "summary": {
+          "duration_ms": 24,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "mode",
+            "profile"
+          ]
+        }
+      },
+      {
+        "sequence": 4,
+        "action": "firmware.quick",
+        "adapter": "firmware",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/firmware",
+        "output_sha256": "4d5e370995282e144bd5e13c42b35c36efff3a376cf63c6d34b920d3fd566a8b",
+        "summary": {
+          "duration_ms": 10,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "carved_targets",
+            "container_type",
+            "embedded_artifacts",
+            "entropy",
+            "extraction",
+            "fanout_tasks",
+            "is_elf",
+            "is_executable",
+            "mode",
+            "notes",
+            "recommended_targets",
+            "scan",
+            "sha256",
+            "size_bytes",
+            "string_signals",
+            "top_level_format"
+          ]
+        }
+      },
+      {
+        "sequence": 5,
+        "action": "libmagic.quick",
+        "adapter": "libmagic",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/libmagic",
+        "output_sha256": "95c2b4a554125cc56d1935020e0bc5231811f40cd29a8e9935de0718b6146de9",
+        "summary": {
+          "duration_ms": 9,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "description",
+            "mime"
+          ]
+        }
+      },
+      {
+        "sequence": 6,
+        "action": "runtime.quick",
+        "adapter": "runtime",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/runtime",
+        "output_sha256": "f4d6fb9c7eca51ec60139c39dbcfc6c5f0b8bf2454ab8b2a6ba488df8d6d8898",
+        "summary": {
+          "duration_ms": 2,
+          "keys": [
+            "abi_version",
+            "arch",
+            "bits",
+            "endianness",
+            "entrypoint",
+            "format",
+            "interp",
+            "needed",
+            "osabi"
+          ]
+        }
+      },
+      {
+        "sequence": 7,
+        "action": "radare2.quick",
+        "adapter": "radare2",
+        "stage": "quick",
+        "status": "partial",
+        "result_ref": "/quick_scan/radare2",
+        "output_sha256": "cfc96bf1a8bb22189b111e404ec35585faa1fc42bb9968c864abcbd0ae3e0073",
+        "summary": {
+          "duration_ms": 51,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "commands",
+            "entry_disassembly",
+            "entry_function",
+            "entry_points",
+            "headers",
+            "imports",
+            "info",
+            "interesting_symbols",
+            "sections",
+            "strings",
+            "symbols"
+          ]
+        }
+      },
+      {
+        "sequence": 8,
+        "action": "artifact_dag.build",
+        "adapter": "artifact_dag",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/artifact_dag",
+        "output_sha256": "8fe11918234ec6c84183040580f1c82ce0eb669ca401aa3276f9a78b0b2f010d",
+        "summary": {
+          "elapsed_ms": 2,
+          "keys": [
+            "edges",
+            "nodes",
+            "notes",
+            "schema_version",
+            "sha256",
+            "summary",
+            "tools"
+          ]
+        }
+      }
+    ],
+    "replay": {
+      "input_token": "{input}",
+      "expected_sha256": "ef8b324e9d8de673554fb5dad0a69ffc9e6c20b93e92fd088745b3243aaad843",
+      "argv": [
+        "r2b",
+        "brief",
+        "{input}",
+        "--quick",
+        "--no-save",
+        "--json"
+      ],
+      "shell": "r2b brief \"$R2B_INPUT\" --quick --no-save --json",
+      "shell_uses_current_config": true,
+      "python": "import os\nfrom pathlib import Path\nfrom r2b import AnalysisOptions, analyze\nfrom r2b.config import AppConfig\n\nbinary = Path(os.environ.get('R2B_INPUT', '/private/tmp/r2b-aarch64-cases/hello-pkg/usr/bin/hello'))\nexpected_sha256 = 'ef8b324e9d8de673554fb5dad0a69ffc9e6c20b93e92fd088745b3243aaad843'\nconfig = AppConfig.model_validate({'analysis': {'enable_angr': False, 'enable_ghidra': False, 'enable_frida': False, 'enable_gef': False, 'gef_timeout': 60, 'gef_max_instructions': 10000, 'require_elf': False}, 'extract': {'enable': False, 'extract_elf': False, 'timeout_s': 60, 'max_files': 200, 'max_bytes': 67108864, 'max_depth': 2}, 'performance': {'parallel_functions': 4}, 'ghidra': {'use_bridge': False, 'max_decompile_functions': 20, 'max_types': 100, 'max_strings': 200}})\nreport = analyze(\n    binary,\n    config=config,\n    options=AnalysisOptions(\n        profile='triage',\n        extract=False,\n    ),\n)\nassert report.payload['provenance']['input']['sha256'] == expected_sha256\nprint(report.briefing['summary'])\n"
+    }
+  },
+  "handoff": {
+    "schema_version": "r2b.handoff.v1",
+    "binary": "/private/tmp/r2b-aarch64-cases/hello-pkg/usr/bin/hello",
+    "record_id": null,
+    "summary": "hello looks like elf; arm64/64; 48 functions; imports memcpy. First region: Entry / entry.",
+    "subject": {
+      "name": "hello",
+      "format": "elf",
+      "arch": "arm64/64",
+      "stripped": true,
+      "dangerous_imports": [
+        "memcpy"
+      ],
+      "risk_level": "medium",
+      "subject_class": "linux_elf",
+      "size_bytes": 68232,
+      "triage_scope": "focused",
+      "scope_warnings": []
+    },
+    "regions": [
+      {
+        "id": "entry:entry",
+        "title": "Entry / entry",
+        "addr": "0x1c00",
+        "why": "Start of hello; establish calling convention and first callees before hunting bugs.",
+        "tags": [
+          "entry",
+          "disasm"
+        ],
+        "snippet": ";-- entry0:\n            ;-- pc:\n            0x00001c00      5f2403d5       bti c\n            0x00001c04      1d0080d2       mov x29, 0\n            0x00001c08      1e0080d2       mov x30, 0\n            0x00001c0c      e50300aa       mov x5, x0\n            0x00001c10      e10340f9       ldr x1, [sp]\n            0x00001c14      e2230091       add x2, sp, 8\n            0x00001c18      e6030091       mov x6, sp\n            0x00001c1c      e00000d0       adrp x0, 0x1f000"
+      },
+      {
+        "id": "imports:plt",
+        "title": "PLT / imported libc surface",
+        "addr": null,
+        "why": "Dangerous or network imports are the cheapest cross-refs to follow.",
+        "tags": [
+          "imports",
+          "plt",
+          "dangerous"
+        ],
+        "snippet": "memcpy"
+      }
+    ],
+    "next_argv": [
+      "r2b decompile /private/tmp/r2b-aarch64-cases/hello-pkg/usr/bin/hello 0x1c00 --json"
+    ],
+    "requires_scope": false,
+    "scope_options": []
+  }
+}

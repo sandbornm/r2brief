@@ -1,0 +1,17 @@
+# Flavor: lab — workstation. `r2b setup --flavor lab --apply`
+# Extra `r2` wraps radare2. angr/Ghidra opt-in. Extractors off until --extract.
+
+[analysis]
+require_elf = false
+enable_angr = false
+enable_ghidra = false
+enable_gef = false
+enable_frida = false
+
+[extract]
+enable = false
+extract_elf = false
+
+[llm]
+compact_context = true
+enable_fallback = false

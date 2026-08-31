@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --font-mono: 'Geist Mono', 'IBM Plex Mono', 'SF Mono', ui-monospace, monospace;
+  --font-sans: 'Geist', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --bg: #0a0908;
+  --fg: #eceae4;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+::selection {
+  background: rgba(200, 169, 106, 0.28);
+}
+
+a {
+  color: #e4d4b4;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code, pre {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+pre {
+  border-radius: 4px;
+  padding: 12px;
+  overflow-x: auto;
+  line-height: 1.5;
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 1px solid #c8a96a;
+  outline-offset: 2px;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Utility classes */
+.mono {
+  font-family: var(--font-mono);
+}
+
+.sans {
+  font-family: var(--font-sans);
+}
+
+/* Smooth animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.25s ease-out;
+}
+
+.slide-in {
+  animation: slideIn 0.2s ease-out;
+}
+
+/* Smooth transitions for interactive elements */
+.MuiButton-root,
+.MuiIconButton-root,
+.MuiTab-root,
+.MuiChip-root,
+.MuiSelect-root {
+  transition: all 0.15s ease !important;
+}
+
+.MuiPaper-root {
+  transition: box-shadow 0.2s ease, background-color 0.2s ease !important;
+}
+
+.MuiDrawer-paper {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.MuiPopover-paper {
+  animation: fadeInUp 0.15s ease-out;
+}
+
+.MuiTooltip-tooltip {
+  animation: fadeIn 0.1s ease-out;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}

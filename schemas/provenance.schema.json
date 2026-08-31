@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sandbornm/r2brief/schemas/provenance.schema.json",
+  "title": "r2b Analysis Provenance",
+  "description": "Portable input identity, analysis recipe, adapter status, and evidence pointers.",
+  "type": "object",
+  "required": ["schema_version", "producer", "input", "plan", "config", "adapter_status", "actions", "replay"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "const": "r2b.provenance.v1" },
+    "producer": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "r2b" },
+        "version": { "type": "string" }
+      }
+    },
+    "input": {
+      "type": "object",
+      "required": ["path", "name", "size_bytes", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "name": { "type": "string" },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "plan": { "type": "object" },
+    "config": { "type": "object" },
+    "adapter_status": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["adapter", "available", "actions", "status"],
+        "properties": {
+          "adapter": { "type": "string" },
+          "available": { "type": ["boolean", "null"] },
+          "actions": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+          "status": { "type": "string" }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sequence", "action", "adapter", "stage", "status", "result_ref", "output_sha256", "summary"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 1 },
+          "action": { "type": "string" },
+          "adapter": { "type": "string" },
+          "stage": { "type": "string" },
+          "status": { "type": "string" },
+          "result_ref": { "type": ["string", "null"] },
+          "output_sha256": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "summary": { "type": "object" }
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "required": ["input_token", "expected_sha256", "argv", "shell", "python"],
+      "properties": {
+        "input_token": { "const": "{input}" },
+        "expected_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "argv": { "type": "array", "items": { "type": "string" } },
+        "shell": { "type": "string" },
+        "python": { "type": "string" },
+        "shell_uses_current_config": { "type": "boolean" }
+      }
+    }
+  }
+}

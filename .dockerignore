@@ -1,0 +1,13 @@
+.git
+.gitignore
+.venv
+artifacts
+data
+dist
+htmlcov
+node_modules
+web/frontend/dist
+web/frontend/node_modules
+*.egg-info
+*.py[cod]
+__pycache__

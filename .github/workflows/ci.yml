@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install backend
+        run: uv sync --locked
+      - name: Ruff
+        run: uv run ruff check src tests
+      - name: Typed public core
+        run: uv run ty check src/r2b/api.py src/r2b/bundle.py src/r2b/analysis/provenance.py src/r2b/analysis/review.py
+      - name: Validate JSON schemas
+        run: |
+          python -m json.tool schemas/analysis_bundle.schema.json > /dev/null
+          python -m json.tool schemas/analysis_record.schema.json > /dev/null
+          python -m json.tool schemas/artifact_dag.schema.json > /dev/null
+          python -m json.tool schemas/briefing.schema.json > /dev/null
+          python -m json.tool schemas/review.schema.json > /dev/null
+          python -m json.tool schemas/pilot.schema.json > /dev/null
+          python -m json.tool schemas/setup.schema.json > /dev/null
+      - name: Pytest
+        run: |
+          uv run pytest tests/unit tests/integration/test_api.py::TestChatsEndpoint::test_chat_bundle_exports_json_and_markdown \
+            --cov=r2b --cov-report=term --cov-fail-under=45
+      - name: CLI smoke
+        run: |
+          uv run r2b --version
+          uv run r2b env --json
+          uv run r2b brief /bin/ls --quick --json > "$RUNNER_TEMP/brief.json"
+          python -c "
+          import json, pathlib, sys
+          data = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          schema = json.loads(pathlib.Path('schemas/briefing.schema.json').read_text())
+          missing = [k for k in schema['required'] if k not in data]
+          assert data.get('schema_version') == 'r2b.briefing.v1', data.get('schema_version')
+          assert 'handoff' in data and 'next_argv' in data['handoff']
+          assert 'ask' not in data['handoff']
+          assert not missing, missing
+          " "$RUNNER_TEMP/brief.json"
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+      - name: Install frontend
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          chmod +x scripts/package_release.sh
+          SKIP_FRONTEND=1 ./scripts/package_release.sh
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2b-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

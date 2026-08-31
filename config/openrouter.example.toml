@@ -1,0 +1,35 @@
+# r2b --ask overlay (OpenRouter). Key lives in gitignored `.env`, never here:
+#   echo 'OPENROUTER_API_KEY=sk-or-...' >> .env
+#   cp config/openrouter.example.toml config/local.toml
+#   # or: cat this file >> config/local.toml after a flavor overlay
+#
+# One key, any model id from https://openrouter.ai/models
+# Leave enable_fallback off so a harness is not surprised by a second host.
+
+[llm]
+provider = "openrouter"
+transport = "chat_completions"
+api_key_env = "OPENROUTER_API_KEY"
+base_url = "https://openrouter.ai/api/v1"
+enable_fallback = false
+temperature = 0.2
+max_tokens = 2048
+compact_context = true
+
+# Pick one. Swap the id; do not change the host.
+model = "anthropic/claude-sonnet-4.5"
+
+# Cheap / fast region asks (omp, Qwen-class):
+# model = "qwen/qwen3-coder"
+# model = "google/gemini-2.5-flash"
+# model = "deepseek/deepseek-chat"
+# model = "meta-llama/llama-4-maverick"
+
+# Stronger brief --ask / naming:
+# model = "anthropic/claude-sonnet-4.5"
+# model = "openai/gpt-5"
+# model = "google/gemini-2.5-pro"
+# model = "anthropic/claude-opus-4.1"
+
+# Stealth / lab:
+# model = "stealth/ox-alpha"

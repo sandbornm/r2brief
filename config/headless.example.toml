@@ -1,0 +1,23 @@
+# r2b headless / Pi overlay. Merge with an --ask overlay via R2B_CONFIG.
+#   export R2B_CONFIG=$PWD/config/headless.example.toml
+#
+# Do not run Ghidra on a Raspberry Pi. analyzeHeadless wants a multi-GB Java
+# heap; firmware blobs will swap or OOM. Use sniff + firmware + radare2 here,
+# and decompile on a bigger box if you need C.
+# angr-mcp on :8770 is optional; kill it on 8 GB hosts.
+# Lab tools: export R2B_TOOL_PATH=$HOME/work/envs/re/bin
+
+[analysis]
+require_elf = false
+enable_angr = false
+enable_ghidra = false
+enable_gef = false
+enable_frida = false
+max_binary_size = "200MB"
+
+[ghidra]
+use_bridge = false
+
+[llm]
+compact_context = true
+context_budget_chars = 16000

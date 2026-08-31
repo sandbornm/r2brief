@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Standalone environment check script."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import sys
+
+# Ensure local src/ is on sys.path when running via `uv run scripts/...`
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = PROJECT_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from r2b.config import load_config  # noqa: E402
+from r2b.environment import detect_environment  # noqa: E402
+from r2b.utils import to_json  # noqa: E402
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Inspect r2b runtime environment")
+    parser.add_argument("--config", type=Path, help="Optional config override", default=None)
+    parser.add_argument("--json", action="store_true", help="Emit JSON")
+    args = parser.parse_args()
+
+    config = load_config(args.config)
+    report = detect_environment(config)
+
+    if args.json:
+        print(to_json(report))
+        return
+
+    print(f"Python: {report.python_version}")
+    print(f"uv available: {report.uv_available}")
+    print(f"OpenAI key present: {report.openai_key_present}")
+    if report.llm:
+        print(f"LLM provider: {report.llm.provider}")
+        print(f"LLM model: {report.llm.model}")
+        print(f"LLM key env: {report.llm.api_key_env}")
+        print(f"LLM key present: {report.llm.api_key_present}")
+        print(f"LLM base URL: {report.llm.base_url or '-'}")
+    for tool in report.tools:
+        status = "ok" if tool.available else "missing"
+        detail = tool.version or tool.details or ""
+        print(f" - {tool.name}: {status} {detail}")
+    if report.ghidra:
+        print(f"Ghidra ready: {report.ghidra.is_ready}")
+        for issue in report.ghidra.issues:
+            print(f"   issue: {issue}")
+        for note in report.ghidra.notes:
+            print(f"   note: {note}")
+    for issue in report.issues:
+        print(f"ISSUE: {issue}")
+
+
+if __name__ == "__main__":
+    main()

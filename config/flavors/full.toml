@@ -1,0 +1,18 @@
+# Flavor: full — 16 GB+ x86_64. `r2b setup --flavor full --apply`
+# Extra `analyzers` wraps r2 + angr. Runtime instrumentation remains an
+# explicit `dynamic` install and an explicit per-run enable.
+
+[analysis]
+require_elf = false
+enable_angr = true
+enable_ghidra = true
+enable_gef = false
+enable_frida = false
+
+[extract]
+enable = false
+extract_elf = false
+
+[llm]
+compact_context = true
+enable_fallback = false

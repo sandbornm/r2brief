@@ -1,0 +1,70 @@
+{
+  "schema_version": "r2b.samples_manifest.v1",
+  "note": "Host-copied aarch64 ELFs (this lab runs arm64 natively). Binaries are gitignored; regenerate with scripts/fetch_samples.sh.",
+  "entries": [
+    {
+      "file": "vendor/openssl",
+      "sha256": "df4989eb4b9e4238fcb411024489f76e79d5407bb07dda68a90e3fd3dd99e4d4",
+      "size": 1148344,
+      "arch": "aarch64",
+      "source_package": "openssl",
+      "package_version": "3.6.3-1"
+    },
+    {
+      "file": "vendor/sshd",
+      "sha256": "98c0874b64ff6700e8645af0c718b3e356109f3b6bffa982d3704982de9e5cb0",
+      "size": 461712,
+      "arch": "aarch64",
+      "source_package": "openssh-server",
+      "package_version": "1:10.3p1-5"
+    },
+    {
+      "file": "vendor/curl",
+      "sha256": "67659a79375e9d00bebf504a801a2fd8dd8c85f8de75208f8cc5fcdab29a1d37",
+      "size": 330232,
+      "arch": "aarch64",
+      "source_package": "curl",
+      "package_version": "8.21.0-2"
+    },
+    {
+      "file": "vendor/wget",
+      "sha256": "cd04264b3e05e2e47db4e0a1e2cbb30dadff6ea1c64dc28c3e1729932a10291e",
+      "size": 478496,
+      "arch": "aarch64",
+      "source_package": "wget",
+      "package_version": "1.25.0-3"
+    },
+    {
+      "file": "vendor/find",
+      "sha256": "f4e3bf68b179be9c8052d5b216837b0f2e30ba73d9b2107cfcf31760bc97d48b",
+      "size": 331024,
+      "arch": "aarch64",
+      "source_package": "findutils",
+      "package_version": "4.11.0-2"
+    },
+    {
+      "file": "vendor/xargs",
+      "sha256": "3e278493fcec4f942414ec0e863ddd909186a64d021a948957f6875b3a61c241",
+      "size": 133424,
+      "arch": "aarch64",
+      "source_package": "findutils",
+      "package_version": "4.11.0-2"
+    },
+    {
+      "file": "vendor/busybox",
+      "sha256": "f79efdd58a1dc2fcd7df3984a5b24925c87717c494116c1a054015b37d9e8418",
+      "size": 985920,
+      "arch": "aarch64",
+      "source_package": "busybox",
+      "package_version": "1:1.38.0-3"
+    },
+    {
+      "file": "vendor/tcpdump",
+      "sha256": "45de747b2f17d3baa4a9a4726dae8859a45388a2c6de4a9b55ffa57b9427b65d",
+      "size": 1327016,
+      "arch": "aarch64",
+      "source_package": "tcpdump",
+      "package_version": "4.99.6-2"
+    }
+  ]
+}

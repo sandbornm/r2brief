@@ -1,0 +1,17 @@
+# r2b --ask overlay (Z.ai / GLM). Copy to config/local.toml (gitignored) or:
+#   export R2B_CONFIG=/path/to/this/file
+#   export ZAI_API_KEY=...          # never commit the key
+#   echo 'ZAI_API_KEY=...' >> .env  # gitignored, auto-loaded
+#
+# Current Z.ai chat-completions endpoint and model.
+
+[llm]
+provider = "glm"
+transport = "chat_completions"
+model = "glm-5.1"
+api_key_env = "ZAI_API_KEY"
+base_url = "https://api.z.ai/api/paas/v4/"
+enable_fallback = false
+temperature = 0.2
+max_tokens = 2048
+compact_context = true

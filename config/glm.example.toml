@@ -1,0 +1,23 @@
+# r2b --ask overlay (GLM / Zhipu). Copy to config/local.toml (gitignored) or:
+#   export R2B_CONFIG=/path/to/this/file
+#
+# Put the key in the environment — never in this file:
+#   echo 'GLM_API_KEY=...' >> .env          # gitignored, auto-loaded
+#   export GLM_API_KEY=...                  # or ZHIPUAI_API_KEY / ZAI_API_KEY
+#   export R2B_LLM_PROVIDER=glm             # enough if you skip this overlay
+#
+# Official China (open.bigmodel.cn) — GLM_API_KEY / ZHIPUAI_API_KEY
+# International Z.ai — ZAI_API_KEY + /api/paas/v4 + glm-5.1
+
+[llm]
+provider = "glm"
+transport = "chat_completions"
+model = "glm-5.1"
+api_key_env = "GLM_API_KEY"
+# base_url is inferred from the key name if omitted:
+#   GLM_API_KEY / ZHIPUAI_API_KEY → https://open.bigmodel.cn/api/paas/v4
+#   ZAI_API_KEY                   → https://api.z.ai/api/paas/v4
+enable_fallback = false
+temperature = 0.2
+max_tokens = 2048
+compact_context = true

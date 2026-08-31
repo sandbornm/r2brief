@@ -55,7 +55,7 @@
       "purpose": "Teaching overflow with a real strcpy lead",
       "subject_class": "linux_elf",
       "arch": "arm64/64",
-      "region_ids": ["entry:main", "imports:plt"],
+      "region_ids": ["entry:main", "imports:memory"],
       "dangerous_imports": ["strcpy"]
     },
     {
@@ -63,7 +63,7 @@
       "purpose": "Native Mach-O contrast with fortified import spelling",
       "subject_class": "macho",
       "arch": "arm64/64",
-      "region_ids": ["entry:entry", "imports:plt"],
+      "region_ids": ["entry:entry", "imports:memory"],
       "dangerous_imports": ["__strcpy_chk"]
     },
     {
@@ -71,7 +71,7 @@
       "purpose": "AArch64 fixture used for the brief, verify, decompile loop",
       "subject_class": "linux_elf",
       "arch": "arm64/64",
-      "region_ids": ["entry:main", "imports:plt"],
+      "region_ids": ["entry:main", "imports:memory"],
       "dangerous_imports": ["strcpy"]
     }
   ]

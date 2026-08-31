@@ -343,7 +343,7 @@ def test_briefing_does_not_dump_full_adapter_bags(tmp_path: Path):
     briefing = build_briefing(analysis)
     dumped = render_briefing_markdown(briefing)
     assert "fcn_199" not in dumped
-    assert dumped.count("```") <= 20
+    assert dumped.count("```") <= 24
 
 
 def test_handoff_elf_emits_verify_and_function_decompile(tmp_path: Path) -> None:

@@ -26,7 +26,7 @@ flowchart LR
 | Runtime | host/tool/target dependent; measure locally | more; heavy tools remain explicit |
 | Needs | `file` + radare2 | same, plus extras you turned on |
 
-`--quick` still ranks PLT / entry / strings, refuses to call a squashfs
+`--quick` still ranks import capsules / entry / strings, refuses to call a squashfs
 `httpd`, writes a SHA-256 record, and can `--verify` first-arg at
 `system` / `popen` / `exec*`. It is not `file` plus `r2 -qc ie`.
 
@@ -61,6 +61,7 @@ flowchart LR
 - `--ask-regions N` → first N region asks.
 - `review --mode rules` → copy the fixed region order; no HTTP.
 - `review --mode llm|both` → request an independent order of known regions.
+- `review --width N` → run `N` independent lenses and merge their cited evidence.
 
 Overlays only configure that optional call. Claude Code / Codex / Grok
 exec the CLI. They are not this process.
@@ -81,6 +82,7 @@ non-reproducible.
 | Orchestrator | flavor + `--quick` / `--extract` | yes — ranked regions |
 | `review --mode rules` | fixed point table already in the briefing | yes — copied, never rewritten |
 | `review --mode llm|both` | model reorders known evidence IDs | no — saved separately as `r2b.review.v1` |
+| `review --width N` | independent lenses over one saved briefing | rules mode is reproducible; model modes record each response |
 | `--ask` / Chat | you, after the briefing exists | cites never rewrite the record |
 | Planner (omp, Claude Code, Grok) | model picks `verify` / `decompile ADDR` | argv in, JSON out |
 
@@ -117,6 +119,33 @@ Reasons remain proposals. `r2b.review.v1` records the briefing and candidate
 hashes plus provider/transport metadata. Tool calls are disabled in this first
 contract version (`tool_rounds=0`), so review cannot run a target, shell
 command, verifier, or decompiler.
+
+### Review the same evidence from several angles
+
+Depth and width answer different questions. Analysis depth collects more
+evidence. Review width asks more questions of the evidence already saved in a
+briefing.
+
+```bash
+r2b review brief.json --mode rules --width 3 --top 2 --json
+r2b review brief.json --mode both --width 3 --top 2 --json
+r2b bundle create ./httpd -o httpd-width3.r2br \
+  --review-width 3 --review-mode rules --review-top 2
+```
+
+The default lenses are triage, execution boundaries, input to effect, and
+coverage gaps. Each pass receives the same canonical candidates and never sees
+another pass's answer. `r2b.review-set.v1` records the individual orders, the
+deduplicated evidence union, and the regions that first appeared at each
+width. Agreement is counted by lens, so rules and model passes for one lens do
+not become two votes.
+
+Rules mode supports the built-in lenses and makes no model call. Custom
+`--review-lens` values require `llm` or `both`; the configured provider remains
+bound to known region and evidence IDs and cannot run tools. Width is useful
+only when the briefing contains several meaningful candidates. If the union
+stays flat, run a targeted verifier or decompile instead of adding another
+lens. See the [recorded AArch64 example](case-studies/review-width-aarch64.md).
 
 ## Three hosts
 
@@ -188,6 +217,9 @@ print(response.text)
 
 fixed = review(report, mode="rules")
 print([item["region_id"] for item in fixed["base_order"]])
+
+wide = review(report, mode="rules", width=3, top_k=2)
+print(wide["overlay"]["marginal"])
 ```
 
 ### CLI
@@ -211,11 +243,11 @@ for unavailable cross-compilers.
 
 | Binary | Why | What `--quick` should expose |
 |---|---|---|
-| `/bin/ls` | everyone has it, stripped | PLT first, then entry |
+| `/bin/ls` | everyone has it, stripped | import capsules, then entry |
 | `samples/bin/arm64/hello` | unstripped contrast | one region: Entry/main |
-| `samples/bin/arm64/vendor/busybox` | sinks | PLT (`popen`/`system`/`exec*`), credentials, entry, network |
-| `samples/bin/arm64/vulnerable` | teaching `strcpy` | PLT, credential strings, Entry/main |
-| `samples/triage/bin/shallow-host` | native build of shared fixture | platform import spelling, entry, PLT |
+| `samples/bin/arm64/vendor/busybox` | sinks | process, network, runtime, and memory/path capsules |
+| `samples/bin/arm64/vulnerable` | teaching `strcpy` | memory/path imports, credential strings, Entry/main |
+| `samples/triage/bin/shallow-host` | native build of shared fixture | platform import spelling, entry, import capsules |
 | Flipper ELF under `samples/firmware/` | wrapper vs ELF | `--extract` on a container, not on hello |
 
 ```bash

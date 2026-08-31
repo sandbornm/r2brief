@@ -57,6 +57,14 @@ def _analysis() -> dict:
     }
 
 
+def _review() -> dict:
+    return {
+        "schema_version": "r2b.review-set.v1",
+        "briefing": {"sha256": "ab" * 32},
+        "overlay": {"unique_top_regions": 2},
+    }
+
+
 def test_bundle_is_deterministic_and_excludes_target_by_default(tmp_path: Path) -> None:
     target = tmp_path / "challenge.bin"
     target.write_bytes(b"\x7fELF\x00portable-evidence")
@@ -112,6 +120,25 @@ def test_bundle_can_explicitly_include_target(tmp_path: Path) -> None:
     assert loaded.summary()["target_included"] is True
     with zipfile.ZipFile(output) as archive:
         assert archive.read("target.bin") == target.read_bytes()
+
+
+def test_bundle_can_attach_review_overlay(tmp_path: Path) -> None:
+    target = tmp_path / "challenge"
+    target.write_bytes(b"sample")
+    output = tmp_path / "reviewed.r2br"
+
+    created = create_bundle(
+        output,
+        briefing=_briefing(),
+        analysis=_analysis(),
+        review=_review(),
+        target=target,
+    )
+
+    assert created.review == _review()
+    assert "review.json" in created.summary()["members"]
+    with zipfile.ZipFile(output) as archive:
+        assert json.loads(archive.read("review.json")) == _review()
 
 
 def test_read_sniffs_manifest_not_filename_extension(tmp_path: Path) -> None:
@@ -186,6 +213,7 @@ def test_manifest_schema_tracks_bundle_contract() -> None:
     assert schema["properties"]["schema_version"]["const"] == BUNDLE_SCHEMA_VERSION
     assert schema["properties"]["subject"]["properties"]["member"]["const"] == "target.bin"
     assert "provenance.json" in schema["properties"]["entries"]["items"]["properties"]["path"]["enum"]
+    assert "review.json" in schema["properties"]["entries"]["items"]["properties"]["path"]["enum"]
 
 
 def test_bundle_cli_create_then_inspect(tmp_path: Path) -> None:

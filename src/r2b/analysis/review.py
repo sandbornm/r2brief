@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
@@ -19,7 +19,55 @@ from ..llm import ChatMessage, LLMBridge, LLMError, LLMResponse
 
 REVIEW_SCHEMA_VERSION = "r2b.review.v1"
 REVIEW_PROMPT_ID = "r2b.review.prompt.v1"
+REVIEW_SET_SCHEMA_VERSION = "r2b.review-set.v1"
+REVIEW_SET_PROMPT_ID = "r2b.review-set.prompt.v1"
+MAX_REVIEW_WIDTH = 4
 ReviewMode = Literal["rules", "llm", "both", "compare"]
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewLens:
+    id: str
+    title: str
+    thesis: str
+    tag_weights: Mapping[str, int]
+
+
+_DEFAULT_LENSES = (
+    ReviewLens(
+        id="triage",
+        title="Triage order",
+        thesis="Prioritize the strongest first-pass evidence without assuming a vulnerability.",
+        tag_weights={},
+    ),
+    ReviewLens(
+        id="execution-boundaries",
+        title="Execution boundaries",
+        thesis=(
+            "Prioritize process launch, runtime loading, identity changes, and network boundaries "
+            "that deserve a caller trace."
+        ),
+        tag_weights={"process": 40, "runtime": 30, "control": 22, "network": 16},
+    ),
+    ReviewLens(
+        id="input-to-effect",
+        title="Input to effect",
+        thesis=(
+            "Prioritize evidence that can connect external input to memory, path, process, or "
+            "runtime effects."
+        ),
+        tag_weights={"network": 40, "string": 36, "memory": 34, "process": 22, "runtime": 12},
+    ),
+    ReviewLens(
+        id="coverage-gaps",
+        title="Coverage gaps",
+        thesis=(
+            "Prioritize evidence whose meaning depends on a missing caller, runtime state, "
+            "configuration, or unavailable analyzer."
+        ),
+        tag_weights={"issue": 50, "entry": 30, "runtime": 24, "firmware": 18, "control": 12},
+    ),
+)
 
 _MODEL_SYSTEM = f"""You review a fixed set of binary-analysis evidence regions.
 Return one JSON object and no prose. The object must have exactly one key:
@@ -148,6 +196,306 @@ def review_briefing(
     if selected_mode == "both":
         result["disagreements"] = _disagreements(base_order, model_order)
     return result
+
+
+def review_briefing_set(
+    briefing: Mapping[str, Any],
+    *,
+    width: int = 3,
+    mode: ReviewMode | str = "rules",
+    theses: list[str] | tuple[str, ...] | None = None,
+    top_k: int = 2,
+    bridge: LLMBridge | None = None,
+    config: AppConfig | None = None,
+    config_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Run independent review lenses over one immutable briefing.
+
+    Width changes the number of questions asked of the same evidence. It does
+    not run an analyzer, add a region, or change a briefing score. Every lens
+    fans out from the canonical candidate set; no lens sees another lens's
+    output. The overlay is computed only after all passes finish.
+    """
+
+    if isinstance(width, bool) or not isinstance(width, int) or not 1 <= width <= MAX_REVIEW_WIDTH:
+        raise ReviewError(f"width must be between 1 and {MAX_REVIEW_WIDTH}")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ReviewError("top_k must be a positive integer")
+    selected_mode = normalize_review_mode(str(mode))
+    if theses and selected_mode == "rules":
+        raise ReviewError("custom lens theses require mode llm or both")
+    if bridge is not None and (config is not None or config_path is not None):
+        raise ReviewError("Pass bridge or config/config_path, not both")
+    if config is not None and config_path is not None:
+        raise ReviewError("Pass config or config_path, not both")
+
+    document = _json_object(briefing, "briefing")
+    if document.get("schema_version") != "r2b.briefing.v1":
+        raise ReviewError("briefing must use schema_version r2b.briefing.v1")
+    candidates, evidence_by_region = _candidate_documents(document)
+    base_order = _base_order(document, evidence_by_region)
+    canonical_briefing = _canonical_json(document)
+    canonical_candidates = _canonical_json({"candidates": candidates})
+    lenses = _review_lenses(width, theses)
+    effective_top_k = min(top_k, len(candidates))
+
+    llm = bridge
+    if selected_mode in {"llm", "both"} and llm is None:
+        loaded = config or load_config(
+            Path(config_path).expanduser() if config_path is not None else None
+        )
+        llm = LLMBridge(loaded)
+
+    passes: list[dict[str, Any]] = []
+    for lens_index, lens in enumerate(lenses, start=1):
+        if selected_mode in {"rules", "both"}:
+            passes.append(
+                {
+                    "id": f"{lens.id}:rules",
+                    "lens_id": lens.id,
+                    "lens_index": lens_index,
+                    "engine": "rules",
+                    "order": _rule_lens_order(
+                        document,
+                        base_order=base_order,
+                        evidence_by_region=evidence_by_region,
+                        lens=lens,
+                    ),
+                    "model": None,
+                }
+            )
+        if selected_mode in {"llm", "both"}:
+            assert llm is not None
+            reviewed = review_briefing(
+                document,
+                mode="llm",
+                thesis=lens.thesis,
+                bridge=llm,
+            )
+            passes.append(
+                {
+                    "id": f"{lens.id}:llm",
+                    "lens_id": lens.id,
+                    "lens_index": lens_index,
+                    "engine": "llm",
+                    "order": reviewed["model_order"],
+                    "model": reviewed["model"],
+                }
+            )
+
+    lens_documents = [
+        {
+            "id": lens.id,
+            "index": index,
+            "title": lens.title,
+            "thesis": lens.thesis,
+        }
+        for index, lens in enumerate(lenses, start=1)
+    ]
+    return {
+        "schema_version": REVIEW_SET_SCHEMA_VERSION,
+        "prompt_id": REVIEW_SET_PROMPT_ID,
+        "mode": selected_mode,
+        "width": width,
+        "top_k": effective_top_k,
+        "independence": "fan_out",
+        "briefing": {
+            "schema_version": "r2b.briefing.v1",
+            "sha256": hashlib.sha256(canonical_briefing).hexdigest(),
+            "candidate_sha256": hashlib.sha256(canonical_candidates).hexdigest(),
+        },
+        "candidate_count": len(candidates),
+        "base_order": base_order,
+        "lenses": lens_documents,
+        "passes": passes,
+        "overlay": _review_overlay(
+            base_order=base_order,
+            lenses=lens_documents,
+            passes=passes,
+            top_k=effective_top_k,
+        ),
+    }
+
+
+def _review_lenses(
+    width: int, theses: list[str] | tuple[str, ...] | None
+) -> list[ReviewLens]:
+    custom = [str(item).strip() for item in (theses or [])]
+    if any(not item for item in custom):
+        raise ReviewError("lens theses must not be empty")
+    if len(custom) > width:
+        raise ReviewError("the number of lens theses cannot exceed width")
+    lenses: list[ReviewLens] = []
+    for index in range(width):
+        if index < len(custom):
+            lenses.append(
+                ReviewLens(
+                    id=f"custom-{index + 1}",
+                    title=f"Custom lens {index + 1}",
+                    thesis=custom[index],
+                    tag_weights={},
+                )
+            )
+        else:
+            lenses.append(_DEFAULT_LENSES[index])
+    return lenses
+
+
+def _rule_lens_order(
+    briefing: Mapping[str, Any],
+    *,
+    base_order: list[dict[str, Any]],
+    evidence_by_region: Mapping[str, frozenset[str]],
+    lens: ReviewLens,
+) -> list[dict[str, Any]]:
+    regions = briefing.get("regions")
+    assert isinstance(regions, list)
+    base_ranks = {str(item["region_id"]): int(item["rank"]) for item in base_order}
+    scored: list[tuple[float, int, str, str, list[str]]] = []
+    for raw in regions:
+        assert isinstance(raw, Mapping)
+        region_id = str(raw["id"])
+        tags = {str(tag) for tag in (raw.get("tags") or [])}
+        matched = sorted(tag for tag in tags if tag in lens.tag_weights)
+        bonus = sum(lens.tag_weights[tag] for tag in matched)
+        score = float(raw["score"]) + bonus
+        if lens.id == "triage":
+            reason = "Keeps the deterministic point-table order."
+        elif matched:
+            reason = f"Matches this lens on: {', '.join(matched)}."
+        else:
+            reason = "No lens-specific tag; the deterministic score breaks the tie."
+        scored.append(
+            (
+                score,
+                base_ranks[region_id],
+                region_id,
+                reason,
+                sorted(evidence_by_region[region_id]),
+            )
+        )
+    scored.sort(key=lambda item: (-item[0], item[1], item[2]))
+    return [
+        {
+            "rank": rank,
+            "region_id": region_id,
+            "reason": reason,
+            "evidence_ids": evidence_ids,
+        }
+        for rank, (_score, _base_rank, region_id, reason, evidence_ids) in enumerate(
+            scored, start=1
+        )
+    ]
+
+
+def _review_overlay(
+    *,
+    base_order: list[dict[str, Any]],
+    lenses: list[dict[str, Any]],
+    passes: list[dict[str, Any]],
+    top_k: int,
+) -> dict[str, Any]:
+    base_ranks = {str(item["region_id"]): int(item["rank"]) for item in base_order}
+    titles = {str(item["region_id"]): str(item["title"]) for item in base_order}
+    baseline_top = {
+        str(item["region_id"]) for item in base_order if int(item["rank"]) <= top_k
+    }
+    marginal: list[dict[str, Any]] = []
+    cumulative: set[str] = set()
+    for lens in lenses:
+        lens_index = int(lens["index"])
+        active = [item for item in passes if int(item["lens_index"]) <= lens_index]
+        current = {
+            str(entry["region_id"])
+            for item in active
+            for entry in item["order"]
+            if int(entry["rank"]) <= top_k
+        }
+        new_ids = sorted(current - cumulative, key=lambda region_id: base_ranks[region_id])
+        cumulative = current
+        marginal.append(
+            {
+                "width": lens_index,
+                "new_region_ids": new_ids,
+                "cumulative_region_ids": sorted(
+                    cumulative, key=lambda region_id: base_ranks[region_id]
+                ),
+                "pass_count": len(active),
+                "model_calls": sum(item["engine"] == "llm" for item in active),
+            }
+        )
+
+    region_rows: list[dict[str, Any]] = []
+    all_evidence: set[str] = set()
+    for region_id in base_ranks:
+        observations: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for review_pass in passes:
+            for entry in review_pass["order"]:
+                if str(entry["region_id"]) == region_id:
+                    observations.append((review_pass, entry))
+                    break
+        top_observations = [
+            (review_pass, entry)
+            for review_pass, entry in observations
+            if int(entry["rank"]) <= top_k
+        ]
+        if not top_observations:
+            continue
+        lens_ids = sorted({str(item[0]["lens_id"]) for item in top_observations})
+        pass_ids = [str(item[0]["id"]) for item in top_observations]
+        evidence_ids = sorted(
+            {
+                str(evidence_id)
+                for _review_pass, entry in top_observations
+                for evidence_id in entry["evidence_ids"]
+            }
+        )
+        all_evidence.update(evidence_ids)
+        ranks = [int(entry["rank"]) for _review_pass, entry in observations]
+        first_width = min(int(item[0]["lens_index"]) for item in top_observations)
+        region_rows.append(
+            {
+                "region_id": region_id,
+                "title": titles[region_id],
+                "base_rank": base_ranks[region_id],
+                "best_rank": min(ranks),
+                "rank_span": max(ranks) - min(ranks),
+                "first_width": first_width,
+                "lens_ids": lens_ids,
+                "pass_ids": pass_ids,
+                "evidence_ids": evidence_ids,
+                "status": (
+                    "consensus"
+                    if len(lens_ids) >= 2
+                    else "added"
+                    if region_id not in baseline_top
+                    else "baseline"
+                ),
+            }
+        )
+    region_rows.sort(
+        key=lambda item: (int(item["first_width"]), int(item["best_rank"]), int(item["base_rank"]))
+    )
+    return {
+        "regions": region_rows,
+        "marginal": marginal,
+        "unique_top_regions": len(region_rows),
+        "unique_evidence_ids": sorted(all_evidence),
+        "consensus_region_ids": [
+            str(item["region_id"]) for item in region_rows if item["status"] == "consensus"
+        ],
+        "added_region_ids": [
+            str(item["region_id"]) for item in region_rows if item["region_id"] not in baseline_top
+        ],
+        "conflicts": [
+            {
+                "region_id": item["region_id"],
+                "rank_span": item["rank_span"],
+            }
+            for item in region_rows
+            if int(item["rank_span"]) >= 2
+        ],
+    }
 
 
 def _candidate_documents(
@@ -408,10 +756,15 @@ def _json_object(value: Mapping[str, Any], label: str) -> dict[str, Any]:
 
 
 __all__ = [
+    "MAX_REVIEW_WIDTH",
     "REVIEW_PROMPT_ID",
     "REVIEW_SCHEMA_VERSION",
+    "REVIEW_SET_PROMPT_ID",
+    "REVIEW_SET_SCHEMA_VERSION",
     "ReviewError",
+    "ReviewLens",
     "ReviewMode",
     "normalize_review_mode",
     "review_briefing",
+    "review_briefing_set",
 ]

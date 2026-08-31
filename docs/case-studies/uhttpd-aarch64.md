@@ -41,11 +41,16 @@ The exact recorded command was:
   --quick --no-save --json
 ```
 
-It completed in 0.94 s wall time (0.74 s user, 0.17 s system). r2b identified
-the AArch64/musl PIE and placed a 117-import region first. The high-signal
-cluster was `socket` / `bind` / `listen` / `accept`, `fork`, `execl`, and
-`dlopen` / `dlsym`. The same region also contained common string APIs, which
-are leads rather than evidence of unsafe dataflow.
+It completed in 0.94 s wall time (0.74 s user, 0.17 s system). That recorded
+version placed all 117 imports in one first-place region. The useful names were
+`socket` / `bind` / `listen` / `accept`, `fork`, `execl`, and `dlopen` /
+`dlsym`. Common string APIs sat in the same bucket even though they were only
+leads.
+
+Current briefings split that inventory into process, network, runtime, memory
+and path, and control capsules. The source evidence has not changed; the split
+makes the next question and review-width result easier to read. The raw JSON
+below remains unchanged so the investigation keeps the original output.
 
 The important handoff was concrete:
 

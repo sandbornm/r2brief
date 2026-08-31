@@ -33,7 +33,7 @@
     "entries": {
       "type": "array",
       "minItems": 3,
-      "maxItems": 5,
+      "maxItems": 6,
       "uniqueItems": true,
       "items": {
         "type": "object",
@@ -41,10 +41,10 @@
         "required": ["path", "role", "media_type", "sha256", "size"],
         "properties": {
           "path": {
-            "enum": ["analysis.json", "briefing.json", "tools.json", "provenance.json", "target.bin"]
+            "enum": ["analysis.json", "briefing.json", "tools.json", "provenance.json", "review.json", "target.bin"]
           },
           "role": {
-            "enum": ["analysis", "briefing", "tool_status", "provenance", "target"]
+            "enum": ["analysis", "briefing", "tool_status", "provenance", "review", "target"]
           },
           "media_type": {
             "enum": ["application/json", "application/octet-stream"]

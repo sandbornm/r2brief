@@ -1,0 +1,94 @@
+{
+  "schema_version": "r2b.case-review-width.v1",
+  "recorded_at": "2026-08-31",
+  "analysis": {
+    "profile": "triage",
+    "review_mode": "rules",
+    "width": 3,
+    "top_k": 2,
+    "target_executed": false,
+    "model_calls": 0
+  },
+  "subjects": [
+    {
+      "name": "busybox",
+      "package": "busybox_1.36.1-r3_aarch64_cortex-a53.ipk",
+      "package_sha256": "3b6afb873a1325031ed04a2d35d96817fcbbaaa04e32e30962201ad2ffb05d77",
+      "binary_sha256": "d3aeb34aaf9ff41d12db6345a811ee142890c6e071dcbcc1006b0fc02e90b66f",
+      "size_bytes": 458773,
+      "function_count": 301,
+      "import_count": 299,
+      "base_order": [
+        "imports:process",
+        "imports:network",
+        "entry:entry",
+        "imports:runtime",
+        "imports:memory",
+        "imports:control"
+      ],
+      "marginal": [
+        { "width": 1, "new_region_ids": ["imports:process", "imports:network"] },
+        { "width": 2, "new_region_ids": ["imports:runtime"] },
+        { "width": 3, "new_region_ids": ["imports:memory"] }
+      ],
+      "consensus_region_ids": ["imports:process", "imports:network"],
+      "unique_evidence_id_count": 9,
+      "bundle_sha256": "bd9a3bd926f8133cf98a5a8af1dd78f4a80222ac3d9a336b7245c6d217d73bb1"
+    },
+    {
+      "name": "dnsmasq",
+      "package": "dnsmasq_2.93-r1_aarch64_cortex-a53.ipk",
+      "package_sha256": "6647ebdd4b7aa044f757c40801580891f9993799bea19d4f68a55be0da6ff7be",
+      "binary_sha256": "a433c23caa56669d6d7ee2d896f157442941ab0ca6d37cc46f6bea6e43d84d7f",
+      "size_bytes": 334841,
+      "function_count": 170,
+      "import_count": 175,
+      "base_order": [
+        "imports:process",
+        "imports:network",
+        "entry:entry",
+        "imports:memory",
+        "imports:control"
+      ],
+      "marginal": [
+        { "width": 1, "new_region_ids": ["imports:process", "imports:network"] },
+        { "width": 2, "new_region_ids": [] },
+        { "width": 3, "new_region_ids": ["imports:memory"] }
+      ],
+      "consensus_region_ids": ["imports:process", "imports:network"],
+      "unique_evidence_id_count": 7,
+      "bundle_sha256": "9fd843093f08c3d5d0d338d738d86d7d3efeff55a11092f0341ee14d0e793f2f"
+    },
+    {
+      "name": "uhttpd",
+      "package": "uhttpd_2025.07.06~7e64e8ba-r5_aarch64_cortex-a53.ipk",
+      "package_sha256": "0a2d2858c81ec39c3d07048d9c79622602106b90d84a8534f112cd9ad883ab3f",
+      "binary_sha256": "2dea2e1017dd4839b375fff5a531b0d8c3317d8d031a3d44f0c2849cda1b0941",
+      "size_bytes": 66259,
+      "function_count": 116,
+      "import_count": 117,
+      "base_order": [
+        "imports:process",
+        "imports:network",
+        "entry:entry",
+        "imports:runtime",
+        "imports:memory"
+      ],
+      "marginal": [
+        { "width": 1, "new_region_ids": ["imports:process", "imports:network"] },
+        { "width": 2, "new_region_ids": ["imports:runtime"] },
+        { "width": 3, "new_region_ids": ["imports:memory"] }
+      ],
+      "consensus_region_ids": ["imports:process", "imports:network"],
+      "unique_evidence_id_count": 9,
+      "bundle_sha256": "49b789907111e1bb147f08f0bebc978ac9febeab7712e78c0fce7d96d2f5a432"
+    }
+  ],
+  "bundle_members": [
+    "analysis.json",
+    "briefing.json",
+    "provenance.json",
+    "review.json",
+    "tools.json"
+  ]
+}

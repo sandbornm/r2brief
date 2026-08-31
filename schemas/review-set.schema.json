@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sandbornm/r2brief/schemas/review-set.schema.json",
+  "title": "r2b independent multi-lens review overlay",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "prompt_id",
+    "mode",
+    "width",
+    "top_k",
+    "independence",
+    "briefing",
+    "candidate_count",
+    "base_order",
+    "lenses",
+    "passes",
+    "overlay"
+  ],
+  "properties": {
+    "schema_version": { "const": "r2b.review-set.v1" },
+    "prompt_id": { "const": "r2b.review-set.prompt.v1" },
+    "mode": { "enum": ["rules", "llm", "both"] },
+    "width": { "type": "integer", "minimum": 1, "maximum": 4 },
+    "top_k": { "type": "integer", "minimum": 1 },
+    "independence": { "const": "fan_out" },
+    "briefing": { "$ref": "review.schema.json#/$defs/briefingRef" },
+    "candidate_count": { "type": "integer", "minimum": 1 },
+    "base_order": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "review.schema.json#/$defs/baseOrderEntry" }
+    },
+    "lenses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/lens" }
+    },
+    "passes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/pass" }
+    },
+    "overlay": { "$ref": "#/$defs/overlay" }
+  },
+  "$defs": {
+    "lens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "index", "title", "thesis"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "index": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "thesis": { "type": "string", "minLength": 1 }
+      }
+    },
+    "pass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "lens_id", "lens_index", "engine", "order", "model"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "lens_id": { "type": "string", "minLength": 1 },
+        "lens_index": { "type": "integer", "minimum": 1 },
+        "engine": { "enum": ["rules", "llm"] },
+        "order": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "review.schema.json#/$defs/modelOrderEntry" }
+        },
+        "model": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "review.schema.json#/$defs/modelMetadata" }
+          ]
+        }
+      }
+    },
+    "overlayRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "region_id",
+        "title",
+        "base_rank",
+        "best_rank",
+        "rank_span",
+        "first_width",
+        "lens_ids",
+        "pass_ids",
+        "evidence_ids",
+        "status"
+      ],
+      "properties": {
+        "region_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "base_rank": { "type": "integer", "minimum": 1 },
+        "best_rank": { "type": "integer", "minimum": 1 },
+        "rank_span": { "type": "integer", "minimum": 0 },
+        "first_width": { "type": "integer", "minimum": 1 },
+        "lens_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "pass_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "evidence_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "status": { "enum": ["baseline", "added", "consensus"] }
+      }
+    },
+    "marginal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "new_region_ids",
+        "cumulative_region_ids",
+        "pass_count",
+        "model_calls"
+      ],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "new_region_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "cumulative_region_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "pass_count": { "type": "integer", "minimum": 1 },
+        "model_calls": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["region_id", "rank_span"],
+      "properties": {
+        "region_id": { "type": "string", "minLength": 1 },
+        "rank_span": { "type": "integer", "minimum": 2 }
+      }
+    },
+    "overlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regions",
+        "marginal",
+        "unique_top_regions",
+        "unique_evidence_ids",
+        "consensus_region_ids",
+        "added_region_ids",
+        "conflicts"
+      ],
+      "properties": {
+        "regions": { "type": "array", "items": { "$ref": "#/$defs/overlayRegion" } },
+        "marginal": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/marginal" } },
+        "unique_top_regions": { "type": "integer", "minimum": 1 },
+        "unique_evidence_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "consensus_region_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "added_region_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "conflicts": { "type": "array", "items": { "$ref": "#/$defs/conflict" } }
+      }
+    }
+  }
+}

@@ -33,7 +33,7 @@ the system Python.
 | One executable | format and architecture, tool coverage, ranked regions, evidence references, and exact follow-up commands |
 | Firmware or a container | bounded inventory, carved-child recommendations, and an artifact DAG with offsets and hashes |
 | A saved analysis | one SHA-256-addressed record that can absorb later passes without losing earlier evidence |
-| A handoff | one validated `.r2br` bundle with the briefing, public analysis, tool status, hashes, and replay data |
+| A handoff | one validated `.r2br` bundle with the briefing, public analysis, tool status, hashes, replay data, and an optional review overlay |
 | Tagged sibling records | exact duplicates and recurring imports, regions, tags, or firmware wrapper families |
 
 Region scores are ordering points from fixed rules. They are not probabilities,
@@ -83,11 +83,13 @@ sample.r2br
 ├── briefing.json    ranked regions and next argv
 ├── tools.json       completed and skipped tools
 ├── provenance.json  evidence pointers and replay recipe, when available
+├── review.json      optional independent-lens review overlay
 └── target.bin       optional
 ```
 
 ```bash
 r2b bundle create ./httpd -o httpd.r2br
+r2b bundle create ./httpd -o httpd-width3.r2br --review-width 3 --review-mode rules
 r2b bundle inspect httpd.r2br --json
 r2b review httpd.r2br --mode rules --json
 ```
@@ -129,16 +131,18 @@ there. r2b earns its place when the scope is unclear, the inputs are numerous,
 the hosts differ, or another person or program needs the same evidence in a
 stable format.
 
-## A real result
+## Worked investigation
 
-The [OpenWrt uHTTPD case study](docs/case-studies/uhttpd-aarch64.md) starts with
+The [OpenWrt uHTTPD investigation](docs/case-studies/uhttpd-aarch64.md) starts with
 a pinned 66 KB AArch64 package, not a teaching binary. The quick pass reduced
-116 functions and 117 imports to one process-launch boundary:
+116 functions and 117 imports to a few evidence capsules. The process capsule
+gave the useful first command:
 
 ```text
 subject       ELF64 AArch64 PIE · musl · stripped · no section table
-regions       1. PLT / imported libc surface      score 93
-              2. Entry / entry @ 0x4b0c           score 89
+regions       1. Process launch / child control   score 93
+              2. Network ingress and egress       score 90
+              3. Entry / entry @ 0x4b0c           score 89
 handoff       r2b verify ./uhttpd --import execl --json
 recovered     reloc.execl @ 0x1fb60 → blr x4 @ 0x9384
 caller        fcn.000092e4 · argument=<dynamic>
@@ -153,8 +157,8 @@ a vulnerability. The remaining question belongs to the deployed router: who
 can create or replace an executable CGI path?
 
 The first verifier run missed the GOT-indirect AArch64 call. The original empty
-result remains in the case record, and the recovered instruction pattern now
-has a regression test. The bundled crackmes and algorithm samples stay in
+result remains in the investigation record. The recovered instruction pattern
+now has a regression test. The bundled crackmes and algorithm samples stay in
 [calibration](docs/calibration/teaching-fixtures.md), where they test ordering,
 weak results, and known limits rather than serving as product proof.
 
@@ -211,6 +215,11 @@ for command in report.handoff["next_argv"]:
 model calls. Rules mode makes no model call. Both mode keeps the fixed order and
 records a validated model order against the same region and evidence IDs. The
 model cannot add, remove, or rename evidence.
+
+`review --width N` runs `N` independent lenses over one saved briefing.
+Each lens starts from the same candidates. The `r2b.review-set.v1` overlay shows
+which regions first appeared at each width and when another pass added nothing.
+Rules mode is deterministic; `llm` and `both` use the configured provider.
 
 OpenAI, Anthropic, xAI/Grok, Kimi, GLM/Z.ai, Ollama, and exo have explicit
 provider configurations. Hosted keys are read from named environment variables

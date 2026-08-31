@@ -28,6 +28,10 @@ r2b bundle create ./samples/triage/bin/shallow-host -o shallow.r2br
 r2b bundle inspect shallow.r2br
 r2b bundle inspect shallow.r2br --json
 
+# Add an independent-lens review without changing the briefing.
+r2b bundle create ./sample.bin -o sample-width3.r2br \
+  --review-width 3 --review-mode rules --review-top 2
+
 # Explicit opt-in for a self-contained bundle when redistribution is allowed.
 r2b bundle create ./sample.bin -o sample.r2br --include-target
 ```
@@ -42,6 +46,7 @@ created = create_bundle(
     briefing=briefing,
     analysis=public_analysis,
     tool_status=public_analysis["tool_status"],
+    review=review_set,             # optional r2b.review-set.v1 overlay
     target="sample.bin",          # establishes SHA-256 + size
     include_target=False,          # the default
 )
@@ -59,6 +64,7 @@ sample.r2br (deterministic ZIP)
 ├── briefing.json    ranked r2b.briefing.v1 + r2b.handoff.v1
 ├── tools.json       availability/status captured during the run
 ├── provenance.json  public provenance, when present
+├── review.json      optional r2b.review.v1 or r2b.review-set.v1 overlay
 └── target.bin       optional; present only with --include-target
 ```
 
@@ -67,6 +73,11 @@ sample.r2br (deterministic ZIP)
 private trajectory state. This preserves the useful answer
 to “how was this produced?” without copying the internal trajectory database
 or turning r2b into the planner.
+
+`review.json` is separate from `briefing.json`. Review can reorder or combine
+known region and evidence IDs, but it cannot rewrite point scores or handoff
+commands. A width review records each independent lens, the deduplicated
+evidence union, and which regions first appeared as width increased.
 
 The JSON Schema for the manifest is
 [`schemas/evidence_bundle.schema.json`](../schemas/evidence_bundle.schema.json).

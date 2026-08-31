@@ -8,12 +8,20 @@ set -euo pipefail
 HELLO_URL="https://snapshot.debian.org/file/fecb242a059fec95f6cdc0760e9b44298c04d279/hello_2.10-5_arm64.deb"
 HELLO_SHA256="7a917c7f44fbd3373dff0f35a0b6bdf8ef564ff90579d8b130ff52fbf33fce1f"
 HELLO_BINARY_SHA256="ef8b324e9d8de673554fb5dad0a69ffc9e6c20b93e92fd088745b3243aaad843"
+BUSYBOX_URL="https://downloads.openwrt.org/releases/24.10.4/packages/aarch64_cortex-a53/base/busybox_1.36.1-r3_aarch64_cortex-a53.ipk"
+BUSYBOX_SHA256="3b6afb873a1325031ed04a2d35d96817fcbbaaa04e32e30962201ad2ffb05d77"
+BUSYBOX_BINARY_SHA256="d3aeb34aaf9ff41d12db6345a811ee142890c6e071dcbcc1006b0fc02e90b66f"
+DNSMASQ_URL="https://downloads.openwrt.org/releases/24.10.4/packages/aarch64_cortex-a53/base/dnsmasq_2.93-r1_aarch64_cortex-a53.ipk"
+DNSMASQ_SHA256="6647ebdd4b7aa044f757c40801580891f9993799bea19d4f68a55be0da6ff7be"
+DNSMASQ_BINARY_SHA256="a433c23caa56669d6d7ee2d896f157442941ab0ca6d37cc46f6bea6e43d84d7f"
 UHTTPD_URL="https://downloads.openwrt.org/releases/24.10.4/packages/aarch64_cortex-a53/base/uhttpd_2025.07.06~7e64e8ba-r5_aarch64_cortex-a53.ipk"
 UHTTPD_SHA256="0a2d2858c81ec39c3d07048d9c79622602106b90d84a8534f112cd9ad883ab3f"
 UHTTPD_BINARY_SHA256="2dea2e1017dd4839b375fff5a531b0d8c3317d8d031a3d44f0c2849cda1b0941"
 
 OUTPUT_DIR="${1:-${TMPDIR:-/tmp}/r2b-case-studies}"
 HELLO_DIR="$OUTPUT_DIR/hello"
+BUSYBOX_DIR="$OUTPUT_DIR/busybox"
+DNSMASQ_DIR="$OUTPUT_DIR/dnsmasq"
 UHTTPD_DIR="$OUTPUT_DIR/uhttpd"
 
 for command in curl ar tar; do
@@ -23,9 +31,11 @@ for command in curl ar tar; do
   fi
 done
 
-mkdir -p "$HELLO_DIR" "$UHTTPD_DIR"
+mkdir -p "$HELLO_DIR" "$BUSYBOX_DIR" "$DNSMASQ_DIR" "$UHTTPD_DIR"
 
 curl -fL --retry 3 --output "$OUTPUT_DIR/hello_2.10-5_arm64.deb" "$HELLO_URL"
+curl -fL --retry 3 --output "$OUTPUT_DIR/busybox_1.36.1-r3_aarch64_cortex-a53.ipk" "$BUSYBOX_URL"
+curl -fL --retry 3 --output "$OUTPUT_DIR/dnsmasq_2.93-r1_aarch64_cortex-a53.ipk" "$DNSMASQ_URL"
 curl -fL --retry 3 --output "$OUTPUT_DIR/uhttpd_2025.07.06~7e64e8ba-r5_aarch64_cortex-a53.ipk" "$UHTTPD_URL"
 
 verify_sha256() {
@@ -47,6 +57,8 @@ verify_sha256() {
 }
 
 verify_sha256 "$HELLO_SHA256" "$OUTPUT_DIR/hello_2.10-5_arm64.deb"
+verify_sha256 "$BUSYBOX_SHA256" "$OUTPUT_DIR/busybox_1.36.1-r3_aarch64_cortex-a53.ipk"
+verify_sha256 "$DNSMASQ_SHA256" "$OUTPUT_DIR/dnsmasq_2.93-r1_aarch64_cortex-a53.ipk"
 verify_sha256 "$UHTTPD_SHA256" "$OUTPUT_DIR/uhttpd_2025.07.06~7e64e8ba-r5_aarch64_cortex-a53.ipk"
 
 (
@@ -56,16 +68,34 @@ verify_sha256 "$UHTTPD_SHA256" "$OUTPUT_DIR/uhttpd_2025.07.06~7e64e8ba-r5_aarch6
 )
 
 (
+  cd "$BUSYBOX_DIR"
+  tar -xzf "$OUTPUT_DIR/busybox_1.36.1-r3_aarch64_cortex-a53.ipk"
+  tar -xzf data.tar.gz
+)
+
+(
+  cd "$DNSMASQ_DIR"
+  tar -xzf "$OUTPUT_DIR/dnsmasq_2.93-r1_aarch64_cortex-a53.ipk"
+  tar -xzf data.tar.gz
+)
+
+(
   cd "$UHTTPD_DIR"
   tar -xzf "$OUTPUT_DIR/uhttpd_2025.07.06~7e64e8ba-r5_aarch64_cortex-a53.ipk"
   tar -xzf data.tar.gz
 )
 
 verify_sha256 "$HELLO_BINARY_SHA256" "$HELLO_DIR/usr/bin/hello"
+verify_sha256 "$BUSYBOX_BINARY_SHA256" "$BUSYBOX_DIR/bin/busybox"
+verify_sha256 "$DNSMASQ_BINARY_SHA256" "$DNSMASQ_DIR/usr/sbin/dnsmasq"
 verify_sha256 "$UHTTPD_BINARY_SHA256" "$UHTTPD_DIR/usr/sbin/uhttpd"
 
 printf 'hello:  %s\n' "$HELLO_DIR/usr/bin/hello"
+printf 'busybox: %s\n' "$BUSYBOX_DIR/bin/busybox"
+printf 'dnsmasq: %s\n' "$DNSMASQ_DIR/usr/sbin/dnsmasq"
 printf 'uhttpd: %s\n' "$UHTTPD_DIR/usr/sbin/uhttpd"
 printf '\nAnalyze without persistence or execution:\n'
 printf '  r2b brief %q --quick --no-save --json\n' "$HELLO_DIR/usr/bin/hello"
+printf '  r2b brief %q --quick --no-save --json\n' "$BUSYBOX_DIR/bin/busybox"
+printf '  r2b brief %q --quick --no-save --json\n' "$DNSMASQ_DIR/usr/sbin/dnsmasq"
 printf '  r2b brief %q --quick --no-save --json\n' "$UHTTPD_DIR/usr/sbin/uhttpd"

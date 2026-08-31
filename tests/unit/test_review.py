@@ -9,7 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 import r2b
-from r2b.analysis.review import ReviewError, review_briefing
+from r2b.analysis.review import ReviewError, review_briefing, review_briefing_set
 from r2b.analysis.orchestrator import AnalysisPlan, AnalysisResult
 from r2b.cli import app
 from r2b.llm import LLMResponse, LLMTransport, ToolCall
@@ -106,6 +106,60 @@ class _Bridge:
         values = list(messages)
         self.calls.append((values, kwargs))
         return self.response
+
+
+class _SequenceBridge:
+    def __init__(self, responses: list[LLMResponse]) -> None:
+        self.responses = list(responses)
+        self.calls: list[tuple[list[Any], dict[str, Any]]] = []
+
+    def generate(self, messages: Any, **kwargs: Any) -> LLMResponse:
+        values = list(messages)
+        self.calls.append((values, kwargs))
+        return self.responses.pop(0)
+
+
+def _width_briefing() -> dict[str, Any]:
+    source = deepcopy(_briefing())
+    process = source["regions"][0]
+    process.update(
+        {
+            "id": "imports:process",
+            "title": "Process launch / child control",
+            "tags": ["imports", "process"],
+        }
+    )
+    process["snippet"]["artifact_id"] = "imports:process"
+    source["regions"] = [
+        process,
+        {
+            "id": "imports:network",
+            "title": "Network ingress / egress",
+            "why": "Network boundary.",
+            "score": 90,
+            "tags": ["imports", "network"],
+            "snippet": {"source": "radare2", "kind": "inventory", "text": "accept\nbind"},
+        },
+        source["regions"][1],
+        {
+            "id": "imports:runtime",
+            "title": "Runtime loading / memory mapping",
+            "why": "Runtime boundary.",
+            "score": 87,
+            "tags": ["imports", "runtime"],
+            "snippet": {"source": "radare2", "kind": "inventory", "text": "dlopen"},
+        },
+        {
+            "id": "imports:memory",
+            "title": "Memory and path handling",
+            "why": "Caller pivot.",
+            "score": 84,
+            "tags": ["imports", "memory"],
+            "snippet": {"source": "radare2", "kind": "inventory", "text": "strcpy"},
+        },
+        source["regions"][2],
+    ]
+    return source
 
 
 def test_rules_mode_is_pure_and_makes_no_model_call() -> None:
@@ -230,6 +284,78 @@ def test_public_api_accepts_nested_analysis_payload() -> None:
     assert result["schema_version"] == "r2b.review.v1"
 
 
+def test_rules_width_adds_distinct_regions_without_counting_duplicate_evidence() -> None:
+    source = _width_briefing()
+    before = deepcopy(source)
+
+    result = review_briefing_set(source, mode="rules", width=3, top_k=2)
+
+    assert source == before
+    assert result["schema_version"] == "r2b.review-set.v1"
+    assert result["independence"] == "fan_out"
+    assert [item["new_region_ids"] for item in result["overlay"]["marginal"]] == [
+        ["imports:process", "imports:network"],
+        ["imports:runtime"],
+        ["imports:memory"],
+    ]
+    assert result["overlay"]["unique_top_regions"] == 4
+    assert result["overlay"]["consensus_region_ids"] == [
+        "imports:process",
+        "imports:network",
+    ]
+    evidence_ids = result["overlay"]["unique_evidence_ids"]
+    assert len(evidence_ids) == len(set(evidence_ids))
+
+
+def test_llm_width_fans_out_from_identical_candidates() -> None:
+    ids = [
+        "imports:process",
+        "imports:network",
+        "entry:main",
+        "imports:runtime",
+        "imports:memory",
+        "issue:missing-ghidra",
+    ]
+    bridge = _SequenceBridge(
+        [
+            _model_response(ids),
+            _model_response(
+                [
+                    "imports:runtime",
+                    "imports:process",
+                    "imports:network",
+                    "entry:main",
+                    "imports:memory",
+                    "issue:missing-ghidra",
+                ]
+            ),
+        ]
+    )
+
+    result = review_briefing_set(
+        _width_briefing(),
+        mode="llm",
+        width=2,
+        bridge=cast(Any, bridge),
+    )
+
+    assert len(bridge.calls) == 2
+    prompts = [json.loads(call[0][1].content) for call in bridge.calls]
+    assert prompts[0]["candidates"] == prompts[1]["candidates"]
+    assert prompts[0]["thesis"] != prompts[1]["thesis"]
+    assert result["overlay"]["marginal"][-1]["model_calls"] == 2
+
+
+def test_rules_width_rejects_custom_thesis() -> None:
+    with pytest.raises(ReviewError, match="require mode llm or both"):
+        review_briefing_set(
+            _width_briefing(),
+            mode="rules",
+            width=1,
+            theses=["Find parser state transitions."],
+        )
+
+
 def test_analysis_report_has_review_helper(tmp_path: Path) -> None:
     internal = AnalysisResult(
         binary=tmp_path / "sample",
@@ -256,8 +382,25 @@ def test_cli_rules_review_emits_one_json_object(tmp_path: Path) -> None:
     assert result["model_order"] is None
 
 
+def test_cli_width_emits_review_set(tmp_path: Path) -> None:
+    path = tmp_path / "briefing.json"
+    path.write_text(json.dumps(_width_briefing()), encoding="utf-8")
+
+    output = CliRunner().invoke(
+        app,
+        ["review", str(path), "--mode", "rules", "--width", "3", "--json"],
+    )
+
+    assert output.exit_code == 0, output.output
+    result = json.loads(output.stdout)
+    assert result["schema_version"] == "r2b.review-set.v1"
+    assert result["overlay"]["unique_top_regions"] == 4
+
+
 def test_review_schema_names_the_public_contract() -> None:
     schema = json.loads(Path("schemas/review.schema.json").read_text(encoding="utf-8"))
 
     assert schema["properties"]["schema_version"]["const"] == "r2b.review.v1"
     assert schema["properties"]["prompt_id"]["const"] == "r2b.review.prompt.v1"
+    review_set = json.loads(Path("schemas/review-set.schema.json").read_text(encoding="utf-8"))
+    assert review_set["properties"]["schema_version"]["const"] == "r2b.review-set.v1"

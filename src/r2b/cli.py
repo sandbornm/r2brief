@@ -16,7 +16,13 @@ from .analysis.briefing import build_briefing, build_handoff, render_briefing_ma
 from .analysis.handoff import publish_analysis_session
 from .analysis.insights import extract_insights, save_lab_note
 from .analysis.record import AnalysisRecordStore
-from .analysis.review import ReviewError, normalize_review_mode, review_briefing
+from .analysis.review import (
+    MAX_REVIEW_WIDTH,
+    ReviewError,
+    normalize_review_mode,
+    review_briefing,
+    review_briefing_set,
+)
 from .analysis.result_dto import analysis_result_to_public_dict
 from .bundle import (
     BundleError,
@@ -247,24 +253,55 @@ def review(
         "--thesis",
         help="Question or audit thesis for the independent model ordering",
     ),
+    width: Optional[int] = typer.Option(
+        None,
+        "--width",
+        min=1,
+        max=MAX_REVIEW_WIDTH,
+        help="Independent lens count; emits r2b.review-set.v1 when set",
+    ),
+    lenses: Optional[list[str]] = typer.Option(
+        None,
+        "--lens",
+        help="Custom lens thesis; repeatable and applied before built-in lenses",
+    ),
+    top_k: int = typer.Option(
+        2,
+        "--top",
+        min=1,
+        help="Regions from each pass included in the width overlay",
+    ),
     config_path: Optional[Path] = typer.Option(
         None,
         "--config",
         help="LLM overlay TOML; ignored by rules mode",
     ),
-    json_output: bool = typer.Option(False, "--json", help="Emit r2b.review.v1 JSON"),
+    json_output: bool = typer.Option(False, "--json", help="Emit versioned review JSON"),
 ) -> None:
     """Compare the fixed point-table order with an optional model order."""
 
     try:
         selected_mode = normalize_review_mode(mode)
         briefing = _load_review_briefing(briefing_path)
-        payload = review_briefing(
-            briefing,
-            mode=selected_mode,
-            thesis=thesis,
-            config_path=config_path,
-        )
+        if width is not None or lenses:
+            lens_theses = list(lenses or [])
+            if thesis:
+                lens_theses.insert(0, thesis)
+            payload = review_briefing_set(
+                briefing,
+                mode=selected_mode,
+                width=width or len(lens_theses),
+                theses=lens_theses,
+                top_k=top_k,
+                config_path=config_path,
+            )
+        else:
+            payload = review_briefing(
+                briefing,
+                mode=selected_mode,
+                thesis=thesis,
+                config_path=config_path,
+            )
     except (BundleError, ReviewError, LLMError, OSError, json.JSONDecodeError) as exc:
         err_console.print(f"[red]Review failed:[/] {exc}")
         raise typer.Exit(code=2) from exc
@@ -289,6 +326,9 @@ def _load_review_briefing(path: Path) -> dict[str, Any]:
 
 
 def _render_review(payload: dict[str, Any]) -> None:
+    if payload.get("schema_version") == "r2b.review-set.v1":
+        _render_review_set(payload)
+        return
     table = Table(title=f"Region review · {payload.get('mode')}")
     table.add_column("Rules", justify="right")
     table.add_column("Model", justify="right")
@@ -316,6 +356,31 @@ def _render_review(payload: dict[str, Any]) -> None:
         console.print(f"[dim]{model.get('provider')}/{model.get('model')} · tool rounds 0[/]")
 
 
+def _render_review_set(payload: dict[str, Any]) -> None:
+    overlay = payload.get("overlay") if isinstance(payload.get("overlay"), dict) else {}
+    marginal = overlay.get("marginal") if isinstance(overlay, dict) else []
+    table = Table(title=f"Review width · {payload.get('width')} · top {payload.get('top_k')}")
+    table.add_column("Width", justify="right")
+    table.add_column("New regions")
+    table.add_column("Cumulative", justify="right")
+    table.add_column("Passes", justify="right")
+    table.add_column("Model calls", justify="right")
+    for item in marginal if isinstance(marginal, list) else []:
+        if not isinstance(item, dict):
+            continue
+        table.add_row(
+            str(item.get("width")),
+            ", ".join(str(value) for value in item.get("new_region_ids") or []) or "—",
+            str(len(item.get("cumulative_region_ids") or [])),
+            str(item.get("pass_count")),
+            str(item.get("model_calls")),
+        )
+    console.print(table)
+    console.print(
+        "[dim]One briefing; independent fan-out; evidence IDs are deduplicated in the overlay.[/]"
+    )
+
+
 @bundle_app.command("create")
 def bundle_create(
     binary: Path = typer.Argument(..., help="Path to the binary or firmware subject"),
@@ -337,6 +402,29 @@ def bundle_create(
         "--extract",
         help="Run sandboxed binwalk3/unblob and merge into the artifact DAG",
     ),
+    review_width: int = typer.Option(
+        0,
+        "--review-width",
+        min=0,
+        max=MAX_REVIEW_WIDTH,
+        help="Attach an independent multi-lens review; 0 disables review",
+    ),
+    review_mode: str = typer.Option(
+        "rules",
+        "--review-mode",
+        help="Review engine: rules, llm, both (compare aliases both)",
+    ),
+    review_lenses: Optional[list[str]] = typer.Option(
+        None,
+        "--review-lens",
+        help="Custom model lens thesis; repeatable",
+    ),
+    review_top: int = typer.Option(
+        2,
+        "--review-top",
+        min=1,
+        help="Regions from each pass included in the attached overlay",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Emit the validated bundle summary as JSON"),
 ) -> None:
     """Analyze a subject and write a portable, validated evidence bundle."""
@@ -351,16 +439,28 @@ def bundle_create(
     public = analysis_result_to_public_dict(result)
     briefing = build_briefing(result, max_regions=max_regions)
     public["briefing"] = briefing
+    review_payload = None
     try:
+        if review_width or review_lenses:
+            lens_theses = list(review_lenses or [])
+            review_payload = review_briefing_set(
+                briefing,
+                mode=normalize_review_mode(review_mode),
+                width=review_width or len(lens_theses),
+                theses=lens_theses,
+                top_k=review_top,
+                config_path=config_path,
+            )
         bundle = create_evidence_bundle(
             destination,
             briefing=briefing,
             analysis=public,
             tool_status=result.tool_status,
+            review=review_payload,
             target=binary,
             include_target=include_target,
         )
-    except BundleError as exc:
+    except (BundleError, ReviewError, LLMError) as exc:
         err_console.print(f"[red]Could not create bundle:[/] {exc}")
         raise typer.Exit(code=1) from exc
     summary = bundle.summary()

@@ -60,6 +60,7 @@ jobs:
           uv run ty check src/r2b/api.py src/r2b/bundle.py src/r2b/analysis/provenance.py src/r2b/analysis/review.py
           python -m json.tool schemas/analysis_bundle.schema.json > /dev/null
           python -m json.tool schemas/review.schema.json > /dev/null
+          python -m json.tool schemas/review-set.schema.json > /dev/null
           python -m json.tool schemas/setup.schema.json > /dev/null
           uv run pytest tests/unit tests/integration/test_api.py::TestChatsEndpoint::test_chat_bundle_exports_json_and_markdown
           uv run r2b --version

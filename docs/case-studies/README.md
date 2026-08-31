@@ -1,22 +1,22 @@
-# AArch64 case studies
+# AArch64 investigations
 
-Case studies are investigations that teach something concrete about their
-target. They are read-only runs against public, redistributable binaries—not
-fixtures written to flatter the ranker. Target code is downloaded,
-hash-checked, and analyzed; it is never executed. Third-party binaries are not
-committed.
+These are read-only investigations of public, redistributable binaries. Each
+one answers a narrow question or records a useful limit. They are not fixtures
+written to flatter the ranker. Target code is downloaded, hash-checked, and
+analyzed; it is never executed. Third-party binaries are not committed.
 
 | Investigation | Question answered |
 |---|---|
 | [OpenWrt uHTTPD: following a request to `execl`](uhttpd-aarch64.md) | What path, dispatch, process, and configuration boundaries sit between an HTTP request and CGI launch? |
+| [Review width on three AArch64 programs](review-width-aarch64.md) | When do independent lenses expose a new evidence capsule, and when does another pass add nothing? |
 
 GNU Hello is kept separately as a [calibration sample](../calibration/hello-aarch64.md),
 not presented as an investigation. It catches noisy risk language on a known
 benign target.
 
 [`scripts/fetch_case_studies.sh`](../../scripts/fetch_case_studies.sh)
-recreates both public inputs in a temporary directory. It validates package and
-extracted-binary SHA-256 values, and it never invokes either target.
+recreates the public inputs in a temporary directory. It validates package and
+extracted-binary SHA-256 values, and it never invokes a target.
 
 ## Reproduce the investigation
 

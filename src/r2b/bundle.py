@@ -30,6 +30,7 @@ _BRIEFING_MEMBER = "briefing.json"
 _ANALYSIS_MEMBER = "analysis.json"
 _TOOLS_MEMBER = "tools.json"
 _PROVENANCE_MEMBER = "provenance.json"
+_REVIEW_MEMBER = "review.json"
 _TARGET_MEMBER = "target.bin"
 _ALLOWED_MEMBERS = frozenset(
     {
@@ -39,11 +40,12 @@ _ALLOWED_MEMBERS = frozenset(
         _ANALYSIS_MEMBER,
         _TOOLS_MEMBER,
         _PROVENANCE_MEMBER,
+        _REVIEW_MEMBER,
         _TARGET_MEMBER,
     }
 )
 _FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
-_MAX_MEMBERS = 7
+_MAX_MEMBERS = 8
 _MAX_MANIFEST_BYTES = 1 * 1024 * 1024
 _MAX_JSON_MEMBER_BYTES = 64 * 1024 * 1024
 _MAX_TARGET_MEMBER_BYTES = 512 * 1024 * 1024
@@ -70,6 +72,7 @@ class BundleContents:
     analysis: dict[str, Any]
     tool_status: dict[str, Any]
     provenance: dict[str, Any] | None
+    review: dict[str, Any] | None
 
     def summary(self) -> dict[str, Any]:
         subject = _object(self.manifest.get("subject"), "manifest.subject")
@@ -91,6 +94,7 @@ def create_bundle(
     briefing: Mapping[str, Any],
     analysis: Mapping[str, Any],
     tool_status: Mapping[str, Any] | None = None,
+    review: Mapping[str, Any] | None = None,
     target: str | Path | None = None,
     include_target: bool = False,
 ) -> BundleContents:
@@ -125,6 +129,11 @@ def create_bundle(
         _BRIEFING_MEMBER: _canonical_json(briefing_doc),
         _TOOLS_MEMBER: _canonical_json(tools_doc),
     }
+    if review is not None:
+        review_doc = _json_object(review, "review")
+        if review_doc.get("schema_version") not in {"r2b.review.v1", "r2b.review-set.v1"}:
+            raise BundleError("review must use schema_version r2b.review.v1 or r2b.review-set.v1")
+        documents[_REVIEW_MEMBER] = _canonical_json(review_doc)
     provenance = analysis_doc.get("provenance")
     if provenance is not None:
         documents[_PROVENANCE_MEMBER] = _canonical_json(_json_object(provenance, "provenance"))
@@ -204,6 +213,11 @@ def read_bundle(path: str | Path) -> BundleContents:
                 if _PROVENANCE_MEMBER in archive.namelist()
                 else None
             )
+            review = (
+                _read_json_member(archive, _REVIEW_MEMBER, _MAX_JSON_MEMBER_BYTES)
+                if _REVIEW_MEMBER in archive.namelist()
+                else None
+            )
     except (zipfile.BadZipFile, OSError) as exc:
         raise BundleError(f"invalid r2b bundle: {exc}") from exc
 
@@ -211,6 +225,11 @@ def read_bundle(path: str | Path) -> BundleContents:
         raise BundleError("briefing.json has an unsupported schema_version")
     if provenance is not None and provenance != analysis.get("provenance"):
         raise BundleError("provenance.json does not match public analysis provenance")
+    if review is not None and review.get("schema_version") not in {
+        "r2b.review.v1",
+        "r2b.review-set.v1",
+    }:
+        raise BundleError("review.json has an unsupported schema_version")
     return BundleContents(
         path=bundle_path,
         sha256=bundle_sha256,
@@ -219,6 +238,7 @@ def read_bundle(path: str | Path) -> BundleContents:
         analysis=analysis,
         tool_status=tools,
         provenance=provenance,
+        review=review,
     )
 
 
@@ -292,6 +312,7 @@ def _role_for(name: str) -> str:
         _ANALYSIS_MEMBER: "analysis",
         _TOOLS_MEMBER: "tool_status",
         _PROVENANCE_MEMBER: "provenance",
+        _REVIEW_MEMBER: "review",
     }[name]
 
 

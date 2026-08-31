@@ -75,6 +75,83 @@ _INTERESTING_IMPORTS = {
     "ptrace",
     "system",
 }
+_IMPORT_GROUPS = (
+    (
+        "process",
+        "Process launch / child control",
+        frozenset(
+            {
+                "system",
+                "popen",
+                "execve",
+                "execl",
+                "execlp",
+                "execvp",
+                "execv",
+                "execlpe",
+                "execvpe",
+                "fork",
+                "clone",
+            }
+        ),
+        93,
+        "These imports cross from the current process into a child or another program.",
+    ),
+    (
+        "network",
+        "Network ingress / egress",
+        frozenset(
+            {
+                "socket",
+                "bind",
+                "listen",
+                "accept",
+                "connect",
+                "send",
+                "recv",
+                "sendto",
+                "recvfrom",
+            }
+        ),
+        90,
+        "These imports mark code that accepts or sends data across a network boundary.",
+    ),
+    (
+        "runtime",
+        "Runtime loading / memory mapping",
+        frozenset({"dlopen", "dlsym", "mmap", "mprotect", "ptrace"}),
+        87,
+        "These imports mark runtime code loading, mapped memory, or process inspection.",
+    ),
+    (
+        "memory",
+        "Memory and path handling",
+        frozenset(
+            {
+                "strcpy",
+                "strcat",
+                "sprintf",
+                "vsprintf",
+                "gets",
+                "scanf",
+                "sscanf",
+                "memcpy",
+                "memmove",
+                "realpath",
+                "tmpnam",
+            }
+        ),
+        84,
+        "These imports are useful caller pivots, but an import alone says nothing about data flow.",
+    ),
+    (
+        "control",
+        "Kernel and identity controls",
+        frozenset({"setuid", "setgid", "prctl", "ioctl"}),
+        81,
+        "These imports mark identity changes or program-specific kernel control paths.",
+    ),
+)
 _NAME_HINTS = (
     "main",
     "entry",
@@ -910,44 +987,41 @@ def _signal_regions(firmware: dict[str, Any], profile: dict[str, Any]) -> list[R
 
 def _import_regions(r2_quick: dict[str, Any]) -> list[RegionAsk]:
     imports = [_import_name(item) for item in _list(r2_quick.get("imports"))]
-    hits = [name for name in imports if _basename(name) in _DANGEROUS_IMPORTS | _INTERESTING_IMPORTS]
-    if not hits:
-        return []
-    dangerous = [name for name in hits if _basename(name) in _DANGEROUS_IMPORTS]
-    bases = {_basename(name) for name in hits}
-    if bases & set(_VERIFY_IMPORTS):
-        score = 93
-    elif bases & set(_BUFFER_IMPORTS):
-        score = 86
-    elif dangerous:
-        score = 78
-    else:
-        score = 76
-    text = "\n".join(hits[:16])
-    return [
-        RegionAsk(
-            id="imports:plt",
-            title="PLT / imported libc surface",
-            why=(
-                "Dangerous or network imports are the cheapest cross-refs to follow."
-                if dangerous
-                else "Network/loader imports mark the user-facing surface."
-            ),
-            score=score,
-            tags=["imports", "plt"] + (["dangerous"] if dangerous else []),
-            snippet=RegionSnippet(
-                source="radare2",
-                kind="inventory",
-                text=text,
-                xref=_basename((dangerous or hits)[0]),
-                artifact_id="imports:plt",
-            ),
-            next_actions=[
-                "r2: `ii` then `axt @ sym.imp.<name>` for each dangerous import.",
-                "Rank callers of system/strcpy/sprintf before reading random large functions.",
-            ],
+    names_by_base: dict[str, str] = {}
+    for name in imports:
+        base = _basename(name)
+        if base in _DANGEROUS_IMPORTS | _INTERESTING_IMPORTS:
+            names_by_base.setdefault(base, name)
+
+    regions: list[RegionAsk] = []
+    for group_id, title, members, score, why in _IMPORT_GROUPS:
+        bases = sorted(set(names_by_base) & members)
+        if not bases:
+            continue
+        hits = [names_by_base[base] for base in bases]
+        dangerous = any(base in _DANGEROUS_IMPORTS for base in bases)
+        artifact_id = f"imports:{group_id}"
+        regions.append(
+            RegionAsk(
+                id=artifact_id,
+                title=title,
+                why=why,
+                score=score,
+                tags=["imports", "plt", group_id] + (["dangerous"] if dangerous else []),
+                snippet=RegionSnippet(
+                    source="radare2",
+                    kind="inventory",
+                    text="\n".join(hits[:16]),
+                    xref=bases[0],
+                    artifact_id=artifact_id,
+                ),
+                next_actions=[
+                    f"r2: `ii` then `axt @ sym.imp.{bases[0]}` to find the first caller.",
+                    "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim.",
+                ],
+            )
         )
-    ]
+    return regions
 
 
 def _entry_regions(

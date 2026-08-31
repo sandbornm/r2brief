@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, Collection, Literal, Mapping, S
 
 from r2b.analysis.briefing import build_briefing, render_briefing_markdown
 from r2b.analysis.orchestrator import AnalysisOrchestrator, AnalysisResult
-from r2b.analysis.review import ReviewMode, review_briefing
+from r2b.analysis.review import ReviewMode, review_briefing, review_briefing_set
 from r2b.analysis.result_dto import analysis_result_to_public_dict
 from r2b.config import AppConfig, load_config
 from r2b.environment import EnvironmentReport, detect_environment
@@ -285,15 +285,18 @@ def review(
     *,
     mode: ReviewMode | str = "rules",
     thesis: str | None = None,
+    width: int | None = None,
+    lenses: Sequence[str] | None = None,
+    top_k: int = 2,
     bridge: LLMBridge | None = None,
     config: AppConfig | None = None,
     config_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Create a versioned rules/model review without changing the briefing.
 
-    ``rules`` makes no model call. ``llm`` asks a configured model to return an
-    exact permutation of known region IDs. ``both`` also reports rank
-    disagreements. Model tool execution is disabled in ``r2b.review.v1``.
+    With no ``width``, this returns the original ``r2b.review.v1`` document.
+    Set ``width`` to fan out independent lenses and return
+    ``r2b.review-set.v1``. No review executes tools or changes briefing scores.
     """
 
     if isinstance(analysis, AnalysisReport):
@@ -302,6 +305,20 @@ def review(
         source = dict(analysis)
         nested = source.get("briefing")
         briefing = dict(nested) if isinstance(nested, Mapping) else source
+    if width is not None or lenses:
+        lens_theses = list(lenses or [])
+        if thesis:
+            lens_theses.insert(0, thesis)
+        return review_briefing_set(
+            briefing,
+            mode=mode,
+            width=width if width is not None else len(lens_theses),
+            theses=lens_theses,
+            top_k=top_k,
+            bridge=bridge,
+            config=config,
+            config_path=config_path,
+        )
     return review_briefing(
         briefing,
         mode=mode,

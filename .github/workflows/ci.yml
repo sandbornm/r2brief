@@ -43,6 +43,7 @@ jobs:
           python -m json.tool schemas/artifact_dag.schema.json > /dev/null
           python -m json.tool schemas/briefing.schema.json > /dev/null
           python -m json.tool schemas/review.schema.json > /dev/null
+          python -m json.tool schemas/review-set.schema.json > /dev/null
           python -m json.tool schemas/pilot.schema.json > /dev/null
           python -m json.tool schemas/setup.schema.json > /dev/null
       - name: Pytest

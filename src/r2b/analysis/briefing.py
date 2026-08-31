@@ -558,7 +558,7 @@ def _subject(
     core = _dict(_dict(r2_quick.get("info")).get("core"))
     format_info = _dict(_dict(analysis.get("quick_scan")).get("binary_format"))
     normalized_info = dict(info)
-    for key in ("arch", "bits"):
+    for key in ("format", "arch", "bits"):
         if format_info.get(key) not in {None, ""}:
             normalized_info[key] = format_info[key]
     imports = [_import_name(item) for item in _list(r2_quick.get("imports"))]
@@ -619,7 +619,7 @@ def _classify_subject(
     info: dict[str, Any],
     profile: dict[str, Any],
 ) -> str:
-    top = str(firmware.get("top_level_format") or "").lower()
+    top = str(firmware.get("top_level_format") or info.get("format") or "").lower()
     is_elf = bool(firmware.get("is_elf")) or top == "elf"
     if is_elf:
         os_name = str(info.get("os") or profile.get("os") or "").strip().lower()

@@ -229,11 +229,24 @@ class Radare2Adapter:
             info = self._cmdj(session, "ij") or {}
             arch = ""
             if isinstance(info, dict):
-                arch = str((info.get("bin") or {}).get("arch") or "")
+                bin_info = info.get("bin") or {}
+                arch = str(bin_info.get("arch") or "")
+                if arch.lower() == "arm" and bin_info.get("bits") == 64:
+                    arch = "aarch64"
             xref_lines: dict[str, list[str]] = {}
             for name in imports:
-                refs = session.cmd(f"axt @ sym.imp.{name}") or ""
-                sites = [line.strip() for line in refs.splitlines() if "CALL" in line or "ICOD" in line]
+                sites: list[str] = []
+                seen_sites: set[str] = set()
+                for target in (f"sym.imp.{name}", f"reloc.{name}"):
+                    refs = session.cmd(f"axt @ {target}") or ""
+                    for raw_line in refs.splitlines():
+                        line = raw_line.strip()
+                        if not any(kind in line for kind in ("CALL", "ICOD", "DATA")):
+                            continue
+                        if line in seen_sites:
+                            continue
+                        seen_sites.add(line)
+                        sites.append(line)
                 lines: list[str] = []
                 for site in sites:
                     parts = site.split()

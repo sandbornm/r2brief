@@ -1,0 +1,78 @@
+{
+  "schema_version": "r2b.samples.expectations.v1",
+  "profile": "triage",
+  "cases": [
+    {
+      "path": "samples/bin/arm32/sample.bin",
+      "purpose": "Small ARM32 baseline",
+      "subject_class": "linux_elf",
+      "arch": "arm/32",
+      "region_ids": ["entry:main"],
+      "dangerous_imports": []
+    },
+    {
+      "path": "samples/bin/arm64/crypto_simple",
+      "purpose": "Algorithm example that the quick policy should not pretend to recognize",
+      "subject_class": "linux_elf",
+      "arch": "arm64/64",
+      "region_ids": ["entry:main"],
+      "dangerous_imports": []
+    },
+    {
+      "path": "samples/bin/arm64/fibonacci",
+      "purpose": "Recursive control-flow example",
+      "subject_class": "linux_elf",
+      "arch": "arm64/64",
+      "region_ids": ["entry:main"],
+      "dangerous_imports": []
+    },
+    {
+      "path": "samples/bin/arm64/hello",
+      "purpose": "Benign entry-only control",
+      "subject_class": "linux_elf",
+      "arch": "arm64/64",
+      "region_ids": ["entry:main"],
+      "dangerous_imports": []
+    },
+    {
+      "path": "samples/bin/arm64/structs",
+      "purpose": "Data-layout example with no quick-pass behavior claim",
+      "subject_class": "linux_elf",
+      "arch": "arm64/64",
+      "region_ids": ["entry:main"],
+      "dangerous_imports": []
+    },
+    {
+      "path": "samples/bin/arm64/syscalls",
+      "purpose": "Static direct-syscall control with no imports",
+      "subject_class": "linux_elf",
+      "arch": "arm64/64",
+      "region_ids": ["entry:_start"],
+      "dangerous_imports": []
+    },
+    {
+      "path": "samples/bin/arm64/vulnerable",
+      "purpose": "Teaching overflow with a real strcpy lead",
+      "subject_class": "linux_elf",
+      "arch": "arm64/64",
+      "region_ids": ["entry:main", "imports:plt"],
+      "dangerous_imports": ["strcpy"]
+    },
+    {
+      "path": "samples/triage/bin/shallow-host",
+      "purpose": "Native Mach-O contrast with fortified import spelling",
+      "subject_class": "macho",
+      "arch": "arm64/64",
+      "region_ids": ["entry:entry", "imports:plt"],
+      "dangerous_imports": ["__strcpy_chk"]
+    },
+    {
+      "path": "samples/triage/bin/shallow-linux-arm64",
+      "purpose": "AArch64 fixture used for the brief, verify, decompile loop",
+      "subject_class": "linux_elf",
+      "arch": "arm64/64",
+      "region_ids": ["entry:main", "imports:plt"],
+      "dangerous_imports": ["strcpy"]
+    }
+  ]
+}

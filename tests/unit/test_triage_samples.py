@@ -18,3 +18,25 @@ def test_shallow_triage_fixture_contract() -> None:
         assert symbol in source
     assert "system(" not in source
     assert "exec(" not in source
+
+
+def test_first_pass_expectations_cover_every_committed_sample() -> None:
+    root = Path(__file__).resolve().parents[2]
+    manifest = json.loads((root / "samples" / "first-pass-expectations.json").read_text())
+    cases = manifest["cases"]
+
+    assert manifest["schema_version"] == "r2b.samples.expectations.v1"
+    assert manifest["profile"] == "triage"
+    assert {case["path"] for case in cases} == {
+        str(path.relative_to(root))
+        for path in (root / "samples" / "bin").glob("**/*")
+        if path.is_file() and path.name != "manifest.json"
+    } | {
+        str(path.relative_to(root))
+        for path in (root / "samples" / "triage" / "bin").glob("*")
+        if path.is_file()
+    }
+    for case in cases:
+        assert (root / case["path"]).is_file()
+        assert case["region_ids"]
+        assert case["purpose"]

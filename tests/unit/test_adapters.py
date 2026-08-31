@@ -104,6 +104,64 @@ class TestRadare2Adapter:
             with patch("builtins.__import__", side_effect=ModuleNotFoundError):
                 assert adapter._module_available() is False
 
+    def test_verify_scan_follows_aarch64_got_data_reference(self):
+        """A reloc DATA xref can lead to a nearby indirect ``blr`` call."""
+        from r2b.adapters.radare2 import Radare2Adapter
+
+        class FakeSession:
+            def __init__(self):
+                self.commands: list[str] = []
+                self.closed = False
+
+            def cmd(self, command: str) -> str:
+                self.commands.append(command)
+                responses = {
+                    "ij": '{"bin":{"arch":"arm","bits":64}}',
+                    "axt @ sym.imp.execl": "",
+                    "axt @ reloc.execl": (
+                        "fcn.000092e4 0x936c [DATA:r--] ldr x4, reloc.execl"
+                    ),
+                    "pd -16 @ 0x936c": "",
+                    "pd 8 @ 0x936c": "\n".join(
+                        [
+                            "0x0000936c 84b045f9 ldr x4, [x4, 0xb60] ; reloc.execl",
+                            "0x00009374 e20301aa mov x2, x1",
+                            "0x00009380 e00301aa mov x0, x1",
+                            "0x00009384 80003fd6 blr x4",
+                        ]
+                    ),
+                }
+                return responses.get(command, "")
+
+            def quit(self) -> None:
+                self.closed = True
+
+        adapter = Radare2Adapter()
+        session = FakeSession()
+
+        with (
+            patch.object(Radare2Adapter, "is_available", return_value=True),
+            patch.object(Radare2Adapter, "_open", return_value=session),
+        ):
+            result = adapter.verify_scan(Path("/tmp/uhttpd"), ["execl"])
+
+        assert result == [
+            {
+                "import": "execl",
+                "status": "dynamic",
+                "call_sites": [
+                    {
+                        "function": "000092e4",
+                        "address": "0x00009384",
+                        "argument": "<dynamic>",
+                        "constant": False,
+                    }
+                ],
+            }
+        ]
+        assert "axt @ reloc.execl" in session.commands
+        assert session.closed is True
+
 
 class TestCapstoneAdapter:
     """Tests for CapstoneAdapter."""

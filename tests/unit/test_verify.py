@@ -129,10 +129,47 @@ class TestVerifyImports:
                 "           0x004007a0      dcffff97       bl sym.imp.strcpy",
             ]
         }
-        verdicts = verify_imports(xref_lines, arch="arm")
+        verdicts = verify_imports(xref_lines, arch="aarch64")
         assert verdicts[0].status == "dynamic"
         assert verdicts[0].call_sites[0].address == "0x004007a0"
         assert verdicts[0].call_sites[0].function == "check_phrase"
+
+    def test_aarch64_got_load_followed_by_blr(self):
+        xref_lines = {
+            "execl": [
+                "0x0000936c 84b045f9 ldr x4, [x4, 0xb60] ; reloc.execl",
+                "; r2b-caller: fcn.000092e4",
+                "0x00009374 e20301aa mov x2, x1",
+                "0x00009380 e00301aa mov x0, x1",
+                "0x00009384 80003fd6 blr x4",
+            ]
+        }
+
+        verdicts = verify_imports(xref_lines, arch="aarch64")
+
+        assert verdicts[0].status == "dynamic"
+        assert verdicts[0].call_sites[0].address == "0x00009384"
+        assert verdicts[0].call_sites[0].function == "000092e4"
+        assert verdicts[0].call_sites[0].argument == "<dynamic>"
+
+    def test_overlapping_windows_merge_the_same_call_site(self):
+        first_window = [
+            "0x0000936c 84b045f9 ldr x4, [x4, 0xb60] ; reloc.execl",
+            "0x00009380 e00301aa mov x0, x1",
+            "0x00009384 80003fd6 blr x4",
+        ]
+        named_window = [
+            "0x0000936c 84b045f9 ldr x4, [x4, 0xb60] ; reloc.execl",
+            "; r2b-caller: fcn.000092e4",
+            "0x00009380 e00301aa mov x0, x1",
+            "0x00009384 80003fd6 blr x4",
+        ]
+
+        verdicts = verify_imports({"execl": first_window + named_window}, arch="aarch64")
+
+        assert len(verdicts[0].call_sites) == 1
+        assert verdicts[0].call_sites[0].address == "0x00009384"
+        assert verdicts[0].call_sites[0].function == "000092e4"
 
     def test_end_to_end_mips_popen(self):
         xref_lines = {

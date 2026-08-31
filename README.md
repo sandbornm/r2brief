@@ -109,6 +109,17 @@ code map, then adds the workflow around it:
 | records, corpus comparisons, bundles, and replay data | explicit runtime inspection from Frida or GEF |
 | optional rules/model rank comparison | extraction from binwalk3 or unblob |
 
+The default `analyze()` profile is deliberately mechanical. It reads format
+headers, runs the bounded file/runtime checks, then uses r2pipe to start
+radare2 and request metadata, imports, strings, sections, symbols, entry points,
+and 32 bytes at the selected entry. `build_briefing()` turns those evidence
+classes into fixed-point candidates, sorts them, and emits the handoff. It does
+not infer whole-program behavior or estimate vulnerability likelihood.
+
+The `standard` and `exhaustive` profiles can add the enabled deep adapters after
+that intake. Frida and GEF remain explicit because they execute or attach to a
+target. No profile calls a model as part of analysis.
+
 Without radare2, r2b can still classify formats, inventory firmware, run
 bounded extraction, preserve records, and create bundles. Executable triage is
 much shallower because functions, xrefs, and the normal code map are missing.
@@ -120,33 +131,43 @@ stable format.
 
 ## A real result
 
-The shallow AArch64 fixture ranks the entry function and imported-libc region,
-then emits a one-function decompile command. Verification found the caller of
-`strcpy` but left its argument unresolved instead of guessing:
+The [OpenWrt uHTTPD case study](docs/case-studies/uhttpd-aarch64.md) starts with
+a pinned 66 KB AArch64 package, not a teaching binary. The quick pass reduced
+116 functions and 117 imports to one process-launch boundary:
 
 ```text
-subject       ELF · arm64/64 · 18 functions · 9 imports
-risk          medium
-regions       1. Entry / main @ 0x4007cc           score 89
-              2. PLT / imported libc surface      score 86
-next argv     r2b decompile .../shallow-linux-arm64 0x4007cc --json
-verify        strcpy · check_phrase @ 0x004007a0 · argument=<unresolved>
-models called 0
+subject       ELF64 AArch64 PIE · musl · stripped · no section table
+regions       1. PLT / imported libc surface      score 93
+              2. Entry / entry @ 0x4b0c           score 89
+handoff       r2b verify ./uhttpd --import execl --json
+recovered     reloc.execl @ 0x1fb60 → blr x4 @ 0x9384
+caller        fcn.000092e4 · argument=<dynamic>
+target run    no
+models called no
 ```
 
-Targeted Ghidra decompilation then showed the fixed stack buffer and copied
-argument. The sample exposed a missing AArch64 `bl` / `blr` verifier path; that
-bug is now regression-tested. Build and check the fixtures locally:
+Pinned source showed normal CGI dispatch: path lookup and authentication lead
+to a forked child that calls `execl` directly rather than building a shell
+command. The binary establishes that execution boundary; it does not establish
+a vulnerability. The remaining question belongs to the deployed router: who
+can create or replace an executable CGI path?
+
+The first verifier run missed the GOT-indirect AArch64 call. The original empty
+result remains in the case record, and the recovered instruction pattern now
+has a regression test. The bundled crackmes and algorithm samples stay in
+[calibration](docs/calibration/teaching-fixtures.md), where they test ordering,
+weak results, and known limits rather than serving as product proof.
+
+Build and check those fixtures locally:
 
 ```bash
 ./samples/triage/build.sh
-uv run pytest -q tests/unit/test_triage_samples.py tests/unit/test_binary_formats.py
+uv run pytest -q tests/unit/test_triage_samples.py tests/unit/test_binary_formats.py \
+  tests/integration/test_sample_briefs.py
 ```
 
-The [OpenWrt uHTTPD case study](docs/case-studies/uhttpd-aarch64.md) follows an
-`execl` lead through CGI dispatch at a pinned upstream revision. It ends with
-the deployment question static analysis cannot answer. [GNU Hello](docs/calibration/hello-aarch64.md)
-is the benign control for import-risk noise.
+[GNU Hello](docs/calibration/hello-aarch64.md) is the benign control for
+import-risk noise.
 
 ## Install and use
 
@@ -228,6 +249,26 @@ cd web/frontend && npm ci && npm test && npm run build
 ```
 
 Start with [AGENTS.md](AGENTS.md) and [docs/USAGE.md](docs/USAGE.md).
+
+## Responsible use and third-party software
+
+r2brief's MIT license covers r2brief, not the target being analyzed. Before
+using r2b, make sure you own the system, binary, firmware, or service or have
+authorization to assess it. You are responsible for following applicable law,
+contracts, organizational policy, and the licenses of the targets and tools you
+use.
+
+r2brief itself is MIT licensed. The MIT license includes the standard
+no-warranty and limitation-of-liability terms; it does not grant rights to a
+target, authorize access to somebody else's systems, or relicense third-party
+software. r2b invokes optional tools and installs optional Python dependencies
+under their own licenses. See [NOTICE.md](NOTICE.md) for the third-party map.
+If you redistribute a container or appliance that includes third-party
+binaries, review that artifact separately and include any notices or source
+offers those licenses require.
+
+Runtime adapters remain explicit because they execute or attach to a target.
+Use an isolated environment and obtain authorization before enabling them.
 
 MIT — [LICENSE](LICENSE). Third-party map: [NOTICE.md](NOTICE.md). r2brief is
 not an official radare2 project.

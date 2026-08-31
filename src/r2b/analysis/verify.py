@@ -225,6 +225,25 @@ def _caller_marker(line: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _dedupe_call_sites(call_sites: list[CallSite]) -> list[CallSite]:
+    """Merge overlapping disassembly windows for the same call address."""
+    unique: dict[str, CallSite] = {}
+    for site in call_sites:
+        existing = unique.get(site.address)
+        if existing is None:
+            unique[site.address] = site
+            continue
+        if existing.function == "unknown" and site.function != "unknown":
+            existing.function = site.function
+        existing_rank = 0 if existing.argument == "<unresolved>" else 1 + int(existing.is_constant)
+        site_rank = 0 if site.argument == "<unresolved>" else 1 + int(site.is_constant)
+        if site_rank > existing_rank:
+            existing.argument = site.argument
+            existing.is_constant = site.is_constant
+            existing.evidence = site.evidence
+    return list(unique.values())
+
+
 def verify_imports(
     xref_lines: dict[str, list[str]],
     arch: str | None,
@@ -254,6 +273,7 @@ def verify_imports(
                 if references_import or _window_references(current[:-1], import_name):
                     verdict.call_sites.append(resolve_argument(current, len(current) - 1, arg_regs))
                     current = []
+        verdict.call_sites = _dedupe_call_sites(verdict.call_sites)
         verdicts.append(verdict)
     return verdicts
 

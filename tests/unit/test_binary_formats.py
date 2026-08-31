@@ -205,3 +205,23 @@ def test_public_result_promotes_binary_format_metadata(tmp_path: Path) -> None:
     payload = analysis_result_core_dict(result)
 
     assert payload["binary_format"] == {"format": "pe", "arch": "x86_64", "bits": 64}
+
+
+def test_binary_format_classifies_code_without_firmware_payload(tmp_path: Path) -> None:
+    binary = tmp_path / "shallow"
+    analysis = {
+        "binary": str(binary),
+        "quick_scan": {
+            "binary_format": {"format": "elf", "arch": "arm64", "bits": 64},
+            "radare2": {
+                "info": {"bin": {"arch": "arm", "bits": 64, "os": "linux"}},
+                "imports": [],
+            },
+        },
+        "deep_scan": {},
+        "issues": [],
+    }
+
+    briefing = build_briefing(analysis)
+
+    assert briefing["subject"]["subject_class"] == "linux_elf"

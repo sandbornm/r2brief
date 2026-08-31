@@ -3,18 +3,23 @@
 </p>
 
 <p align="center">
-  <strong>Get a bounded first pass on an unfamiliar binary before opening a full RE project.</strong><br />
-  r2b keeps the evidence, ranks a few places to inspect, and prints the next commands.
+  <strong>Build a small evidence record before opening a full RE project.</strong><br />
+  r2b ranks a few places to inspect, keeps the supporting facts, and prints the next commands.
 </p>
 
 <p align="center">
   <a href="https://github.com/sandbornm/r2brief/actions/workflows/ci.yml"><img src="https://github.com/sandbornm/r2brief/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 </p>
 
-`r2b` accepts ELF, PE, Mach-O, firmware, containers, and raw blobs through a
-CLI, Python library, web workbench, or subprocess harness. It detects the tools
-on the host and records missing prerequisites as skips. The default path does
-not execute the target or call a model.
+`r2b` classifies ELF, PE, Mach-O, firmware, containers, and raw blobs through a
+CLI, Python library, web workbench, or subprocess harness. The most tested path
+is AArch64 ELF, with selected firmware samples. It detects the tools on the
+host and records missing prerequisites as skips. The default path does not
+execute the target or call a model.
+
+r2b is useful when the starting scope is unclear or the evidence needs to move
+between people, hosts, or programs. It does not replace the disassembler,
+decompiler, or runtime tool that produced the underlying facts.
 
 ```bash
 git clone https://github.com/sandbornm/r2brief.git
@@ -32,7 +37,7 @@ the system Python.
 |---|---|
 | One executable | format and architecture, tool coverage, ranked regions, evidence references, and exact follow-up commands |
 | Firmware or a container | bounded inventory, carved-child recommendations, and an artifact DAG with offsets and hashes |
-| A saved analysis | one SHA-256-addressed record that can absorb later passes without losing earlier evidence |
+| A saved analysis | one SHA-256-addressed record that stores later passes alongside earlier evidence |
 | A handoff | one validated `.r2br` bundle with the briefing, public analysis, tool status, hashes, replay data, and an optional review overlay |
 | Tagged sibling records | exact duplicates and recurring imports, regions, tags, or firmware wrapper families |
 
@@ -134,9 +139,9 @@ stable format.
 ## Worked investigation
 
 The [OpenWrt uHTTPD investigation](docs/case-studies/uhttpd-aarch64.md) starts with
-a pinned 66 KB AArch64 package, not a teaching binary. The quick pass reduced
-116 functions and 117 imports to a few evidence capsules. The process capsule
-gave the useful first command:
+a pinned 66 KB AArch64 package. The quick pass put a few evidence capsules
+ahead of the full function and import inventories. The process capsule gave
+the useful first command:
 
 ```text
 subject       ELF64 AArch64 PIE · musl · stripped · no section table
@@ -172,6 +177,11 @@ uv run pytest -q tests/unit/test_triage_samples.py tests/unit/test_binary_format
 
 [GNU Hello](docs/calibration/hello-aarch64.md) is the benign control for
 import-risk noise.
+
+The [AArch64 first-pass corpus](docs/case-studies/corpus-aarch64.md) adds
+BusyBox, dnsmasq, rpcd, and ubus. It records concrete caller scopes, a noisy
+multi-call result, and a real thin brief. The page also lists the missing PE,
+Mach-O, firmware-image, and version-pair coverage.
 
 ## Install and use
 

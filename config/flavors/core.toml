@@ -1,0 +1,22 @@
+# Flavor: core — Pi / 8 GB / omp box. `r2b setup --flavor core --apply`
+# Extra `r2` wraps radare2/file. Merge an --ask overlay after this file.
+# Do not enable Ghidra or angr here.
+
+[analysis]
+require_elf = false
+enable_angr = false
+enable_ghidra = false
+enable_gef = false
+enable_frida = false
+
+[extract]
+enable = false
+extract_elf = false
+
+[ghidra]
+use_bridge = false
+
+[llm]
+compact_context = true
+context_budget_chars = 16000
+enable_fallback = false

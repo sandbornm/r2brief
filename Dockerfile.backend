@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1.6
+
+################################################################################
+# Frontend build stage
+################################################################################
+FROM node:20-bullseye-slim AS frontend-builder
+WORKDIR /frontend
+
+COPY web/frontend/package*.json ./
+RUN npm ci
+COPY web/frontend/ .
+RUN npm run build
+
+################################################################################
+# Backend stage with ARM cross-compilers
+################################################################################
+FROM python:3.11-slim AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_LINK_MODE=copy \
+    R2B_WEB_HOST=0.0.0.0 \
+    R2B_WEB_PORT=5050
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        libmagic-dev \
+        libmagic1 \
+        python3-dev \
+        radare2 \
+        curl \
+        # ARM cross-compilation toolchains
+        gcc-arm-linux-gnueabihf \
+        libc6-dev-armhf-cross \
+        gcc-aarch64-linux-gnu \
+        libc6-dev-arm64-cross \
+        binutils && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock README.md LICENSE NOTICE.md ./
+COPY config ./config
+COPY src ./src
+RUN uv sync --no-dev --frozen --extra std
+
+COPY scripts ./scripts
+COPY ghidra ./ghidra
+COPY web ./web
+COPY --from=frontend-builder /frontend/dist ./web/frontend/dist
+
+# Create compile output directory
+RUN mkdir -p /app/artifacts/compiled && chmod 777 /app/artifacts/compiled
+
+EXPOSE 5050
+
+CMD ["uv", "run", "--no-sync", "r2b-web"]

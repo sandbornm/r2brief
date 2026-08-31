@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sandbornm/r2brief/schemas/evidence_bundle.schema.json",
+  "title": "r2b portable evidence bundle manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "container", "producer", "subject", "entries"],
+  "properties": {
+    "schema_version": { "const": "r2b.bundle.v1" },
+    "container": { "const": "zip" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "r2b" },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "size", "bytes_included"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "size": { "type": ["integer", "null"], "minimum": 0 },
+        "bytes_included": { "type": "boolean" },
+        "member": { "const": "target.bin" }
+      }
+    },
+    "requires_scope": { "type": "boolean" },
+    "entries": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role", "media_type", "sha256", "size"],
+        "properties": {
+          "path": {
+            "enum": ["analysis.json", "briefing.json", "tools.json", "provenance.json", "target.bin"]
+          },
+          "role": {
+            "enum": ["analysis", "briefing", "tool_status", "provenance", "target"]
+          },
+          "media_type": {
+            "enum": ["application/json", "application/octet-stream"]
+          },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

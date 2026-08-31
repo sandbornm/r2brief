@@ -1,0 +1,154 @@
+from __future__ import annotations
+
+import struct
+from pathlib import Path
+
+from r2b.adapters.firmware import FirmwareAdapter
+
+
+def test_firmware_adapter_detects_embedded_components(tmp_path: Path):
+    firmware = bytearray(b"\x00" * 0x3000)
+    firmware[0:7] = b"TP-LINK"
+    firmware[0x40 : 0x40 + 40] = struct.pack(
+        ">10I",
+        0xD00DFEED,
+        0x120,
+        0x38,
+        0x100,
+        0x28,
+        17,
+        16,
+        0,
+        0x20,
+        0x80,
+    )
+    firmware[0x100:0x10B] = b"OpenWrt FIT"
+    firmware[0x1000:0x1004] = b"hsqs"
+    firmware[0x2000:0x2004] = b"\x7fELF"
+    path = tmp_path / "router.bin"
+    path.write_bytes(firmware)
+
+    result = FirmwareAdapter(run_binwalk=False).quick_scan(path)
+
+    assert result["mode"] == "firmware_inventory"
+    assert result["is_elf"] is False
+    assert result["top_level_format"] == "firmware_container"
+    assert result["container_type"] in {"boot_firmware", "filesystem_image"}
+
+    kinds = {artifact["kind"] for artifact in result["embedded_artifacts"]}
+    assert {"device_tree", "squashfs_filesystem", "elf_binary"}.issubset(kinds)
+    assert any(target["kind"] == "elf_binary" for target in result["recommended_targets"])
+    assert any(target["carved_signature"] == "elf" for target in result["carved_targets"])
+    assert any("angr" in task["tools"] and "ghidra" in task["tools"] for task in result["fanout_tasks"])
+
+    elf_target = next(target for target in result["carved_targets"] if target["carved_signature"] == "elf")
+    carved_path = Path(elf_target["carved_path"])
+    assert carved_path.exists()
+    assert carved_path.read_bytes().startswith(b"\x7fELF")
+
+
+def test_firmware_adapter_detects_tplink_cloud_and_img0(tmp_path: Path):
+    blob = bytearray(b"\x00" * 64)
+    blob[0x14:0x21] = b"fw-type:Cloud"
+    path = tmp_path / "cloud.bin"
+    path.write_bytes(blob)
+
+    cloud = FirmwareAdapter(run_binwalk=False).quick_scan(path)
+    kinds = {artifact["kind"] for artifact in cloud["embedded_artifacts"]}
+    assert "vendor_wrapper" in kinds
+    assert cloud["wrapper_family"] == "cloud"
+    assert any(item["name"] == "TP-Link Cloud" for item in cloud["embedded_artifacts"])
+
+    img = bytearray(b"\x00" * 32)
+    img[0x14:0x18] = b"IMG0"
+    img_path = tmp_path / "img0.bin"
+    img_path.write_bytes(img)
+    img_result = FirmwareAdapter(run_binwalk=False).quick_scan(img_path)
+    assert any(item["name"] == "TP-Link IMG0" for item in img_result["embedded_artifacts"])
+    assert img_result["wrapper_family"] == "img0"
+
+
+def test_firmware_adapter_classifies_top_level_elf(tmp_path: Path):
+    path = tmp_path / "sample.elf"
+    path.write_bytes(b"\x7fELF" + b"\x00" * 64)
+
+    result = FirmwareAdapter(run_binwalk=False).quick_scan(path)
+
+    assert result["is_elf"] is True
+    assert result["top_level_format"] == "elf"
+    assert result["container_type"] == "executable"
+    assert result["embedded_artifacts"] == []
+
+
+def test_firmware_adapter_does_not_carve_jffs2_inside_elf(tmp_path: Path):
+    blob = bytearray(b"\x7fELF" + b"\x00" * 512)
+    blob[64:66] = b"\x85\x19"
+    blob[128:130] = b"\x19\x85"
+    path = tmp_path / "thumb.elf"
+    path.write_bytes(blob)
+
+    result = FirmwareAdapter(run_binwalk=False).quick_scan(path)
+
+    kinds = {item["kind"] for item in result["embedded_artifacts"]}
+    assert "jffs2_marker" not in kinds
+    assert result["carved_targets"] == []
+    assert result["recommended_targets"] == []
+    assert any("signature carving skipped" in note for note in result["notes"])
+
+
+def test_firmware_adapter_reports_string_signals_and_entropy(tmp_path: Path):
+    high_entropy = bytes(range(256)) * 256
+    signal_strings = b"\x00".join(
+        [
+            b"admin_password=root",
+            b"http://updates.example/router.bin",
+            b"/etc/init.d/telnetd",
+            b"system(\"/bin/sh\")",
+            b"-----BEGIN RSA PRIVATE KEY-----",
+        ]
+    )
+    path = tmp_path / "router-with-signals.bin"
+    path.write_bytes(high_entropy + b"\x00" + signal_strings)
+
+    result = FirmwareAdapter(run_binwalk=False).quick_scan(path)
+
+    signals = result["string_signals"]
+    assert signals["matched_count"] >= 5
+    assert signals["category_counts"]["credential"] >= 2
+    assert signals["category_counts"]["network"] >= 1
+    assert signals["category_counts"]["service"] >= 1
+    assert signals["category_counts"]["dangerous_api"] >= 1
+    assert any(signal["value"] == "admin_password=root" for signal in signals["top_signals"])
+    assert any(signal["offset_hex"].startswith("0x") for signal in signals["top_signals"])
+
+    entropy = result["entropy"]
+    assert entropy["sampled_windows"] >= 1
+    assert entropy["max"] >= 7.9
+    assert entropy["high_entropy_windows"][0]["offset"] == 0
+    assert any("matched these categories" in note for note in result["notes"])
+    assert any("High-entropy regions" in note for note in result["notes"])
+
+
+def test_firmware_string_rules_do_not_match_substrings_in_ordinary_words(tmp_path: Path):
+    path = tmp_path / "ordinary-words.bin"
+    path.write_bytes(
+        b"usage: shallow <phrase>\x00shallow.c\x00class loader\x00connectivity manager"
+    )
+
+    signals = FirmwareAdapter(run_binwalk=False).quick_scan(path)["string_signals"]
+
+    assert "crypto" not in signals["category_counts"]
+    assert "network" not in signals["category_counts"]
+
+
+def test_firmware_string_rules_separate_build_paths_from_target_paths(tmp_path: Path):
+    path = tmp_path / "paths.bin"
+    path.write_bytes(
+        b"/opt/homebrew/Cellar/toolchain/sysroot/usr/lib/crti.o\x00/etc/init.d/httpd"
+    )
+
+    signals = FirmwareAdapter(run_binwalk=False).quick_scan(path)["string_signals"]
+
+    assert signals["category_counts"]["build_path"] == 1
+    assert signals["category_counts"]["filesystem"] == 1
+    assert signals["categories"]["filesystem"][0]["value"] == "/etc/init.d/httpd"

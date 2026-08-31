@@ -1,0 +1,907 @@
+export type ProgressEventName =
+  | 'analysis_started'
+  | 'analysis_cache_hit'
+  | 'job_started'
+  | 'adapter_started'
+  | 'adapter_completed'
+  | 'adapter_failed'
+  | 'adapter_skipped'
+  | 'stage_started'
+  | 'stage_completed'
+  | 'analysis_result'
+  | 'job_completed'
+  | 'job_failed';
+
+export interface ProgressEventPayload {
+  stage?: string;
+  adapter?: string;
+  payload?: unknown;
+  error?: string;
+  reason?: string;
+  binary?: string;
+  issues?: string[];
+  notes?: string[];
+  session_id?: string;
+  trajectory_id?: string;
+  command?: string;
+  commands?: string[];
+}
+
+export interface ProgressEventEntry {
+  id: string;
+  event: ProgressEventName;
+  data: ProgressEventPayload;
+  timestamp: number;
+}
+
+export interface AnalysisPlanPayload {
+  quick: boolean;
+  deep: boolean;
+  run_angr: boolean;
+  persist_trajectory: boolean;
+  profile?: 'triage' | 'standard' | 'exhaustive' | string;
+}
+
+export interface AnalysisResultPayload {
+  binary: string;
+  plan: AnalysisPlanPayload;
+  quick_scan: Record<string, unknown>;
+  deep_scan: Record<string, unknown>;
+  notes: string[];
+  issues: string[];
+  session_id?: string;
+  trajectory_id?: string;
+  tool_availability?: Record<string, boolean>;  // Which tools were available during analysis
+  tool_status?: Record<string, ToolStatusSummary>;
+  tool_scorecard?: Record<string, ToolScorecardEntry>;
+  evidence_coverage?: EvidenceCoverage;
+  analysis_graph?: AnalysisGraphPayload;
+  snippets?: Array<Record<string, unknown>>;
+  snippet_count?: number;
+  briefing?: AnalysisBriefingPayload;
+  record?: AnalysisRecordSummary;
+}
+
+export interface InsightPattern {
+  id: string;
+  kind: string;
+  title: string;
+  why: string;
+  support: number;
+  total: number;
+  confidence: number;
+  next_action: string;
+  evidence?: Array<{ record_id?: string; name?: string; tags?: string[] }>;
+}
+
+export interface InsightsPayload {
+  schema_version?: string;
+  ready: boolean;
+  reason?: string | null;
+  focus_id?: string | null;
+  sibling_count: number;
+  siblings?: Array<{ record_id?: string; name?: string; tags?: string[] }>;
+  patterns: InsightPattern[];
+  lab_note?: string;
+  skill_ready?: boolean;
+  skill_hint?: string;
+}
+
+export interface AnalysisRecordSummary {
+  schema_version?: string;
+  record_id?: string;
+  sha256?: string;
+  names?: string[];
+  tags?: string[];
+  revision?: number;
+  directory?: string;
+  tool_names?: string[];
+  region_count?: number;
+  cfg_count?: number;
+  updated_at?: string;
+  parent_id?: string | null;
+}
+
+export interface BriefingSnippet {
+  source: string;
+  kind: string;
+  text: string;
+  address?: string | null;
+  function?: string | null;
+}
+
+export interface BriefingRegion {
+  id: string;
+  title: string;
+  why: string;
+  score: number;
+  tags: string[];
+  snippet?: BriefingSnippet | null;
+  ask: string;
+  next_actions: string[];
+}
+
+export interface AnalysisBriefingPayload {
+  schema_version?: string;
+  binary: string;
+  subject?: Record<string, unknown>;
+  summary: string;
+  regions: BriefingRegion[];
+  overall_ask: string;
+  next_steps: string[];
+}
+
+export interface RuntimeRequirements {
+  format?: string;
+  arch?: string;
+  bits?: number;
+  endianness?: string;
+  osabi?: string;
+  abi_version?: string;
+  interp?: string | null;
+  needed?: string[];
+  error?: string;
+}
+
+export interface ToolStatusSummary {
+  status: 'completed' | 'failed' | 'partial' | 'skipped';
+  functions_count?: number;
+  cfg_nodes?: number;
+  cfg_edges?: number;
+  memory_allocations?: string[];
+  warnings?: string[];
+  error?: string;
+  duration_ms?: number;
+  stage?: string;
+  reason?: string;
+}
+
+export interface ToolScorecardEntry {
+  state: string;
+  quality: 'good' | 'usable' | 'limited' | 'unavailable' | string;
+  score: number;
+  speed?: string;
+  confidence?: string;
+  best_for?: string[];
+  limits?: string[];
+  action?: string | string[] | null;
+  duration_ms?: number | null;
+  coverage?: {
+    present?: number;
+    partial?: number;
+    missing?: number;
+  };
+  error?: string | null;
+  warnings?: string[];
+}
+
+export interface EvidenceCoverage {
+  columns: string[];
+  rows: string[];
+  matrix: Record<string, Record<string, string>>;
+}
+
+export interface ToolStatusInfo {
+  available: boolean;
+  enabled?: boolean;
+  install_hint?: string;
+  description?: string;
+  details?: string;
+  path?: string | null;
+  binwalk_available?: boolean;
+  python_package_available?: boolean;
+  bridge_connected?: boolean;
+  bridge_available?: boolean;
+  headless_ready?: boolean;
+  headless_available?: boolean;
+  docker_available?: boolean;
+  image_built?: boolean;
+  cli_available?: boolean;
+  service_available?: boolean;
+  installed_models?: string[];
+  selected_model?: string;
+  selected_model_available?: boolean;
+  transport?: string;
+  url?: string;
+  active_url?: string;
+  command?: string;
+  command_available?: boolean;
+  status_code?: number;
+  capabilities_count?: number;
+  latency_ms?: number;
+  scorecard?: ToolScorecardEntry;
+}
+
+export interface HealthStatus {
+  status: 'ok' | 'error';
+  model: string;
+  provider?: string;
+  available_models?: string[];
+  model_names?: Record<string, string>;
+  features?: {
+    show_compiler?: boolean;
+  };
+  ghidra_ready: boolean;
+  tools?: Record<string, ToolStatusInfo>;
+  tools_meta?: ToolsStatusMeta;
+}
+
+export interface ApiAnalysisResponse {
+  job_id: string;
+  session_id: string;
+}
+
+export interface CitedClaim {
+  text: string;
+  cites: Array<{ tool?: string; addr?: string; artifact?: string; xref?: string }>;
+  proposed?: boolean;
+}
+
+export interface CitedClaims {
+  schema_version?: string;
+  claims?: CitedClaim[];
+  uncited?: string[];
+  proposed?: string[];
+  grounded?: boolean;
+}
+
+export interface ChatAttachment {
+  type: string;
+  provider?: string;
+  cited_claims?: CitedClaims;
+  [key: string]: unknown;
+}
+
+export interface ChatMessageItem {
+  message_id: string;
+  session_id: string;
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  attachments: ChatAttachment[];
+  created_at: string;
+}
+
+export interface ChatSessionSummary {
+  session_id: string;
+  binary_path: string;
+  trajectory_id?: string | null;
+  title?: string | null;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface ChatDetailResponse {
+  session: ChatSessionSummary;
+  messages: ChatMessageItem[];
+}
+
+export interface ChatAnalysisResponse {
+  session: ChatSessionSummary;
+  analysis: ChatAttachment;
+}
+
+export interface ChatPostResponse {
+  session: ChatSessionSummary;
+  messages: ChatMessageItem[];
+  message: ChatMessageItem;
+  assistant?: ChatMessageItem;
+  provider?: string | null;
+  error?: string;
+}
+
+export interface ExplorerGraphNode {
+  id: string;
+  kind: string;
+  label: string;
+  source?: string;
+  actor?: string | null;
+  timestamp?: string | null;
+  address?: string | null;
+  properties: Record<string, unknown>;
+}
+
+export interface ExplorerGraphEdge {
+  id: string;
+  kind: string;
+  source: string;
+  target: string;
+  source_tool?: string;
+  confidence?: number;
+  properties: Record<string, unknown>;
+}
+
+export interface AnalysisGraphPayload {
+  schema_version: string;
+  binary: string;
+  generated_at: string;
+  nodes: ExplorerGraphNode[];
+  edges: ExplorerGraphEdge[];
+  summary: Record<string, unknown>;
+}
+
+export interface InvestigationGraphPayload {
+  schema_version: string;
+  session_id: string;
+  binary: string;
+  generated_at: string;
+  nodes: ExplorerGraphNode[];
+  edges: ExplorerGraphEdge[];
+  summary: Record<string, unknown>;
+}
+
+export interface SessionGraphsResponse {
+  analysis_graph: AnalysisGraphPayload | null;
+  investigation_graph: InvestigationGraphPayload | null;
+}
+
+export interface AnalysisBundleResponse {
+  schema_version: 'r2b.analysis_bundle.v1';
+  schema_url?: string;
+  generated_at: string;
+  session: ChatSessionSummary;
+  subject: Record<string, unknown>;
+  findings: {
+    issues: unknown[];
+    notes: unknown[];
+    important_nodes: ExplorerGraphNode[];
+    evidence_gaps: string[];
+  };
+  tooling: {
+    tool_availability: Record<string, boolean>;
+    tool_status: Record<string, ToolStatusSummary>;
+    tool_scorecard?: Record<string, ToolScorecardEntry>;
+    evidence_coverage: EvidenceCoverage | Record<string, unknown>;
+  };
+  graphs: {
+    analysis_graph: AnalysisGraphPayload | Record<string, unknown>;
+    investigation_graph: InvestigationGraphPayload | Record<string, unknown>;
+  };
+  journey: Record<string, unknown>;
+  context: {
+    compact_markdown: string;
+  };
+  manifest?: SessionArtifactManifest;
+  report_markdown: string;
+}
+
+export interface SessionArtifactManifest {
+  schema_version: 'r2b.session_artifact_manifest.v1' | string;
+  generated_at?: string;
+  session_id?: string | null;
+  exports: Array<{
+    path: string;
+    media_type: string;
+    description?: string;
+  }>;
+  files: Array<{
+    kind: string;
+    role?: string;
+    source?: string;
+    source_path: string;
+    archive_path?: string | null;
+    included: boolean;
+    reason?: string;
+    size_bytes?: number;
+    offset?: number;
+  }>;
+  summary?: Record<string, unknown>;
+}
+
+// Assembly annotation for persisting notes on disassembly lines
+export interface AssemblyAnnotation {
+  address: string;
+  note: string;
+  createdAt: string;
+}
+
+// Function naming types for LLM-suggested or human-overridden names
+export interface FunctionName {
+  id: string;
+  address: string;
+  originalName: string;
+  displayName: string;
+  reasoning?: string;
+  confidence?: number;
+  source: 'llm' | 'user';
+  status?: 'proposed' | 'accepted' | 'rejected';
+  artifactId?: string;
+  tool?: string;
+  xref?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FunctionNameSuggestion {
+  address: string;
+  name: string;
+  confidence: number;
+  reasoning: string;
+  status?: 'proposed' | 'accepted';
+  cite?: { tool?: string; addr?: string; xref?: string; artifact?: string };
+}
+
+export interface SuggestNamesResponse {
+  suggestions: FunctionNameSuggestion[];
+  provider?: string;
+  message?: string;
+  error?: string;
+}
+
+// Compiler-related types
+export interface CompileResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  command: string;
+  return_code: number;
+  architecture: string;
+  compiler: string;
+  output_path?: string;
+  output_name?: string;
+  assembly?: string;
+  asm_path?: string;
+  asm_name?: string;
+}
+
+export interface CompilerInfo {
+  name: string;
+  path: string;
+  version: string;
+  is_clang: boolean;
+}
+
+export interface CompilerOperationSupport {
+  supported: boolean;
+  mode: 'native' | 'docker' | 'unavailable' | string;
+  compiler?: string | null;
+  reason: string;
+  action?: string | null;
+  requirements?: string[];
+}
+
+export interface CompilerCandidate {
+  name: string;
+  path?: string | null;
+  available: boolean;
+}
+
+export interface CompilerArchitectureSnapshot {
+  arch: string;
+  label: string;
+  state: 'ready' | 'degraded' | 'missing' | 'probing' | 'error' | string;
+  compilers: CompilerInfo[];
+  checked_candidates: CompilerCandidate[];
+  operations: Record<string, CompilerOperationSupport>;
+  recommended_arch?: string;
+}
+
+export interface CompilersResponse {
+  state?: 'ready' | 'degraded' | 'missing' | 'probing' | 'error' | string;
+  generated_at?: string;
+  compilers: Record<string, CompilerInfo[]>;
+  available_architectures: string[];
+  docker_available?: boolean;
+  docker_image_exists?: boolean;
+  docker?: {
+    available: boolean;
+    image: string;
+    image_exists: boolean;
+    action?: string | null;
+  };
+  helpers?: Record<string, Record<string, unknown>>;
+  architectures?: Record<string, CompilerArchitectureSnapshot>;
+  install_hints?: string[];
+  errors?: string[];
+  meta?: ToolsStatusMeta;
+  error?: string;
+}
+
+export interface CommandPreview {
+  command: string;
+  uses_docker: boolean;
+  compiler: string;
+  available: boolean;
+  docker_running?: boolean;
+  image_exists?: boolean;
+  mode?: string;
+  reason?: string;
+  action?: string | null;
+  requirements?: string[];
+  capability_state?: string;
+  error?: string;
+}
+
+// Activity tracking types for context engineering
+export type ActivityEventType =
+  | 'tab_switch'
+  | 'function_view'
+  | 'address_hover'
+  | 'code_select'
+  | 'annotation_add'
+  | 'search_query'
+  | 'cfg_navigate'
+  | 'disassembly_scroll'
+  | 'ask_claude'
+  | 'dwarf_view'          // Viewing DWARF panel
+  | 'dwarf_function_view' // Viewing a specific DWARF function
+  | 'dwarf_type_view'     // Viewing a specific DWARF type
+  | 'dwarf_ask_claude';   // Asking Claude about DWARF info
+
+export interface ActivityEvent {
+  event_id?: string;
+  event_type: ActivityEventType;
+  event_data: Record<string, unknown>;
+  created_at: string;
+  duration_ms?: number;  // Time spent on this activity
+}
+
+export interface ActivityContext {
+  recent_events: ActivityEvent[];
+  current_tab: string;
+  last_viewed_function?: string;
+  last_viewed_address?: string;
+  session_duration_ms: number;
+  event_count: number;
+}
+
+// Code citation for linking LLM responses to disassembly
+export interface CodeCitation {
+  address: string;
+  function_name?: string;
+  instruction?: string;
+  bytes?: string;
+  context_lines?: string[];  // Surrounding disassembly lines
+}
+
+// DWARF debug information types
+export interface DWARFFunction {
+  name: string;
+  offset: number;
+  low_pc: number | null;
+  high_pc: number | null;
+  size?: number;
+  is_external: boolean;
+  is_inline: boolean;
+  decl_file?: number;
+  decl_line?: number;
+  parameters: DWARFParameter[];
+  local_variables: DWARFVariable[];
+}
+
+export interface DWARFParameter {
+  name: string;
+  offset: number;
+  type_offset?: number;
+  location?: string;
+}
+
+export interface DWARFVariable {
+  name: string;
+  offset: number;
+  is_local: boolean;
+  type_offset?: number;
+  decl_file?: number;
+  decl_line?: number;
+  location?: string;
+  is_external: boolean;
+}
+
+export interface DWARFType {
+  name?: string;
+  offset: number;
+  tag: string;
+  byte_size?: number;
+  encoding?: number;
+  base_type_offset?: number;
+  members?: DWARFTypeMember[];
+  enumerators?: DWARFEnumerator[];
+}
+
+export interface DWARFTypeMember {
+  name?: string;
+  offset?: number;
+  type_offset?: number;
+}
+
+export interface DWARFEnumerator {
+  name?: string;
+  value?: number;
+}
+
+export interface DWARFCompilationUnit {
+  offset: number;
+  version?: number;
+  unit_length?: number;
+  name?: string;
+  producer?: string;
+  language?: number;
+  comp_dir?: string;
+  source_files: string[];
+  functions: DWARFFunction[];
+  variables: DWARFVariable[];
+  types: DWARFType[];
+}
+
+export interface DWARFLineEntry {
+  address: number;
+  file: number;
+  line: number;
+  column: number;
+  is_stmt: boolean;
+  end_sequence: boolean;
+}
+
+export interface DWARFLineProgram {
+  cu_offset: number;
+  entries: DWARFLineEntry[];
+  total_entries: number;
+}
+
+export interface DWARFData {
+  has_dwarf: boolean;
+  dwarf_version?: number;
+  compilation_units: DWARFCompilationUnit[];
+  functions: DWARFFunction[];
+  variables: DWARFVariable[];
+  types: DWARFType[];
+  source_files: string[];
+  line_programs: DWARFLineProgram[];
+  error?: string;
+}
+
+// Auto-profiling types for quick binary characterization
+export interface SecurityFeatures {
+  relro: 'none' | 'partial' | 'full' | 'unknown';
+  stack_canary: boolean | null;
+  nx: boolean | null;
+  pie: boolean | null;
+  fortify: boolean | null;
+  rpath: boolean | null;
+  runpath: boolean | null;
+}
+
+export interface EmbeddedFile {
+  offset: number;
+  description: string;
+}
+
+export interface AutoProfileData {
+  mode: 'autoprofile';
+  profile: {
+    file_type: string;
+    architecture: string;
+    bits: number | null;
+    endian: 'little' | 'big' | 'unknown';
+    is_stripped: boolean | null;
+    has_debug_info: boolean | null;
+    security: SecurityFeatures;
+    total_strings: number;
+    network_strings: string[];
+    crypto_strings: string[];
+    file_io_strings: string[];
+    dangerous_functions: string[];
+    suspicious_strings: string[];
+    embedded_files: EmbeddedFile[];
+    has_compressed_data: boolean;
+    has_encrypted_data: boolean;
+    risk_level: 'low' | 'medium' | 'high';
+    risk_factors: string[];
+  };
+  error?: string;
+}
+
+// Ghidra decompilation types
+export interface GhidraDecompiledFunction {
+  name: string;
+  address: string;
+  signature: string;
+  decompiled_c: string;
+  parameters: Array<{ name: string; type: string; index: number }>;
+  return_type: string;
+  calling_convention: string | null;
+}
+
+export interface GhidraTypeInfo {
+  name: string;
+  category: string;
+  size: number;
+  kind: 'struct' | 'enum' | 'typedef' | 'pointer' | 'array' | 'primitive';
+  members: Array<{
+    name: string;
+    type?: string;
+    offset?: number;
+    size?: number;
+    value?: number;
+  }>;
+}
+
+export interface GhidraXref {
+  from_address?: string;
+  to_address?: string;
+  ref_type: string;
+  from_function?: string | null;
+  to_function?: string | null;
+}
+
+export interface GhidraData {
+  mode: 'bridge' | 'headless';
+  functions?: Array<{
+    name: string;
+    address: number;
+    size: number;
+    signature?: string;
+    calling_convention?: string;
+    is_thunk?: boolean;
+    comment?: string;
+  }>;
+  function_count?: number;
+  decompiled: GhidraDecompiledFunction[];
+  decompiled_count: number;
+  types: GhidraTypeInfo[];
+  type_count: number;
+  strings?: Array<{
+    address: number;
+    value: string;
+    length: number;
+    type?: string;
+  }>;
+  string_count?: number;
+  xref_map?: Record<string, { to: GhidraXref[]; from: GhidraXref[] }>;
+  binary: string;
+  error?: string;
+}
+
+// GEF/GDB dynamic analysis types
+export interface RegisterSnapshot {
+  pc: number;
+  sp: number;
+  registers: Record<string, number>;
+}
+
+export interface GEFMemoryRegion {
+  start: string;
+  end: string;
+  size: string;
+  offset: string;
+  permissions: string;
+  name: string;
+}
+
+export interface GEFExecutionTrace {
+  entry_point?: string;
+  register_snapshots: RegisterSnapshot[];
+  memory_maps: GEFMemoryRegion[];
+  instruction_count: number;
+  exit_code?: number;
+  error?: string;
+}
+
+export interface GEFData {
+  mode: 'gef';
+  binary: string;
+  returncode: number;
+  trace: GEFExecutionTrace;
+  error?: string;
+}
+
+// Ghidra Scripting types
+export interface GhidraScriptTask {
+  id: string;
+  description: string;
+  language: 'python' | 'java';
+  script: string;
+  status: 'pending' | 'generating' | 'ready' | 'running' | 'completed' | 'failed';
+  result?: string;
+  error?: string;
+  createdAt: string;
+  executedAt?: string;
+}
+
+export interface GhidraScriptGenerateResponse {
+  script: string;
+  language: string;
+  task: string;
+  error?: string;
+}
+
+export interface GhidraScriptExecuteResponse {
+  output: string;
+  language: string;
+  success: boolean;
+  error?: string;
+}
+
+export interface GhidraStatusResponse {
+  available: boolean;
+  bridge_available: boolean;
+  bridge_connected: boolean;
+  bridge_program?: string | null;
+  headless_available: boolean;
+  install_dir?: string | null;
+  issues: string[];
+  notes: string[];
+}
+
+// Tool execution status types (from /api/tools/status)
+export interface ToolExecutionStatus {
+  available: boolean;
+  description: string;
+  details?: string;
+  install_hint?: string;
+  path?: string | null;
+  bridge_available?: boolean;
+  bridge_connected?: boolean;
+  bridge_program_loaded?: string | null;
+  headless_ready?: boolean;
+  headless_available?: boolean;
+  binwalk_available?: boolean;
+  python_package_available?: boolean;
+  docker_available?: boolean;
+  image_built?: boolean;
+  cli_available?: boolean;
+  service_available?: boolean;
+  transport?: string;
+  url?: string;
+  active_url?: string;
+  command?: string;
+  args?: string[];
+  command_available?: boolean;
+  start_command?: string[];
+  working_dir?: string | null;
+  capabilities_count?: number | null;
+  latency_ms?: number | null;
+  scorecard?: ToolScorecardEntry;
+}
+
+export interface ToolsStatusMeta {
+  cached?: boolean;
+  live?: boolean;
+  generated_at?: string | null;
+  probing?: boolean;
+}
+
+export interface ToolsStatusResponse {
+  tools: Record<string, ToolExecutionStatus>;
+  scorecard?: Record<string, ToolScorecardEntry>;
+  score_summary?: Record<string, number>;
+  available_count: number;
+  total_count: number;
+  meta?: ToolsStatusMeta;
+}
+
+
+// Script execution types for chat-driven tool use
+export interface ScriptValidationError {
+  message: string;
+  location?: string;
+  severity: string;
+  suggestion?: string;
+}
+
+export interface ScriptValidationResult {
+  valid: boolean;
+  errors: ScriptValidationError[];
+  warnings: ScriptValidationError[];
+  error_summary: string;
+}
+
+export interface ScriptExecutionResult {
+  status: 'success' | 'error' | 'timeout' | 'connection_lost';
+  duration_ms: number;
+  stdout?: string;
+  stderr?: string;
+  exception?: string;
+  traceback?: string;
+}
+
+// Chat attachment for script execution results
+export interface ScriptExecutionAttachment extends ChatAttachment {
+  type: 'script_execution';
+  tool: string;
+  language: string;
+  script: string;
+  intent?: string;
+  validation: ScriptValidationResult | null;
+  execution: ScriptExecutionResult | null;
+}

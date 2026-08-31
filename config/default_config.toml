@@ -1,0 +1,91 @@
+# Defaults. `r2b brief --quick` needs none of this.
+# Hosted --ask: copy an overlay from config/*.example.toml to
+# config/local.toml and put the key in .env. Never the secret here.
+# R2B_CONFIG=/path only if local.toml is elsewhere.
+# GHIDRA_INSTALL_DIR — wrapped Ghidra, only for `r2b decompile`.
+
+[llm]
+provider = "ollama"
+model = "gemma3:4b"
+transport = "auto"
+api_key_env = ""
+base_url = "http://127.0.0.1:11434"
+# An explicit provider selects its default endpoint and transport. Custom
+# local endpoints (vLLM / llama.cpp / exo) set `base_url` directly.
+fallback_provider = "openai"
+fallback_model = "gpt-5.6-luna"
+fallback_api_key_env = "OPENAI_API_KEY"
+enable_fallback = false
+max_tokens = 8192
+temperature = 0.1
+compact_context = true
+context_budget_chars = 24000
+max_tool_rounds = 3
+
+[analysis]
+auto_analyze = true
+max_binary_size = "200MB"
+
+# Heavy tools are off until a flavor overlay or local.toml turns them on.
+enable_angr = false
+enable_ghidra = false
+enable_frida = false
+enable_gef = false
+gef_timeout = 60
+gef_max_instructions = 10000
+
+require_elf = false
+enable_trajectory_recording = true
+
+[extract]
+# Sandboxed binwalk3 / unblob → content-addressed artifact DAG.
+# ELF subjects skip extractors unless extract_elf=true (inventory still builds a DAG).
+enable = false
+extract_elf = false
+timeout_s = 60
+max_files = 200
+max_bytes = 67108864
+max_depth = 2
+
+[output]
+format = "terminal"
+verbosity = "normal"
+save_artifacts = true
+artifacts_dir = "~/.cache/r2b"
+
+[performance]
+parallel_functions = 4
+cache_results = true
+
+[storage]
+database_path = "~/.local/share/r2b/r2b.db"
+auto_migrate = true
+
+[ui]
+show_compiler = false
+
+[ghidra]
+# Ghidra decompilation supports two modes:
+#
+# 1. Headless Mode (default): Runs analyzeHeadless subprocess.
+#    - Set GHIDRA_INSTALL_DIR environment variable
+#    - Set JAVA_HOME for Ghidra 12+ (requires Java 21)
+#    - R2BHeadless.java script outputs JSON with functions/strings/decompiled code
+#
+# 2. Bridge Mode (richer data): Connects to running Ghidra GUI.
+#    - Requires extra `ghidra` (`uv sync --extra ghidra`)
+#    - Run ghidra_bridge_server_background.py in Ghidra's Script Manager
+#
+# Note: PyGhidra 3.0.2 has a recursion bug with Python 3.11 when calling
+# pyghidra.start() directly. r2b uses subprocess-based headless mode instead.
+
+use_bridge = false
+bridge_host = "127.0.0.1"
+bridge_port = 13100
+bridge_timeout = 30
+
+# install_dir is machine-local; set GHIDRA_INSTALL_DIR or override in a local config.
+project_dir = "~/.local/share/r2b/ghidra-projects"
+max_decompile_functions = 20
+max_types = 100
+max_strings = 200

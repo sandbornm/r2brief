@@ -1,0 +1,16 @@
+{
+  "schema_version": "r2b.samples.v1",
+  "source": "shallow.c",
+  "purpose": "Non-malicious shallow triage fixture with stable imports and strings.",
+  "expected": {
+    "strings": ["r2b-training-only", "http://127.0.0.1:8080/health"],
+    "imports_any": ["strcpy", "strcmp"],
+    "symbols_any": ["check_phrase", "main"]
+  },
+  "targets": [
+    {"name": "host", "arch": "native", "format": "native"},
+    {"name": "linux-arm64", "arch": "arm64", "format": "elf"},
+    {"name": "linux-arm32", "arch": "arm", "format": "elf"},
+    {"name": "windows-x86_64", "arch": "x86_64", "format": "pe"}
+  ]
+}

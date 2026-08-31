@@ -1,0 +1,1617 @@
+import AddIcon from '@mui/icons-material/Add';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import CodeIcon from '@mui/icons-material/Code';
+import MapIcon from '@mui/icons-material/Map';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import SettingsIcon from '@mui/icons-material/Settings';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import debug from './debug';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  FormControl,
+  IconButton,
+  MenuItem,
+  Select,
+  SelectChangeEvent,
+  Stack,
+  Tab,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import {
+  DragEvent,
+  FormEvent,
+  Suspense,
+  SyntheticEvent,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { CFGContext } from './components/ResultViewer';
+import SessionList from './components/SessionList';
+import type { AnalysisSettings } from './components/SettingsDrawer';
+import TrajectoryPanel from './components/TrajectoryPanel';
+import { ActivityProvider, useActivity } from './contexts/ActivityContext';
+import { TrajectoryProvider, useTrajectory, useTrajectoryActions } from './trajectory';
+import { useThemeMode } from './themeMode';
+import type {
+  AnalysisPlanPayload,
+  AnalysisResultPayload,
+  ApiAnalysisResponse,
+  ChatDetailResponse,
+  ChatAnalysisResponse,
+  ChatAttachment,
+  ChatMessageItem,
+  ChatPostResponse,
+  ChatSessionSummary,
+  ExplorerGraphNode,
+  HealthStatus,
+  ProgressEventEntry,
+  ProgressEventName,
+  ProgressEventPayload,
+  EvidenceCoverage,
+  ToolStatusSummary,
+} from './types';
+import { CacheKeys, getFromCache, setInCache } from './utils/cache';
+import { buildGraphEvidencePrompt } from './utils/graphEvidence';
+
+const ChatPanel = lazy(() => import('./components/ChatPanel'));
+const CompilerPanel = lazy(() => import('./components/CompilerPanel'));
+const GraphExplorer = lazy(() => import('./components/GraphExplorer'));
+const ProgressLog = lazy(() => import('./components/ProgressLog'));
+const ResultViewer = lazy(() => import('./components/ResultViewer'));
+const HelpGuide = lazy(() => import('./components/HelpGuide'));
+const SettingsDrawer = lazy(() => import('./components/SettingsDrawer'));
+const ToolStatusBar = lazy(() => import('./components/ToolStatusBar'));
+
+const EVENT_NAMES: ProgressEventName[] = [
+  'analysis_started',
+  'analysis_cache_hit',
+  'job_started',
+  'stage_started',
+  'stage_completed',
+  'adapter_started',
+  'adapter_completed',
+  'adapter_failed',
+  'adapter_skipped',
+  'analysis_result',
+  'job_completed',
+  'job_failed',
+];
+
+type JobStatus = 'idle' | 'running' | 'done' | 'error';
+type TabValue = 'results' | 'map' | 'chat' | 'logs' | 'compiler';
+
+type AnalysisResponseEvent = AnalysisResultPayload & { session_id?: string };
+type SSEHandlers = Partial<Record<ProgressEventName, (payload: ProgressEventPayload) => void>>;
+
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
+const MAX_UPLOAD_LABEL = '200 MB';
+
+const DEFAULT_SETTINGS: AnalysisSettings = {
+  analysisProfile: 'triage',
+  quickScanOnly: true,
+  enableAngr: false,
+  enableGhidra: false,
+  enableGef: false,
+  enableFrida: false,
+  autoAskLLM: false,
+  selectedModel: 'gemma4:latest',
+};
+
+const loadSettings = (): AnalysisSettings => {
+  try {
+    const stored = localStorage.getItem('r2b-settings');
+    if (stored) return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+  } catch {
+    // ignore
+  }
+  return DEFAULT_SETTINGS;
+};
+
+const formatBytes = (bytes: number): string => {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+};
+
+const buildAnalysisResultFromAttachment = (
+  analysisAttachment: ChatAttachment,
+  session: ChatSessionSummary,
+): AnalysisResultPayload => ({
+  binary: String(analysisAttachment.binary ?? session.binary_path),
+  plan: (analysisAttachment.plan ?? {}) as AnalysisPlanPayload,
+  quick_scan: (analysisAttachment.quick_scan ?? {}) as Record<string, unknown>,
+  deep_scan: (analysisAttachment.deep_scan ?? {}) as Record<string, unknown>,
+  notes: (analysisAttachment.notes ?? []) as string[],
+  issues: (analysisAttachment.issues ?? []) as string[],
+  session_id: session.session_id,
+  trajectory_id: analysisAttachment.trajectory_id as string | undefined,
+  tool_availability: analysisAttachment.tool_availability as Record<string, boolean> | undefined,
+  tool_status: analysisAttachment.tool_status as Record<string, ToolStatusSummary> | undefined,
+  evidence_coverage: analysisAttachment.evidence_coverage as EvidenceCoverage | undefined,
+  analysis_graph: analysisAttachment.analysis_graph as AnalysisResultPayload['analysis_graph'],
+  snippets: analysisAttachment.snippets as AnalysisResultPayload['snippets'],
+  snippet_count: analysisAttachment.snippet_count as number | undefined,
+  tool_scorecard: analysisAttachment.tool_scorecard as AnalysisResultPayload['tool_scorecard'],
+  briefing: analysisAttachment.briefing as AnalysisResultPayload['briefing'],
+  record: analysisAttachment.record as AnalysisResultPayload['record'],
+});
+
+const getLatestAnalysisAttachment = (messages: ChatMessageItem[]): ChatAttachment | undefined => {
+  const analysisAttachments = messages
+    .flatMap((msg) => msg.attachments || [])
+    .filter((attachment) => attachment.type === 'analysis_result');
+  return analysisAttachments[analysisAttachments.length - 1];
+};
+
+const PanelFallback = () => (
+  <Box sx={{ minHeight: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+    <CircularProgress size={18} />
+    <Typography variant="caption" color="text.secondary">
+      Loading panel...
+    </Typography>
+  </Box>
+);
+
+const ResultsEmptyState = () => (
+  <Box
+    sx={{
+      height: '100%',
+      minHeight: 320,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'text.secondary',
+    }}
+  >
+    <CloudUploadIcon sx={{ fontSize: 40, mb: 1.5, opacity: 0.4 }} />
+    <Typography variant="body2">No analysis yet</Typography>
+    <Typography variant="caption" color="text.secondary">
+      Drop a binary to get started
+    </Typography>
+  </Box>
+);
+
+const AppContent = () => {
+  const { mode, toggleTheme } = useThemeMode();
+  const isDark = mode === 'dark';
+  const activity = useActivity();
+  const trajectory = useTrajectory();
+  const trajectoryActions = useTrajectoryActions();
+
+  const [binaryPath, setBinaryPath] = useState('');
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [userGoal, setUserGoal] = useState('');
+  const [status, setStatus] = useState<JobStatus>('idle');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [events, setEvents] = useState<ProgressEventEntry[]>([]);
+  const [result, setResult] = useState<AnalysisResultPayload | null>(null);
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessageItem[]>([]);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabValue>('results');
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsDrawerMounted, setSettingsDrawerMounted] = useState(false);
+  const [settings, setSettings] = useState<AnalysisSettings>(loadSettings);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const sourceRef = useRef<EventSource | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
+  const lastSyncedSessionIdRef = useRef<string | null>(null);
+  const loadedMessagesSessionIdRef = useRef<string | null>(null);
+  const restoredAnalysisSessionIdRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const goalInputRef = useRef<HTMLInputElement>(null);
+
+  const activeSession = useMemo(
+    () => sessions.find((session) => session.session_id === activeSessionId) ?? null,
+    [sessions, activeSessionId],
+  );
+  const showCompiler = health?.features?.show_compiler === true;
+  const visibleActiveTab: TabValue = !showCompiler && activeTab === 'compiler' ? 'results' : activeTab;
+  const mapNodeCount = result?.analysis_graph?.nodes?.length ?? 0;
+  const mapTabLabel = mapNodeCount > 0 ? `Map (${mapNodeCount})` : 'Map';
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!showCompiler && activeTab === 'compiler') {
+      setActiveTab('results');
+    }
+  }, [activeTab, showCompiler]);
+
+  useEffect(() => {
+    if (settingsOpen) setSettingsDrawerMounted(true);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('r2b-settings', JSON.stringify(settings));
+  }, [settings]);
+
+  const recordEvent = useCallback((event: ProgressEventName, data: ProgressEventPayload) => {
+    const sessionId = activeSessionIdRef.current;
+    const entry = {
+      id: `${event}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      event,
+      data,
+      timestamp: Date.now(),
+    };
+    setEvents((prev) => {
+      const next = [...prev, entry].slice(-500);
+      if (sessionId) {
+        setInCache(CacheKeys.events(sessionId), next);
+      }
+      return next;
+    });
+  }, []);
+
+  const fetchHealth = useCallback(async () => {
+    try {
+      const response = await fetch('/api/health');
+      const data: HealthStatus = await response.json();
+      setHealth(data);
+    } catch (error) {
+      console.error('Failed to fetch health', error);
+      setHealth({ status: 'error', model: 'unknown', ghidra_ready: false, available_models: [] });
+    }
+  }, []);
+
+  const handleModelChange = useCallback(async (event: SelectChangeEvent<string>) => {
+    const newModel = event.target.value;
+    try {
+      const response = await fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: newModel }),
+      });
+      if (response.ok) {
+        setHealth((prev) => prev ? { ...prev, model: newModel } : null);
+      }
+    } catch (error) {
+      console.error('Failed to change model', error);
+    }
+  }, []);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const response = await fetch('/api/chats?limit=50');
+      const data: ChatSessionSummary[] = await response.json();
+      setSessions(data);
+
+      const selectedId = activeSessionIdRef.current;
+      if (selectedId) {
+        const stillExists = data.some((session) => session.session_id === selectedId);
+        if (!stillExists) {
+          lastSyncedSessionIdRef.current = null;
+          setActiveSessionId(data.length ? data[0].session_id : null);
+        }
+      } else {
+        lastSyncedSessionIdRef.current = null;
+        setActiveSessionId(null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch sessions', error);
+    }
+  }, []);
+
+  const restoreSessionAnalysis = useCallback(async (sessionId: string) => {
+    const cachedResult = getFromCache<AnalysisResultPayload>(CacheKeys.analysisResult(sessionId));
+    if (cachedResult) {
+      if (activeSessionIdRef.current === sessionId) {
+        setResult(cachedResult);
+        restoredAnalysisSessionIdRef.current = sessionId;
+      }
+      return;
+    }
+
+    if (restoredAnalysisSessionIdRef.current === sessionId) return;
+
+    try {
+      const response = await fetch(`/api/chats/${sessionId}/analysis`);
+      if (response.status === 404) {
+        if (activeSessionIdRef.current === sessionId) {
+          setResult(null);
+          restoredAnalysisSessionIdRef.current = sessionId;
+        }
+        return;
+      }
+      if (!response.ok) throw new Error('Failed to restore analysis');
+      const data: ChatAnalysisResponse = await response.json();
+      const restoredResult = buildAnalysisResultFromAttachment(data.analysis, data.session);
+      if (activeSessionIdRef.current !== sessionId) return;
+      setResult(restoredResult);
+      setInCache(CacheKeys.analysisResult(data.session.session_id), restoredResult);
+      restoredAnalysisSessionIdRef.current = data.session.session_id;
+      setSessions((prev) => {
+        const exists = prev.some((session) => session.session_id === data.session.session_id);
+        if (!exists) return prev;
+        return prev.map((session) =>
+          session.session_id === data.session.session_id ? data.session : session,
+        );
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const loadSessionMessages = useCallback(async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/chats/${sessionId}?limit=250`);
+      if (!response.ok) throw new Error('Failed to load chat history');
+      const data: ChatDetailResponse = await response.json();
+      if (activeSessionIdRef.current !== sessionId) return;
+      setMessages(data.messages);
+      loadedMessagesSessionIdRef.current = data.session.session_id;
+      const analysisAttachment = getLatestAnalysisAttachment(data.messages);
+      if (analysisAttachment) {
+        const restoredResult = buildAnalysisResultFromAttachment(analysisAttachment, data.session);
+        setResult(restoredResult);
+        setInCache(CacheKeys.analysisResult(data.session.session_id), restoredResult);
+        restoredAnalysisSessionIdRef.current = data.session.session_id;
+      } else {
+        setResult(null);
+        restoredAnalysisSessionIdRef.current = data.session.session_id;
+      }
+      setSessions((prev) => {
+        const exists = prev.some((session) => session.session_id === data.session.session_id);
+        if (!exists) return prev;
+        return prev.map((session) =>
+          session.session_id === data.session.session_id ? data.session : session,
+        );
+      });
+    } catch (error) {
+      console.error(error);
+      if (activeSessionIdRef.current === sessionId) {
+        setMessages([]);
+        loadedMessagesSessionIdRef.current = null;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    debug.system.init();
+    fetchHealth();
+    refreshSessions();
+    return () => {
+      if (sourceRef.current) sourceRef.current.close();
+    };
+  }, [fetchHealth, refreshSessions]);
+
+  useEffect(() => {
+    if (activeSessionId) {
+      const cachedEvents = getFromCache<ProgressEventEntry[]>(CacheKeys.events(activeSessionId));
+      setEvents(cachedEvents ?? []);
+      loadedMessagesSessionIdRef.current = null;
+      setMessages([]);
+      const cachedResult = getFromCache<AnalysisResultPayload>(CacheKeys.analysisResult(activeSessionId));
+      setResult(cachedResult ?? null);
+      restoredAnalysisSessionIdRef.current = cachedResult ? activeSessionId : null;
+    } else {
+      setMessages([]);
+      setEvents([]);
+      setResult(null);
+      loadedMessagesSessionIdRef.current = null;
+      restoredAnalysisSessionIdRef.current = null;
+    }
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (activeSession && lastSyncedSessionIdRef.current !== activeSession.session_id) {
+      setBinaryPath(activeSession.binary_path);
+      setFileName(activeSession.title ?? activeSession.binary_path.split('/').pop() ?? null);
+      lastSyncedSessionIdRef.current = activeSession.session_id;
+    }
+  }, [activeSession]);
+
+  useEffect(() => {
+    if (activeTab !== 'chat' || !activeSessionId || loadedMessagesSessionIdRef.current === activeSessionId) return;
+    loadSessionMessages(activeSessionId).catch(console.error);
+  }, [activeTab, activeSessionId, loadSessionMessages]);
+
+  useEffect(() => {
+    const shouldRestore = (activeTab === 'results' || activeTab === 'map') &&
+      activeSessionId &&
+      (!result || result.session_id !== activeSessionId);
+    if (shouldRestore) {
+      restoreSessionAnalysis(activeSessionId).catch(console.error);
+    }
+  }, [activeTab, activeSessionId, result, restoreSessionAnalysis]);
+
+  const closeSource = () => {
+    if (sourceRef.current) {
+      sourceRef.current.close();
+      sourceRef.current = null;
+    }
+  };
+
+  const attachEventHandlers = useCallback(
+    (source: EventSource, handlers: SSEHandlers) => {
+      EVENT_NAMES.forEach((name) => {
+        source.addEventListener(name, (event) => {
+          const message = event as MessageEvent<string>;
+          let payload: ProgressEventPayload = {};
+          if (message.data) {
+            try {
+              payload = JSON.parse(message.data) as ProgressEventPayload;
+            } catch {
+              console.error('Failed to parse SSE payload');
+            }
+          }
+          recordEvent(name, payload);
+          handlers[name]?.(payload);
+        });
+      });
+
+      source.onerror = () => {
+        // Browsers fire error when the server closes a finished SSE stream.
+        if (source.readyState === EventSource.CLOSED) {
+          closeSource();
+          return;
+        }
+        setStatus((current) => (current === 'done' ? current : 'error'));
+        setStatusMessage((current) => (current === 'Done' ? current : 'Connection lost'));
+        closeSource();
+      };
+    },
+    [recordEvent]
+  );
+
+  const handleFileUpload = async (file: File) => {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setStatus('error');
+      setStatusMessage(`File exceeds ${MAX_UPLOAD_LABEL} hard limit`);
+      return;
+    }
+
+    setUploading(true);
+    setStatusMessage('Uploading...');
+    setStatus('running');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error ?? 'Upload failed');
+      }
+
+      const data = await response.json();
+      setBinaryPath(data.path);
+      setFileName(data.filename);
+      setStatus('idle');
+      setStatusMessage(`Uploaded ${data.filename} (${formatBytes(file.size)})`);
+      lastSyncedSessionIdRef.current = null;
+    } catch (error) {
+      console.error(error);
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      await handleFileUpload(files[0]);
+    }
+  };
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      await handleFileUpload(files[0]);
+    }
+  };
+
+  const startAnalysis = async () => {
+    if (!binaryPath.trim()) {
+      setStatus('error');
+      setStatusMessage('Upload a binary first');
+      return;
+    }
+
+    const quickOnly = settings.analysisProfile === 'triage' || settings.quickScanOnly;
+    const analysisOptions = {
+      binary: binaryPath,
+      analysis_profile: settings.analysisProfile,
+      quick_only: quickOnly,
+      enable_angr: settings.enableAngr,
+      enable_ghidra: settings.enableGhidra,
+      enable_gef: settings.enableGef,
+      enable_frida: settings.enableFrida,
+      user_goal: userGoal.trim() || undefined,
+    };
+    debug.system.analysisStart(binaryPath, analysisOptions);
+
+    closeSource();
+    setStatus('running');
+    setStatusMessage('Analyzing...');
+    setEvents([]);
+    setResult(null);
+    setActiveTab('logs');
+
+    try {
+      debug.api.request('POST', '/api/analyze', analysisOptions);
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(analysisOptions),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error ?? 'Analysis failed');
+      }
+
+      const data: ApiAnalysisResponse = await response.json();
+
+      if (data.session_id) {
+        lastSyncedSessionIdRef.current = null;
+        setActiveSessionId(data.session_id);
+        activeSessionIdRef.current = data.session_id;
+        loadedMessagesSessionIdRef.current = null;
+        restoredAnalysisSessionIdRef.current = null;
+        refreshSessions();
+      }
+
+      const source = new EventSource(`/api/jobs/${data.job_id}/stream`);
+      sourceRef.current = source;
+
+      const handlers: SSEHandlers = {
+        job_started: (payload) => {
+          setStatus('running');
+          setStatusMessage(`Analyzing ${payload.binary ?? fileName ?? 'binary'}`);
+        },
+        stage_started: (payload) => {
+          if (payload.stage) setStatusMessage(`${payload.stage} stage...`);
+        },
+        job_failed: (payload) => {
+          setStatus('error');
+          setStatusMessage(payload.error ?? 'Failed');
+          closeSource();
+        },
+        job_completed: (payload) => {
+          setStatus('done');
+          setStatusMessage('Done');
+          if (payload.session_id) {
+            lastSyncedSessionIdRef.current = null;
+            setActiveSessionId(payload.session_id);
+            activeSessionIdRef.current = payload.session_id;
+            refreshSessions();
+          }
+          closeSource();
+        },
+        analysis_result: (payload) => {
+          const analysis = payload as unknown as AnalysisResponseEvent;
+          setResult(analysis);
+          if (analysis.analysis_graph?.nodes?.length) {
+            setActiveTab('map');
+          }
+          // Cache the analysis result for faster switching
+          if (analysis.session_id) {
+            setInCache(CacheKeys.analysisResult(analysis.session_id), analysis);
+            restoredAnalysisSessionIdRef.current = analysis.session_id;
+            lastSyncedSessionIdRef.current = null;
+            setActiveSessionId(analysis.session_id);
+            activeSessionIdRef.current = analysis.session_id;
+            refreshSessions();
+
+            if (settings.autoAskLLM) {
+              handleAutoAskLLM(analysis.session_id!, analysis);
+            }
+          }
+        },
+      };
+
+      attachEventHandlers(source, handlers);
+    } catch (error) {
+      console.error(error);
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed');
+    }
+  };
+
+  const handleAnalyze = (event: FormEvent) => {
+    event.preventDefault();
+    void startAnalysis();
+  };
+
+  const startAnalysisRef = useRef(startAnalysis);
+  startAnalysisRef.current = startAnalysis;
+
+  useEffect(() => {
+    const isTypingTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (helpOpen) {
+          event.preventDefault();
+          setHelpOpen(false);
+          return;
+        }
+        if (settingsOpen) {
+          event.preventDefault();
+          setSettingsOpen(false);
+        }
+        return;
+      }
+
+      if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (event.key === '?' || (event.shiftKey && event.key === '/')) {
+        event.preventDefault();
+        setHelpOpen((open) => !open);
+        return;
+      }
+      if (event.key === '1') {
+        event.preventDefault();
+        setActiveTab('results');
+        return;
+      }
+      if (event.key === '2') {
+        event.preventDefault();
+        setActiveTab('map');
+        return;
+      }
+      if (event.key === '3') {
+        event.preventDefault();
+        setActiveTab('chat');
+        return;
+      }
+      if (event.key === '4') {
+        event.preventDefault();
+        setActiveTab('logs');
+        return;
+      }
+      if (event.key === 'g') {
+        event.preventDefault();
+        if (!fileName) {
+          fileInputRef.current?.click();
+          return;
+        }
+        goalInputRef.current?.focus();
+        return;
+      }
+      if (event.key === 'a') {
+        if (status === 'running' || uploading || !fileName) return;
+        event.preventDefault();
+        void startAnalysisRef.current();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [helpOpen, settingsOpen, fileName, status, uploading]);
+
+  const handleAutoAskLLM = async (sessionId: string, analysisResult?: AnalysisResultPayload) => {
+    if (!settings.autoAskLLM) return;
+    if (activeSessionIdRef.current && activeSessionIdRef.current !== sessionId) return;
+    setActiveTab('chat');
+    setSendingMessage(true);
+    
+    const briefing = analysisResult?.briefing ?? result?.briefing;
+    const analysisDeepScan = analysisResult?.deep_scan ?? result?.deep_scan ?? {};
+    const r2Deep = (analysisDeepScan.radare2 ?? {}) as Record<string, unknown>;
+    const funcCount = Array.isArray(r2Deep.functions) ? r2Deep.functions.length : 0;
+    const currentFileName = analysisResult?.binary?.split('/').pop() ?? 'this binary';
+    
+    let prompt: string;
+    if (briefing?.overall_ask) {
+      prompt = userGoal.trim()
+        ? `${briefing.overall_ask}\n\nUser goal: ${userGoal.trim()}`
+        : briefing.overall_ask;
+    } else if (userGoal.trim()) {
+      prompt = `My goal: ${userGoal.trim()}
+
+What can you tell me about ${currentFileName}? Keep it brief.`;
+    } else {
+      prompt = `Give me a quick intro to ${currentFileName}.
+
+In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing ' + funcCount + ' functions' : 'just getting started'}.`;
+    }
+    
+    try {
+      const response = await fetch(`/api/chats/${sessionId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: prompt,
+          call_llm: true,
+        }),
+      });
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Auto-ask: Server returned non-JSON response');
+        setChatError('Backend not responding. Is the server running?');
+        return;
+      }
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (activeSessionIdRef.current !== sessionId) return;
+        setMessages(data.messages);
+        loadedMessagesSessionIdRef.current = sessionId;
+        if (data.error) {
+          setChatError(data.error);
+        }
+      } else {
+        const errorData = await response.json();
+        setChatError(errorData.error || 'LLM request failed');
+      }
+    } catch (error) {
+      console.error('Auto-ask failed:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMsg.includes('Unexpected token') || errorMsg.includes('JSON')) {
+        setChatError('Cannot connect to backend. Make sure the Flask server is running.');
+      }
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleSessionSelect = useCallback((session: ChatSessionSummary) => {
+    setActiveSessionId(session.session_id);
+    activeSessionIdRef.current = session.session_id;
+    setBinaryPath(session.binary_path);
+    setFileName(session.title ?? session.binary_path.split('/').pop() ?? null);
+    lastSyncedSessionIdRef.current = session.session_id;
+
+    // Start trajectory for this session
+    trajectory.startTrajectory(session.session_id);
+
+    // Try to load cached analysis result for faster switching
+    const cachedResult = getFromCache<AnalysisResultPayload>(
+      CacheKeys.analysisResult(session.session_id)
+    );
+    if (cachedResult) {
+      setResult(cachedResult);
+      restoredAnalysisSessionIdRef.current = session.session_id;
+    }
+  }, [trajectory]);
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    debug.api.request('DELETE', `/api/chats/${sessionId}`);
+    try {
+      const response = await fetch(`/api/chats/${sessionId}`, {
+        method: 'DELETE',
+      });
+      debug.api.response(`/api/chats/${sessionId}`, response.status);
+      if (response.ok) {
+        debug.session.delete(sessionId);
+        // Remove from local state
+        setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+        // If we deleted the active session, select the next one
+        if (activeSessionId === sessionId) {
+          const remaining = sessions.filter((s) => s.session_id !== sessionId);
+          if (remaining.length > 0) {
+            setActiveSessionId(remaining[0].session_id);
+          } else {
+            setActiveSessionId(null);
+            setResult(null);
+          }
+        }
+      }
+    } catch (error) {
+      debug.api.error(`/api/chats/${sessionId}`, error);
+      console.error('Delete failed:', error);
+    }
+  }, [activeSessionId, sessions]);
+
+  const handleSendMessage = useCallback(async (content: string, options: { callLLM: boolean }) => {
+    if (!activeSessionId) return false;
+    const sessionAtSend = activeSessionId;
+    debug.chat.send(activeSessionId, content);
+    setSendingMessage(true);
+    setChatError(null);
+
+    // Track the question being asked
+    if (options.callLLM) {
+      const topic = content.length > 50 ? content.slice(0, 50) + '...' : content;
+      activity.trackEvent('ask_claude', { topic, content_length: content.length });
+      trajectoryActions.askQuestion(content);
+    }
+
+    // Sync activity context to backend before sending (best effort)
+    activity.syncToBackend(activeSessionId).catch(() => {});
+    
+    const optimisticId = `pending-${Date.now()}`;
+    const timestamp = new Date().toISOString();
+    const optimisticMessage: ChatMessageItem = {
+      message_id: optimisticId,
+      session_id: activeSessionId,
+      role: 'user',
+      content,
+      attachments: [],
+      created_at: timestamp,
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+
+    try {
+      const response = await fetch(`/api/chats/${activeSessionId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, call_llm: options.callLLM }),
+      });
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        setMessages((prev) => prev.filter((msg) => msg.message_id !== optimisticId));
+        throw new Error('Server returned non-JSON response. Is the backend running on port 5050?');
+      }
+      
+      if (!response.ok) {
+        setMessages((prev) => prev.filter((msg) => msg.message_id !== optimisticId));
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error ?? 'Failed');
+      }
+      const data: ChatPostResponse = await response.json();
+      if (activeSessionIdRef.current !== sessionAtSend) {
+        setMessages((prev) => prev.filter((msg) => msg.message_id !== optimisticId));
+        return true;
+      }
+      setActiveSessionId(data.session.session_id);
+      activeSessionIdRef.current = data.session.session_id;
+      setMessages(data.messages);
+      loadedMessagesSessionIdRef.current = data.session.session_id;
+      setSessions((prev) => {
+        const next = prev.filter((s) => s.session_id !== data.session.session_id);
+        return [data.session, ...next];
+      });
+      if (data.error) {
+        debug.chat.error(data.session.session_id, data.error);
+        setChatError(data.error);
+      }
+      return true;
+    } catch (error) {
+      debug.chat.error(activeSessionId, error instanceof Error ? error.message : 'Unknown error');
+      console.error(error);
+      const errorMsg = error instanceof Error ? error.message : 'Failed';
+      // Provide better error message for common issues
+      if (errorMsg.includes('Unexpected token') || errorMsg.includes('JSON')) {
+        setChatError('Cannot connect to backend. Start it with: uv run r2b-web');
+      } else {
+        setChatError(errorMsg);
+      }
+      setMessages((prev) => prev.filter((msg) => msg.message_id !== optimisticId));
+      return false;
+    } finally {
+      setSendingMessage(false);
+    }
+  }, [activeSessionId, activity, trajectoryActions]);
+
+  const handleTabChange = (_: SyntheticEvent, value: TabValue) => {
+    if (value === 'compiler' && !showCompiler) return;
+    debug.activity.tabSwitch(activeTab, value);
+    setActiveTab(value);
+    // Track tab switch for activity context
+    activity.setCurrentTab(value);
+    trajectory.setCurrentView(value);
+  };
+
+  // Extract disassembly from analysis result for address hover citations
+  const disassemblyContext = useMemo(() => {
+    if (!result) return undefined;
+    const deep = result.deep_scan?.radare2 as Record<string, unknown> | undefined;
+    if (!deep) return undefined;
+    
+    // Prefer entry_disassembly, fall back to general disassembly
+    const entryDisasm = deep.entry_disassembly;
+    if (typeof entryDisasm === 'string' && entryDisasm.trim()) {
+      return entryDisasm;
+    }
+    
+    const generalDisasm = deep.disassembly;
+    if (typeof generalDisasm === 'string' && generalDisasm.trim()) {
+      return generalDisasm;
+    }
+    
+    return undefined;
+  }, [result]);
+
+  // Handle navigation to a specific address (from citation click)
+  const handleNavigateToAddress = useCallback((address: string) => {
+    // Track the navigation event
+    activity.trackEvent('address_hover', { address, source: 'citation' });
+    // Switch to results tab to show disassembly
+    setActiveTab('results');
+    // Could add scrolling to the address in disassembly view in the future
+  }, [activity]);
+
+  const handleAskAboutGraphNode = useCallback((node: ExplorerGraphNode, mode: 'findings' | 'journey') => {
+    const incidentEdges = (result?.analysis_graph?.edges ?? []).filter(
+      (edge) => edge.source === node.id || edge.target === node.id,
+    );
+    const prompt = buildGraphEvidencePrompt(node, mode, incidentEdges);
+    setActiveTab('chat');
+    handleSendMessage(prompt, { callLLM: true });
+  }, [handleSendMessage, result?.analysis_graph?.edges]);
+
+  const handleAskAboutCode = useCallback((codeOrQuestion: string) => {
+    setActiveTab('chat');
+
+    const hasUserQuestion =
+      (codeOrQuestion.includes('```') && codeOrQuestion.indexOf('```') > 10)
+      || /^(REGION\s+\d|SUMMARIZE FROM|PROFESSIONAL TRIAGE)/.test(codeOrQuestion);
+    let prompt: string;
+    if (hasUserQuestion) {
+      prompt = codeOrQuestion;
+    } else {
+      const r2Info = (result?.quick_scan?.radare2 as Record<string, unknown> | undefined)?.info as
+        | Record<string, unknown>
+        | undefined;
+      const binInfo = r2Info?.bin as Record<string, unknown> | undefined;
+      const archName = (binInfo?.arch as string | undefined) || 'assembly';
+      prompt = `Explain this ${archName} code:\n\n\`\`\`asm\n${codeOrQuestion}\n\`\`\`\n\nWhat does it do? Walk me through each instruction. Are there any security concerns or interesting patterns?`;
+    }
+
+    handleSendMessage(prompt, { callLLM: true });
+  }, [handleSendMessage, result?.quick_scan]);
+
+  const handleAskAboutCFG = useCallback((context: CFGContext) => {
+    setActiveTab('chat');
+
+    let prompt = '';
+    if (context.functionName && context.functionOffset) {
+      prompt += `I'm looking at the CFG for function \`${context.functionName}\` at ${context.functionOffset}.\n\n`;
+    }
+
+    if (context.selectedBlock && context.blockAssembly) {
+      prompt += `Selected block at \`${context.selectedBlock}\`:\n\n\`\`\`asm\n`;
+      prompt += context.blockAssembly
+        .map((instr) => `${instr.addr}  ${instr.opcode || ''}`)
+        .join('\n');
+      prompt += '\n```\n\n';
+    } else if (context.visibleBlocks.length > 0) {
+      prompt += 'Visible blocks:\n\n```asm\n';
+      for (const block of context.visibleBlocks) {
+        if (block.offset && block.disassembly) {
+          prompt += `; Block ${block.offset}\n`;
+          prompt += block.disassembly
+            .map((instr) => `${instr.addr}  ${instr.opcode || ''}`)
+            .join('\n');
+          prompt += '\n\n';
+        }
+      }
+      prompt += '```\n\n';
+    }
+
+    prompt += 'What does this code do? Explain the control flow and any interesting patterns.';
+    handleSendMessage(prompt, { callLLM: true });
+  }, [handleSendMessage]);
+
+  const clearFile = () => {
+    setBinaryPath('');
+    setFileName(null);
+    setUserGoal('');
+    setResult(null);
+    setEvents([]);
+    setStatus('idle');
+    setActiveTab('results');
+  };
+
+  const handleNewSession = () => {
+    setActiveSessionId(null);
+    activeSessionIdRef.current = null;
+    lastSyncedSessionIdRef.current = null;
+    setBinaryPath('');
+    setFileName(null);
+    setUserGoal('');
+    setResult(null);
+    setMessages([]);
+    setEvents([]);
+    loadedMessagesSessionIdRef.current = null;
+    restoredAnalysisSessionIdRef.current = null;
+    setStatus('idle');
+    setStatusMessage(null);
+    setActiveTab('results');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleBinaryCompiled = useCallback((path: string, filename: string) => {
+    setBinaryPath(path);
+    setFileName(filename);
+    setStatus('idle');
+    setStatusMessage(`Compiled: ${filename}`);
+    lastSyncedSessionIdRef.current = null;
+  }, []);
+
+  // Handle "Analyze & Chat" - analyze the compiled binary and auto-ask the selected model
+  const handleAnalyzeAndChat = useCallback(async (path: string, filename: string) => {
+    setBinaryPath(path);
+    setFileName(filename);
+    setStatus('running');
+    setStatusMessage('Analyzing compiled binary...');
+    setEvents([]);
+    setResult(null);
+    setActiveTab('logs');
+    lastSyncedSessionIdRef.current = null;
+
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          binary: path,
+          analysis_profile: settings.analysisProfile,
+          quick_only: settings.analysisProfile === 'triage' || settings.quickScanOnly,
+          enable_angr: settings.enableAngr,
+          enable_ghidra: settings.enableGhidra,
+          enable_gef: settings.enableGef,
+          enable_frida: settings.enableFrida,
+          user_goal: `I just compiled this ARM binary (${filename}). Help me understand the generated assembly and how it maps to my C code.`,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error ?? 'Analysis failed');
+      }
+
+      const data: ApiAnalysisResponse = await response.json();
+
+      if (data.session_id) {
+        lastSyncedSessionIdRef.current = null;
+        setActiveSessionId(data.session_id);
+        activeSessionIdRef.current = data.session_id;
+        loadedMessagesSessionIdRef.current = null;
+        restoredAnalysisSessionIdRef.current = null;
+        refreshSessions();
+      }
+
+      closeSource();
+      const source = new EventSource(`/api/jobs/${data.job_id}/stream`);
+      sourceRef.current = source;
+
+      const handlers: SSEHandlers = {
+        job_completed: (payload) => {
+          setStatus('done');
+          setStatusMessage('Done');
+          closeSource();
+          setActiveTab('chat');
+          if (payload.session_id) {
+            lastSyncedSessionIdRef.current = null;
+            setActiveSessionId(payload.session_id);
+            activeSessionIdRef.current = payload.session_id;
+            refreshSessions();
+            if (!settings.autoAskLLM) {
+              return;
+            }
+            const prompt = `Help me understand this compiled ARM binary (${filename}). What patterns do you see in the assembly?`;
+            setSendingMessage(true);
+            fetch(`/api/chats/${payload.session_id}/messages`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content: prompt, call_llm: true }),
+            })
+              .then((res) => res.ok ? res.json() : Promise.reject(res))
+              .then((responseData) => {
+                if (activeSessionIdRef.current !== payload.session_id) return;
+                if (responseData?.messages) {
+                  setMessages(responseData.messages);
+                  if (payload.session_id) loadedMessagesSessionIdRef.current = payload.session_id;
+                }
+                if (responseData?.error) setChatError(responseData.error);
+              })
+              .catch(() => setChatError('Failed to get LLM response'))
+              .finally(() => setSendingMessage(false));
+          }
+        },
+        analysis_result: (payload) => {
+          const analysis = payload as unknown as AnalysisResponseEvent;
+          setResult(analysis);
+          if (analysis.analysis_graph?.nodes?.length) {
+            setActiveTab('map');
+          }
+          if (analysis.session_id) {
+            setInCache(CacheKeys.analysisResult(analysis.session_id), analysis);
+            restoredAnalysisSessionIdRef.current = analysis.session_id;
+            lastSyncedSessionIdRef.current = null;
+            setActiveSessionId(analysis.session_id);
+            activeSessionIdRef.current = analysis.session_id;
+            refreshSessions();
+          }
+        },
+        job_failed: (payload) => {
+          setStatus('error');
+          setStatusMessage(payload.error ?? 'Failed');
+          closeSource();
+        },
+      };
+
+      attachEventHandlers(source, handlers);
+    } catch (error) {
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Analysis failed');
+    }
+  }, [
+    refreshSessions,
+    attachEventHandlers,
+    settings.analysisProfile,
+    settings.quickScanOnly,
+    settings.enableAngr,
+    settings.enableGhidra,
+    settings.enableGef,
+    settings.enableFrida,
+    settings.autoAskLLM,
+  ]);
+
+  return (
+    <Box
+      sx={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: 'background.default',
+        color: 'text.primary',
+      }}
+    >
+      {/* Header */}
+      <Box
+        component="header"
+        sx={{
+          px: 2,
+          py: 1,
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          bgcolor: 'background.paper',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+          <Box
+            component="img"
+            src="/favicon.svg"
+            alt=""
+            sx={{ width: 28, height: 28, display: 'block', flexShrink: 0, borderRadius: '6px' }}
+          />
+          <Typography
+            variant="h6"
+            fontWeight={500}
+            sx={{
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: '-0.04em',
+              fontSize: '1rem',
+            }}
+          >
+            r2brief
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: { xs: 'none', lg: 'block' }, maxWidth: 760, minWidth: 0, overflow: 'hidden' }}>
+          <Suspense fallback={null}>
+            <ToolStatusBar
+              compact
+              refreshInterval={60000}
+              settings={settings}
+              onSettingsChange={setSettings}
+            />
+          </Suspense>
+        </Box>
+
+        <Box sx={{ flex: 1 }} />
+
+        {health && health.available_models && health.available_models.length > 0 && (
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <Select
+              value={health.model}
+              onChange={handleModelChange}
+              sx={{
+                fontSize: '0.8rem',
+                transition: 'all 0.2s ease',
+                '& .MuiSelect-select': {
+                  py: 0.75,
+                  px: 1.5,
+                },
+                '&:hover': {
+                  bgcolor: 'action.hover',
+                },
+              }}
+            >
+              {health.available_models.map((modelId) => (
+                <MenuItem key={modelId} value={modelId} sx={{ fontSize: '0.8rem' }}>
+                  {health.model_names?.[modelId] || modelId}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+
+        {health && (!health.available_models || health.available_models.length === 0) && (
+          <Typography variant="caption" color="text.secondary">
+            {health.model_names?.[health.model] || health.model}
+          </Typography>
+        )}
+
+        <Tooltip title={isDark ? 'Light mode' : 'Dark mode'}>
+          <IconButton size="small" onClick={toggleTheme}>
+            {isDark ? <LightModeIcon sx={{ fontSize: 18 }} /> : <DarkModeIcon sx={{ fontSize: 18 }} />}
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title="How this works">
+          <IconButton size="small" onClick={() => setHelpOpen(true)}>
+            <HelpOutlineIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Settings">
+          <IconButton size="small" onClick={() => setSettingsOpen(true)}>
+            <SettingsIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      {helpOpen && (
+        <Suspense fallback={null}>
+          <HelpGuide open={helpOpen} onClose={() => setHelpOpen(false)} />
+        </Suspense>
+      )}
+      {(settingsOpen || settingsDrawerMounted) && (
+        <Suspense fallback={null}>
+          <SettingsDrawer
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            isDarkMode={isDark}
+            onToggleTheme={toggleTheme}
+            settings={settings}
+            onSettingsChange={setSettings}
+          />
+        </Suspense>
+      )}
+
+      {/* Main */}
+      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* Sidebar */}
+        <Box
+          component="aside"
+          sx={{
+            width: sidebarCollapsed ? 40 : 240,
+            minWidth: sidebarCollapsed ? 40 : 240,
+            borderRight: 1,
+            borderColor: 'divider',
+            display: 'flex',
+            flexDirection: 'column',
+            bgcolor: 'background.paper',
+            transition: 'width 0.2s ease, min-width 0.2s ease',
+            overflow: 'hidden',
+          }}
+        >
+          <Box sx={{ p: sidebarCollapsed ? 0.5 : 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: sidebarCollapsed ? 'center' : 'space-between' }}>
+            {!sidebarCollapsed && (
+              <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                Sessions
+              </Typography>
+            )}
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              {!sidebarCollapsed && (
+                <Tooltip title="New Session">
+                  <IconButton size="small" onClick={handleNewSession} sx={{ p: 0.5 }}>
+                    <AddIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <Tooltip title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+                <IconButton size="small" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} sx={{ p: 0.5 }}>
+                  {sidebarCollapsed ? <ChevronRightIcon sx={{ fontSize: 16 }} /> : <ChevronLeftIcon sx={{ fontSize: 16 }} />}
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+          {!sidebarCollapsed && (
+            <Box sx={{ flex: 1, overflow: 'auto' }}>
+              <SessionList
+                sessions={sessions}
+                activeSessionId={activeSessionId}
+                onSelect={handleSessionSelect}
+                onDelete={handleDeleteSession}
+              />
+            </Box>
+          )}
+        </Box>
+
+        {/* Main panel */}
+        <Box
+          sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileInputChange}
+            style={{ display: 'none' }}
+            accept="*/*"
+          />
+
+          {/* No file selected - show welcome screen with tabs */}
+          {!fileName && !result ? (
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* Tabs for empty state */}
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+                <Tabs value={visibleActiveTab} onChange={handleTabChange}>
+                  {showCompiler && (
+                    <Tab value="compiler" label="Compiler" icon={<CodeIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+                  )}
+                  <Tab value="results" label="Upload Binary" icon={<CloudUploadIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+                </Tabs>
+              </Box>
+
+              <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+                {showCompiler && activeTab === 'compiler' ? (
+                  <Suspense fallback={<PanelFallback />}>
+                    <CompilerPanel onBinaryCompiled={handleBinaryCompiled} onAnalyzeAndChat={handleAnalyzeAndChat} />
+                  </Suspense>
+                ) : (
+                  /* Drop zone */
+                  <Box
+                    onClick={() => fileInputRef.current?.click()}
+                    sx={{
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      bgcolor: isDragging ? 'action.hover' : 'transparent',
+                      border: isDragging ? 2 : 1,
+                      borderStyle: 'dashed',
+                      borderColor: isDragging ? 'primary.main' : 'divider',
+                      borderRadius: 2,
+                      transition: 'all 0.2s',
+                      minHeight: 300,
+                    }}
+                  >
+                    <CloudUploadIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" fontWeight={500}>
+                      {isDragging ? 'Drop binary here' : 'Drop a binary file to analyze'}
+                    </Typography>
+                    <Typography variant="body2" color="text.disabled" sx={{ mt: 0.5 }}>
+                      or click to browse
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled" sx={{ mt: 2 }}>
+                      Supports generic binaries and firmware images up to {MAX_UPLOAD_LABEL}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          ) : (
+            <>
+              {/* File selected - show controls */}
+              <Box
+                component="form"
+                onSubmit={handleAnalyze}
+                sx={{
+                  p: 2,
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                }}
+              >
+                <Stack spacing={1.5}>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'monospace' }}>
+                        {fileName || result?.binary.split('/').pop()}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {settings.analysisProfile === 'triage' ? 'Triage' : settings.analysisProfile === 'exhaustive' ? 'Exhaustive' : 'Standard'}
+                        {settings.enableAngr && settings.analysisProfile !== 'triage' && !settings.quickScanOnly && ' + angr'}
+                      </Typography>
+                    </Box>
+                    <Button variant="text" size="small" onClick={clearFile} disabled={status === 'running'}>
+                      Clear
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      size="small"
+                      disabled={status === 'running' || uploading || !fileName}
+                      startIcon={status === 'running' ? <CircularProgress size={14} color="inherit" /> : <PlayArrowIcon />}
+                    >
+                      {status === 'running' ? 'Running' : 'Analyze'}
+                    </Button>
+                  </Stack>
+
+                  {/* User goal input */}
+                  <TextField
+                    size="small"
+                    inputRef={goalInputRef}
+                    inputProps={{ 'aria-label': 'Thesis' }}
+                    placeholder="Thesis — who calls system on the login path"
+                    value={userGoal}
+                    onChange={(e) => setUserGoal(e.target.value)}
+                    fullWidth
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        fontSize: '0.8125rem',
+                      },
+                    }}
+                  />
+
+                  {statusMessage && (
+                    <Alert
+                      severity={status === 'error' ? 'error' : status === 'done' ? 'success' : 'info'}
+                      sx={{ py: 0.5 }}
+                    >
+                      {statusMessage}
+                    </Alert>
+                  )}
+                </Stack>
+              </Box>
+
+              {/* Tabs */}
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+                <Tabs value={visibleActiveTab} onChange={handleTabChange}>
+                  <Tab value="results" label="Results" />
+                  <Tab value="map" label={mapTabLabel} icon={<MapIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+                  <Tab value="chat" label="Chat" />
+                  {showCompiler && (
+                    <Tab value="compiler" label="Compiler" icon={<CodeIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
+                  )}
+                  <Tab value="logs" label={`Logs${events.length ? ` (${events.length})` : ''}`} />
+                </Tabs>
+              </Box>
+
+              {/* Trajectory Panel - Collapsible analysis progress tracker */}
+              {trajectory.snapshot && activeSessionId && (
+                <Box sx={{ px: 2, pt: 1 }}>
+                  <TrajectoryPanel snapshot={trajectory.snapshot} compact />
+                </Box>
+              )}
+
+              {/* Content */}
+              <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+                {activeTab === 'results' && (
+                  <>
+                    {health && (
+                      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Analysis powered by:
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={health.model_names?.[health.model] || health.model}
+                          color="primary"
+                          variant="outlined"
+                          sx={{ fontSize: '0.7rem', height: 20 }}
+                        />
+                      </Box>
+                    )}
+                    {result ? (
+                      <Suspense fallback={<PanelFallback />}>
+                        <ResultViewer
+                          result={result}
+                          sessionId={activeSessionId}
+                          toolsInfo={health?.tools}
+                          onAskAboutCode={handleAskAboutCode}
+                          onAskAboutCFG={handleAskAboutCFG}
+                        />
+                      </Suspense>
+                    ) : (
+                      <ResultsEmptyState />
+                    )}
+                  </>
+                )}
+                {activeTab === 'map' && (
+                  <Suspense fallback={<PanelFallback />}>
+                    <GraphExplorer
+                      sessionId={activeSessionId}
+                      analysisGraph={result?.analysis_graph ?? null}
+                      onAskAboutNode={handleAskAboutGraphNode}
+                      onNavigateToAddress={handleNavigateToAddress}
+                    />
+                  </Suspense>
+                )}
+                {activeTab === 'chat' && (
+                  <Suspense fallback={<PanelFallback />}>
+                    <ChatPanel
+                      session={activeSession}
+                      messages={messages}
+                      onSend={handleSendMessage}
+                      sending={sendingMessage}
+                      error={chatError}
+                      disassembly={disassemblyContext}
+                      onNavigateToAddress={handleNavigateToAddress}
+                      trajectoryContext={trajectory.getLLMContext()}
+                    />
+                  </Suspense>
+                )}
+                {showCompiler && activeTab === 'compiler' && (
+                  <Suspense fallback={<PanelFallback />}>
+                    <CompilerPanel
+                      onBinaryCompiled={handleBinaryCompiled}
+                      onAnalyzeAndChat={handleAnalyzeAndChat}
+                      analysis={result}
+                    />
+                  </Suspense>
+                )}
+                {activeTab === 'logs' && (
+                  <Suspense fallback={<PanelFallback />}>
+                    <ProgressLog entries={events} />
+                  </Suspense>
+                )}
+              </Box>
+            </>
+          )}
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
+// Wrap AppContent with providers for activity and trajectory tracking
+const App = () => {
+  return (
+    <ActivityProvider>
+      <TrajectoryProvider>
+        <AppContent />
+      </TrajectoryProvider>
+    </ActivityProvider>
+  );
+};
+
+export default App;

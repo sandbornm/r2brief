@@ -1,0 +1,301 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import ResultViewer from '../components/ResultViewer';
+import type { AnalysisResultPayload } from '../types';
+
+// Mock the subcomponents that have complex dependencies
+vi.mock('../components/CFGViewer', () => ({
+  default: ({ onAskAboutCFG }: { onAskAboutCFG?: () => void }) => (
+    <div data-testid="cfg-viewer">
+      CFG Viewer Mock
+      {onAskAboutCFG && <button onClick={() => onAskAboutCFG()}>Ask About CFG</button>}
+    </div>
+  ),
+}));
+
+vi.mock('../components/DisassemblyViewer', () => ({
+  default: ({ disassembly, onAskAbout }: { disassembly: string; onAskAbout?: (code: string) => void }) => (
+    <div data-testid="disassembly-viewer">
+      <pre>{disassembly}</pre>
+      {onAskAbout && <button onClick={() => onAskAbout('test code')}>Ask About Code</button>}
+    </div>
+  ),
+}));
+
+vi.mock('../components/DWARFPanel', () => ({
+  default: ({ data, onAskClaude }: { data: unknown; onAskClaude?: (question: string) => void }) => (
+    <div data-testid="dwarf-panel">
+      DWARF Panel Mock
+      {Boolean(data) && <span>Has DWARF data</span>}
+      {onAskClaude && <button onClick={() => onAskClaude('test question')}>Ask model</button>}
+    </div>
+  ),
+}));
+
+vi.mock('../components/ToolAttribution', () => ({
+  default: ({ quickScan, deepScan }: { quickScan?: Record<string, unknown>; deepScan?: Record<string, unknown> }) => (
+    <div data-testid="tool-attribution">
+      Tools: {Object.keys(quickScan || {}).join(', ')} | {Object.keys(deepScan || {}).join(', ')}
+    </div>
+  ),
+}));
+
+vi.mock('../components/InsightsPanel', () => ({
+  default: () => <div data-testid="insights-panel" />,
+}));
+
+describe('ResultViewer', () => {
+  const mockResult: AnalysisResultPayload = {
+    binary: '/tmp/test.bin',
+    plan: {
+      quick: true,
+      deep: true,
+      run_angr: true,
+      persist_trajectory: true,
+    },
+    quick_scan: {
+      sniff: {
+        file: 'ELF 32-bit LSB executable, ARM',
+        sha256: 'abc123def456',
+        size_bytes: 4096,
+        hex_head: '00000000  7f 45 4c 46 01 01 01 00  00 00 00 00 00 00 00 00  .ELF............',
+        strings: [{ value: 'httpd' }, { value: '/cgi-bin/login' }],
+      },
+      radare2: {
+        info: {
+          bin: {
+            arch: 'arm',
+            bits: 32,
+            machine: 'ARM',
+            os: 'linux',
+            bintype: 'elf',
+          },
+          core: {
+            format: 'elf',
+          },
+        },
+        strings: [
+          { string: 'Hello World', vaddr: 0x1000 },
+          { string: 'Test String', vaddr: 0x1010 },
+        ],
+        imports: [
+          { name: 'printf', plt: 0x2000 },
+          { name: 'malloc', plt: 0x2004 },
+        ],
+      },
+    },
+    deep_scan: {
+      radare2: {
+        functions: [
+          { name: 'main', offset: 0x1000, size: 100 },
+          { name: 'helper', offset: 0x2000, size: 50 },
+        ],
+        entry_disassembly: '0x00001000 push {r4, lr}\n0x00001004 mov r0, #1',
+        function_cfgs: [],
+      },
+      angr: {
+        cfg: {
+          nodes: [],
+          edges: [],
+        },
+        active: 0,
+        found: 0,
+      },
+    },
+    notes: [],
+    issues: [],
+    tool_status: {
+      radare2: {
+        status: 'completed',
+        functions_count: 2,
+        cfg_nodes: 0,
+        cfg_edges: 0,
+        duration_ms: 25,
+      },
+    },
+    tool_scorecard: {
+      radare2: {
+        state: 'completed',
+        quality: 'good',
+        score: 98,
+        speed: 'medium',
+        best_for: ['disassembly', 'functions'],
+      },
+    },
+  };
+
+  it('renders empty state when no result', () => {
+    render(<ResultViewer result={null} />);
+    expect(screen.getByText(/no analysis yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/drop a binary to get started/i)).toBeInTheDocument();
+  });
+
+  it('renders binary info header', () => {
+    render(<ResultViewer result={mockResult} />);
+    expect(screen.getAllByText('test.bin').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/elf.*arm32.*linux/i).length).toBeGreaterThan(0);
+  });
+
+  it('renders count chips', () => {
+    render(<ResultViewer result={mockResult} />);
+    expect(screen.getByText('2 fn')).toBeInTheDocument();
+    expect(screen.getByText('2 imp')).toBeInTheDocument();
+    expect(screen.getByText('2 str')).toBeInTheDocument();
+  });
+
+  it('renders overview tab by default', () => {
+    render(<ResultViewer result={mockResult} />);
+    expect(screen.getByTestId('artifact-sheet')).toBeInTheDocument();
+    expect(screen.queryByText('Binary Info')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tool-attribution')).not.toBeInTheDocument();
+  });
+
+  it('renders sniff identity, hex, coverage, and pass timings', () => {
+    render(<ResultViewer result={mockResult} />);
+    expect(screen.getByText(/ELF 32-bit LSB executable, ARM/)).toBeInTheDocument();
+    expect(screen.getByTestId('artifact-hex')).toHaveTextContent(/7f 45 4c 46/);
+    expect(screen.getByTestId('artifact-strings')).toHaveTextContent('httpd');
+    expect(screen.getByTestId('artifact-coverage')).toHaveTextContent(/elf/);
+    expect(screen.getByTestId('artifact-passes')).toHaveTextContent(/radare2 25ms/);
+  });
+
+  it('downloads session archive export', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/annotations')) {
+        return Promise.resolve(new Response(JSON.stringify({ annotations: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }));
+      }
+      return Promise.resolve(new Response(new Blob(['zip-data'], { type: 'application/zip' }), { status: 200 }));
+    });
+    const createObjectURL = vi.fn(() => 'blob:archive');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+
+    render(<ResultViewer result={mockResult} sessionId="session-1" />);
+    await user.click(screen.getByRole('button', { name: /archive/i }));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/chats/session-1/bundle?format=zip');
+    expect(createObjectURL).toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('shows functions in analysis tab', async () => {
+    const user = userEvent.setup();
+    render(<ResultViewer result={mockResult} />);
+
+    await user.click(screen.getByRole('tab', { name: /analysis/i }));
+
+    expect(screen.getByText('main')).toBeInTheDocument();
+    expect(screen.getByText('helper')).toBeInTheDocument();
+  });
+
+  it('shows strings in analysis tab', async () => {
+    const user = userEvent.setup();
+    render(<ResultViewer result={mockResult} />);
+
+    await user.click(screen.getByRole('tab', { name: /analysis/i }));
+
+    // Strings should be visible in the analysis view
+    expect(screen.getByText('Hello World')).toBeInTheDocument();
+    expect(screen.getByText('Test String')).toBeInTheDocument();
+  });
+
+  it('switches to code tab', async () => {
+    const user = userEvent.setup();
+    render(<ResultViewer result={mockResult} />);
+
+    await user.click(screen.getByRole('tab', { name: /code/i }));
+
+    expect(screen.getByTestId('disassembly-viewer')).toBeInTheDocument();
+  });
+
+  it('shows CFG in analysis tab', async () => {
+    const user = userEvent.setup();
+    render(<ResultViewer result={mockResult} />);
+
+    await user.click(screen.getByRole('tab', { name: /analysis/i }));
+
+    // CFG is accessible from analysis tab
+    expect(screen.getByTestId('cfg-viewer')).toBeInTheDocument();
+  });
+
+  it('shows DWARF panel in code tab', async () => {
+    const user = userEvent.setup();
+    render(<ResultViewer result={mockResult} />);
+
+    await user.click(screen.getByRole('tab', { name: /code/i }));
+
+    // DWARF panel should be accessible from code tab
+    expect(screen.getByTestId('dwarf-panel')).toBeInTheDocument();
+  });
+
+  it('calls onAskAboutCode callback when provided', async () => {
+    const user = userEvent.setup();
+    const handleAskAboutCode = vi.fn();
+    render(<ResultViewer result={mockResult} onAskAboutCode={handleAskAboutCode} />);
+
+    await user.click(screen.getByRole('tab', { name: /code/i }));
+    await user.click(screen.getByText('Ask About Code'));
+
+    expect(handleAskAboutCode).toHaveBeenCalledWith('test code');
+  });
+
+  it('handles arm64 architecture display', () => {
+    const arm64Result: AnalysisResultPayload = {
+      ...mockResult,
+      quick_scan: {
+        radare2: {
+          info: {
+            bin: {
+              arch: 'arm',
+              bits: 64,
+              machine: 'ARM64',
+              os: 'linux',
+              bintype: 'elf',
+            },
+            core: {
+              format: 'elf',
+            },
+          },
+          strings: [],
+          imports: [],
+        },
+      },
+    };
+
+    render(<ResultViewer result={arm64Result} />);
+    expect(screen.getAllByText(/elf.*arm64.*linux/i).length).toBeGreaterThan(0);
+  });
+
+  it('handles x86 architecture display', () => {
+    const x86Result: AnalysisResultPayload = {
+      ...mockResult,
+      quick_scan: {
+        radare2: {
+          info: {
+            bin: {
+              arch: 'x86',
+              bits: 64,
+              machine: 'AMD64',
+              os: 'linux',
+              bintype: 'elf',
+            },
+            core: {
+              format: 'elf',
+            },
+          },
+          strings: [],
+          imports: [],
+        },
+      },
+    };
+
+    render(<ResultViewer result={x86Result} />);
+    expect(screen.getAllByText(/elf.*x86_64.*linux/i).length).toBeGreaterThan(0);
+  });
+});

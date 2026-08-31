@@ -1,0 +1,15 @@
+# r2b --ask overlay (xAI / Grok). Key lives in gitignored `.env`, never here:
+#   echo 'XAI_API_KEY=...' >> .env
+#   cp config/x.ai.example.toml config/local.toml
+
+
+[llm]
+provider = "xai"
+transport = "responses"
+model = "grok-4.6"
+api_key_env = "XAI_API_KEY"
+base_url = "https://api.x.ai/v1"
+enable_fallback = false
+temperature = 0.2
+max_tokens = 2048
+compact_context = true

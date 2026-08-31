@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://r2b.local/schemas/setup.schema.json",
+  "title": "r2b setup recommendation",
+  "type": "object",
+  "required": ["schema_version", "flavor", "uv_extra", "commands"],
+  "properties": {
+    "schema_version": { "const": "r2b.setup.v1" },
+    "flavor": { "type": "string", "enum": ["core", "lab", "full"] },
+    "recommended_flavor": { "type": "string", "enum": ["core", "lab", "full"] },
+    "why": { "type": "string" },
+    "uv_extra": { "type": "string" },
+    "overlay": { "type": "string" },
+    "commands": { "type": "array", "items": { "type": "string" } },
+    "have": { "type": "array", "items": { "type": "string" } },
+    "missing": { "type": "array" },
+    "skip": { "type": "array" },
+    "apt": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "host": { "type": "object" },
+    "agent": { "type": "object" },
+    "applied": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,0 +1,16 @@
+# r2b --ask overlay (OpenAI). Key lives in gitignored `.env`, never here:
+#   echo 'OPENAI_API_KEY=sk-...' >> .env
+#   cp config/openai.example.toml config/local.toml
+#
+# The SDK uses api.openai.com when `base_url` is omitted.
+# OpenAI uses the Responses transport for reasoning and function tools.
+
+[llm]
+provider = "openai"
+transport = "responses"
+model = "gpt-5.6-luna"
+api_key_env = "OPENAI_API_KEY"
+enable_fallback = false
+temperature = 0.2
+max_tokens = 2048
+compact_context = true

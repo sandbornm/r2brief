@@ -47,8 +47,8 @@ REGION_ASK_RULES = (
 OVERALL_ASK_RULES = (
     "PROFESSIONAL TRIAGE — facts and region titles only. No lecture.",
     "Answer in exactly 6 bullets, each ending with a cite tag [tool= addr= artifact= xref=]:",
-    "1. What is actually unusual (not 'it is firmware')",
-    "2. Highest-leverage region and the claim it supports",
+    "1. Name the unusual fact; 'it is firmware' is too broad",
+    "2. Region that best supports a claim, and what that claim is",
     "3. Best next ELF/function — prefer a carved child or named symbol over size",
     "4. What is still unknown (missing carve, stripped names, dead tool)",
     "5. Exact next r2 command or `r2b brief` on a child",

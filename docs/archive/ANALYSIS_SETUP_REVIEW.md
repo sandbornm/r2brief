@@ -428,7 +428,7 @@ uv run r2b profile-dataset \
 ```
 
 4. **Integration Points**:
-- Leverage existing `AnalysisTrajectory` model
+- Use the existing `AnalysisTrajectory` model
 - Use `TrajectoryDAO` for persistence
 - Extend `LLMBridge` for plan generation
 - Add `scripts/generate_dataset.py` for batch processing

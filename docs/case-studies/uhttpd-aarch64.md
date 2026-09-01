@@ -158,10 +158,10 @@ useful static finding into an overclaim:
 ## What this investigation taught
 
 r2b's quick pass reduced an unfamiliar network daemon to the right boundary in
-under a second: process launch. Following that lead reveals the program's
-architecture—not just an import list. Requests are resolved and authenticated,
-script work is concurrency-limited, CGI runs in a forked child with an explicit
-environment, and the parent relays output under a timeout.
+under a second: process launch. Following that lead shows how the program works.
+Requests are resolved and authenticated, script work is concurrency-limited,
+CGI runs in a forked child with an explicit environment, and the parent relays
+output under a timeout.
 
 The recorded `verify` run also exposed a coverage gap. A short
 relocation-centered walk recovered the call, and that exact pattern now has a

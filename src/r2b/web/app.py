@@ -28,6 +28,7 @@ from ..analysis.insights import extract_insights, save_lab_note
 from ..analysis.record import AnalysisRecordStore
 from ..analysis.result_dto import analysis_result_to_public_dict, ensure_analysis_briefing
 from ..config import AppConfig
+from ..extract.binwalk3 import find_binwalk3
 from ..llm import ChatMessage as LLMChatMessage, LLMBridge, LLMError
 from ..llm.credentials import resolve_llm_api_key, resolve_provider_base_url
 from ..llm.prompts import ANALYST_SYSTEM
@@ -457,12 +458,12 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "install_hint": "Optional: brew install binwalk",
             "description": "Firmware analysis and extraction signatures (v2 scan)",
         }
-        binwalk3_path = which_any("binwalk3")
+        binwalk3_path = find_binwalk3()
         tools["binwalk3"] = {
             "available": binwalk3_path is not None,
             "path": binwalk3_path,
-            "install_hint": "Kali: apt install binwalk3 (keep /usr/bin/binwalk as v2)",
-            "description": "Sandboxed v3 extractor feeding the artifact DAG",
+            "install_hint": "Install Binwalk v3 as binwalk3, or use Homebrew's binwalk v3 package",
+            "description": "Sandboxed Binwalk v3 extractor feeding the artifact DAG",
         }
         unblob_path = which_any("unblob")
         tools["unblob"] = {

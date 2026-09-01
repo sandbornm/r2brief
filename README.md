@@ -138,28 +138,36 @@ stable format.
 
 ## Worked investigation
 
-The [OpenWrt uHTTPD investigation](docs/case-studies/uhttpd-aarch64.md) starts with
-a pinned 66 KB AArch64 package. The quick pass put a few evidence capsules
-ahead of the full function and import inventories. The process capsule gave
-the useful first command:
+The [OpenWrt release-delta investigation](docs/case-studies/openwrt-ubusd-release-delta.md)
+starts with the official 24.10.3 and 24.10.4 images for one AArch64 router.
+Each root filesystem contained 176 regular ELFs. Of 109 paths present in both,
+106 were unchanged and three changed:
 
 ```text
-subject       ELF64 AArch64 PIE · musl · stripped · no section table
-regions       1. Process launch / child control   score 93
-              2. Network ingress and egress       score 90
-              3. Entry / entry @ 0x4b0c           score 89
-handoff       r2b verify ./uhttpd --import execl --json
-recovered     reloc.execl @ 0x1fb60 → blr x4 @ 0x9384
-caller        fcn.000092e4 · argument=<dynamic>
-target run    no
-models called no
+2 firmware images → 176 ELFs each → 109 common paths
+                    ├── 106 unchanged
+                    └── busybox · ubusd · odhcpd changed
+
+ubusd → 3 dynamic strcpy call sites → event-registration routine
+      → 24.10.4 adds the missing empty-pattern guard
 ```
 
-Pinned source showed normal CGI dispatch: path lookup and authentication lead
-to a forked child that calls `execl` directly rather than building a shell
-command. The binary establishes that execution boundary; it does not establish
-a vulnerability. The remaining question belongs to the deployed router: who
-can create or replace an executable CGI path?
+The full static pass completed radare2, Ghidra, and angr analysis on both
+`ubusd` binaries. A targeted decompile showed the guard at the binary level;
+the upstream patch named the routine and supplied ground truth. No model was
+called and the target was not executed. The case page states the boundary
+plainly: r2b narrowed and preserved the evidence trail; it did not discover or
+prove the published CVE by itself.
+
+The [machine-readable case result](docs/case-studies/openwrt-ubusd-release-delta.json)
+contains the input hashes, inventory counts, changed paths, call sites,
+function addresses, tool status, review-width result, source links, and bundle
+hash.
+
+The earlier [OpenWrt uHTTPD investigation](docs/case-studies/uhttpd-aarch64.md)
+is a negative result: a process-launch lead resolves to normal CGI dispatch.
+It remains useful as a verifier regression record, not as the main product
+example.
 
 The first verifier run missed the GOT-indirect AArch64 call. The original empty
 result remains in the investigation record. The recovered instruction pattern

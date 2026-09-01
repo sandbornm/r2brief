@@ -306,7 +306,7 @@ def _ingest_firmware(builder: _DagBuilder, firmware: dict[str, Any]) -> None:
         sha = item.get("carved_sha256")
         path = item.get("carved_path")
         node_id = _node_id(kind, str(sha) if sha else f"{builder.sha256}:{offset}:{kind}")
-        builder.add_node(
+        node_id = builder.add_node(
             node_id,
             kind=kind,
             label=label,
@@ -499,6 +499,61 @@ def _ingest_extractor_hits(
             confidence=float(hit.get("confidence") or 0.7),
             properties={"description": hit.get("description"), "extractor_name": hit.get("name")},
         )
+        if extracted:
+            extracted_path = Path(str(extracted))
+            if extracted_path.is_dir():
+                _ingest_extracted_code(
+                    builder,
+                    parent_id=node_id,
+                    root=extracted_path,
+                    source_tool=str(hit.get("extractor") or hit.get("tool") or "extractor"),
+                    max_files=max_files,
+                )
+
+
+def _ingest_extracted_code(
+    builder: _DagBuilder,
+    *,
+    parent_id: str,
+    root: Path,
+    source_tool: str,
+    max_files: int,
+) -> None:
+    """Add analyzable ELF and script children from an unpacked filesystem."""
+    candidates = sorted((path for path in root.rglob("*") if path.is_file()), key=lambda path: str(path))
+    added = 0
+    for path in candidates:
+        if added >= max(0, max_files):
+            builder.notes.append(f"extracted code inventory capped at {max_files} files")
+            break
+        kind = "elf" if _looks_elf(path) else "script" if _looks_script(path) else None
+        if kind is None:
+            continue
+        try:
+            digest = sha256_path(path)
+            size = path.stat().st_size
+            relative = path.relative_to(root).as_posix()
+        except OSError:
+            continue
+        node_id = _node_id(kind, digest)
+        builder.add_node(
+            node_id,
+            kind=kind,
+            label=relative,
+            sha256=digest,
+            parent_id=parent_id,
+            parent_offset=0,
+            size=size,
+            path=str(path),
+            source_tools=[source_tool],
+            confidence=0.99 if kind == "elf" else 0.85,
+            properties={
+                "relative_path": relative,
+                "analysis_role": "code",
+                "extracted_filesystem": str(root),
+            },
+        )
+        added += 1
 
 
 def _store_blob(root: Path, digest: str, src: Path) -> str:
@@ -529,6 +584,14 @@ def _looks_elf(path: Path) -> bool:
     try:
         with path.open("rb") as handle:
             return handle.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def _looks_script(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            return handle.read(2) == b"#!"
     except OSError:
         return False
 

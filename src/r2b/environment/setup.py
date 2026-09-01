@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..extract.binwalk3 import find_binwalk3
 from ..paths import shipped_config_dir
 
 SCHEMA_VERSION = "r2b.setup.v1"
@@ -223,7 +224,6 @@ def _which_tools() -> dict[str, bool]:
     names = {
         "radare2": ["radare2", "r2"],
         "file": ["file"],
-        "binwalk3": ["binwalk3"],
         "unblob": ["unblob"],
         "bwrap": ["bwrap"],
         "unsquashfs": ["unsquashfs"],
@@ -231,6 +231,7 @@ def _which_tools() -> dict[str, bool]:
     found: dict[str, bool] = {}
     for name, candidates in names.items():
         found[name] = any(shutil.which(c) for c in candidates)
+    found["binwalk3"] = bool(find_binwalk3())
     headless = shutil.which("analyzeHeadless")
     ghidra_run = shutil.which("ghidraRun")
     ghidra_from_run = (

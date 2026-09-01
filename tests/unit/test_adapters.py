@@ -218,6 +218,41 @@ class TestAngrAdapter:
             with pytest.raises(AdapterUnavailable):
                 adapter.deep_scan(Path("/tmp/test.bin"))
 
+    def test_cfg_uses_executable_segments_when_sections_are_absent(self):
+        from r2b.adapters.angr import _cfg_options_for_project
+
+        main_object = MagicMock()
+        main_object.sections = []
+        main_object.segments = [
+            MagicMock(is_executable=True, min_addr=0x401000, max_addr=0x402FFF),
+            MagicMock(is_executable=False, min_addr=0x403000, max_addr=0x404FFF),
+        ]
+        project = MagicMock()
+        project.loader.main_object = main_object
+
+        options = _cfg_options_for_project(project)
+
+        assert options["regions"] == [(0x401000, 0x403000)]
+        assert options["force_smart_scan"] is False
+        assert options["force_complete_scan"] is True
+
+    def test_cfg_keeps_default_scan_when_executable_section_exists(self):
+        from r2b.adapters.angr import _cfg_options_for_project
+
+        main_object = MagicMock()
+        main_object.sections = [MagicMock(is_executable=True, memsize=4096)]
+        main_object.segments = [MagicMock(is_executable=True, min_addr=0x1000, max_addr=0x1FFF)]
+        project = MagicMock()
+        project.loader.main_object = main_object
+
+        options = _cfg_options_for_project(project)
+
+        assert options == {
+            "normalize": True,
+            "data_references": True,
+            "force_complete_scan": False,
+        }
+
 
 class TestLibmagicAdapter:
     """Tests for LibmagicAdapter."""

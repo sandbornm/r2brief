@@ -88,8 +88,20 @@ def run_sandboxed(
     notes: list[str] = []
     sandbox = "subprocess"
     wrapped = list(argv)
+    tool_dirs = []
+    if argv:
+        executable = Path(argv[0])
+        if executable.is_absolute():
+            tool_dirs.append(str(executable.parent))
+    for extra in extra_ro_binds or ():
+        resolved = extra.resolve()
+        if resolved.is_file():
+            tool_dirs.append(str(resolved.parent))
+    tool_dirs.extend(["/usr/bin", "/bin"])
     env = {
-        "PATH": "/usr/bin:/bin",
+        # Keep the environment scrubbed while allowing an absolute Homebrew
+        # extractor to find sibling helpers such as unsquashfs.
+        "PATH": os.pathsep.join(dict.fromkeys(tool_dirs)),
         "HOME": str(output_dir),
         "TMPDIR": str(output_dir / "tmp"),
         "LANG": "C",

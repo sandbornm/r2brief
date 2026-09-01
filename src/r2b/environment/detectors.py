@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable
 
 from ..config import AppConfig, apply_lab_tool_path
+from ..extract.binwalk3 import find_binwalk3
 from ..llm.credentials import resolve_llm_api_key, resolve_provider_base_url, unused_glm_key_hint
 from .ghidra import GhidraDetection, detect_ghidra
 
@@ -82,6 +83,20 @@ def _check_command(name: str, candidates: Iterable[str]) -> ToolCheck:
     return ToolCheck(name=name, command=None, available=False)
 
 
+def _check_binwalk3() -> ToolCheck:
+    path_text = find_binwalk3()
+    if not path_text:
+        return ToolCheck(name="binwalk3", command=None, available=False)
+    path = Path(path_text)
+    return ToolCheck(
+        name="binwalk3",
+        command=path.name,
+        available=True,
+        version=_probe_version(path_text),
+        path=path,
+    )
+
+
 def _probe_version(command: str) -> str | None:
     try:
         output = subprocess.check_output([command, "--version"], stderr=subprocess.STDOUT, timeout=4)
@@ -147,7 +162,7 @@ def detect_environment(config: AppConfig) -> EnvironmentReport:
     # Optional runtime tools helpful for replay/debugging.
     report.tools.append(_check_command("file", _COMMANDS["file"]))
     report.tools.append(_check_command("binwalk", _COMMANDS["binwalk"]))
-    report.tools.append(_check_command("binwalk3", _COMMANDS["binwalk3"]))
+    report.tools.append(_check_binwalk3())
     report.tools.append(_check_command("unblob", _COMMANDS["unblob"]))
     report.tools.append(_check_command("bwrap", _COMMANDS["bwrap"]))
     report.tools.append(_check_command("unsquashfs", _COMMANDS["unsquashfs"]))

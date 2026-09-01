@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -50,6 +51,7 @@ def test_setup_ghidra_installs_local_archive(tmp_path):
     assert result.ready is True
     assert result.install_dir == tmp_path / "tools" / "ghidra_11.4.2_PUBLIC"
     assert result.headless_path == result.install_dir / "support" / "analyzeHeadless"
+    assert os.access(result.headless_path, os.X_OK)
     assert result.env_line == f"export GHIDRA_INSTALL_DIR={result.install_dir}"
 
 

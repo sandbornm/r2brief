@@ -1,0 +1,155 @@
+{
+  "schema_version": "r2b.case-study.v1",
+  "case_id": "openwrt-ubusd-release-delta",
+  "generated_at": "2026-08-31T00:00:00Z",
+  "dataset": {
+    "vendor": "OpenWrt",
+    "device": "Banana Pi BPI-R3 Mini",
+    "architecture": "AArch64",
+    "releases": [
+      {
+        "version": "24.10.3",
+        "sha256": "6f7dea199d326ca6efcc3c2a11932070edf79fa6d0984e2a4d77cef8c4cbb8a4",
+        "source": "https://downloads.openwrt.org/releases/24.10.3/targets/mediatek/filogic/"
+      },
+      {
+        "version": "24.10.4",
+        "sha256": "8d632977278bfe58b53e20218dc72571b20b8da589ad28184642a5c3be37263b",
+        "source": "https://downloads.openwrt.org/releases/24.10.4/targets/mediatek/filogic/"
+      }
+    ]
+  },
+  "inventory": {
+    "regular_elfs_per_release": 176,
+    "common_paths": 109,
+    "unchanged_common_paths": 106,
+    "changed_common_paths": [
+      "bin/busybox",
+      "sbin/ubusd",
+      "usr/sbin/odhcpd"
+    ],
+    "versioned_paths_added": 67,
+    "versioned_paths_removed": 67,
+    "notes": "Most added and removed paths are kernel modules under 6.6.104 versus 6.6.110 or versioned library filenames. They were not counted as comparable paths."
+  },
+  "subject": {
+    "path": "sbin/ubusd",
+    "size_bytes": 65706,
+    "old_sha256": "8fd16a06d3b529ee4899bf73c6ac283e8b030972205a8356da4fc2fc98dae5f3",
+    "new_sha256": "d279564b22768de6e9d8efe083784c4547c3aeadf6ffd1905356a0e0df1f2765",
+    "old_function_count_radare2": 63,
+    "new_function_count_radare2": 64
+  },
+  "controls": [
+    {
+      "path": "usr/sbin/uhttpd",
+      "sha256": "4c2dd929a4d837b1e951d69add3456826644a896d6903244947fe7f931d480e2",
+      "result": "same SHA-256 in both releases"
+    }
+  ],
+  "brief": {
+    "record_id": "8fd16a06d3b529ee4899bf73c6ac283e8b030972205a8356da4fc2fc98dae5f3",
+    "ranked_regions": [
+      "imports:network",
+      "entry:entry0",
+      "imports:memory"
+    ],
+    "memory_imports": [
+      "memcpy",
+      "sprintf",
+      "strcpy"
+    ],
+    "claim": "The import region is a caller lead, not proof of memory corruption."
+  },
+  "verify": {
+    "import": "strcpy",
+    "status": "dynamic",
+    "old_call_sites": [
+      "0x00004b50",
+      "0x00004b6c",
+      "0x00004ba8"
+    ],
+    "selected_old_function": "0x00104a3c",
+    "selected_new_function": "0x001049a0"
+  },
+  "targeted_decompile": {
+    "old_evidence": [
+      "sVar8 = strlen(__s);",
+      "cVar1 = __s[lVar11 + -1];",
+      "if ((*__s == '\\0') || (acl_check(...) == 0))",
+      "strcpy(destination, __s);"
+    ],
+    "new_evidence": [
+      "sVar8 = strlen(__s);",
+      "if (0 < iVar3) {",
+      "cVar1 = __s[lVar11 + -1];",
+      "if (acl_check(...) == 0)",
+      "strcpy(destination, __s);"
+    ],
+    "interpretation": "The fixed binary rejects an empty pattern before indexing the last byte. Source is used to name the function and confirm intent."
+  },
+  "full_analysis": {
+    "model_calls": 0,
+    "target_executed": false,
+    "tools": {
+      "radare2": {
+        "status": "completed",
+        "functions": 63
+      },
+      "ghidra": {
+        "status": "completed",
+        "functions": 130
+      },
+      "angr": {
+        "status": "completed",
+        "stored_cfg_nodes": 300,
+        "stored_cfg_edges": 381
+      },
+      "capstone": {
+        "status": "partial",
+        "reason": "instruction-only output; no functions or CFG"
+      },
+      "dwarf": {
+        "status": "completed",
+        "debug_info": false
+      }
+    }
+  },
+  "review_width": {
+    "mode": "rules",
+    "model_calls": 0,
+    "marginal_regions": {
+      "1": [
+        "imports:network",
+        "entry:entry0"
+      ],
+      "2": [],
+      "3": [
+        "imports:memory"
+      ]
+    }
+  },
+  "ground_truth": {
+    "advisory": "https://github.com/openwrt/openwrt/security/advisories/GHSA-cp32-65v4-cp73",
+    "fix_commit": "https://github.com/openwrt/ubus/commit/d31effb4277bd557f5ccf16d909422718c1e49d0",
+    "function": "ubusd_alloc_event_pattern",
+    "source_change": "Reject len <= 0 before reading pattern[len - 1]."
+  },
+  "bundle": {
+    "schema_version": "r2b.bundle.v1",
+    "sha256": "90544b29015b3fddfefadb00fb3b332dee59e8718681c1896d8c1c894201cbaf",
+    "target_bytes_included": false,
+    "members": [
+      "analysis.json",
+      "briefing.json",
+      "provenance.json",
+      "review.json",
+      "tools.json"
+    ]
+  },
+  "limits": [
+    "r2b did not discover or prove CVE-2025-62526 by itself.",
+    "Exact hashing supplied the release delta; r2b supplied the saved binary triage, caller leads, targeted decompilation, tool status, and handoff.",
+    "The v1 .r2br is a single-subject bundle. This case manifest links the two release images and the selected subject."
+  ]
+}

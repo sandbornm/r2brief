@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from r2b.extract.sandbox import ExtractLimits, enforce_limits
+from r2b.extract.sandbox import ExtractLimits, enforce_limits, run_sandboxed
 
 
 def test_enforce_limits_prunes_extracted_files_keeps_root_json(tmp_path: Path) -> None:
@@ -28,3 +28,25 @@ def test_enforce_limits_noop_when_under_cap(tmp_path: Path) -> None:
     notes = enforce_limits(tmp_path, ExtractLimits(max_files=10, max_bytes=1024))
     assert notes == []
     assert (tmp_path / "a.bin").is_file()
+
+
+def test_sandbox_path_includes_absolute_tool_directory(tmp_path: Path) -> None:
+    tool_dir = tmp_path / "homebrew" / "bin"
+    tool_dir.mkdir(parents=True)
+    helper = tool_dir / "helper"
+    helper.write_text("#!/bin/sh\nprintf helper-found\n", encoding="utf-8")
+    helper.chmod(0o755)
+    tool = tool_dir / "extractor"
+    tool.write_text("#!/bin/sh\nhelper\n", encoding="utf-8")
+    tool.chmod(0o755)
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+
+    result = run_sandboxed(
+        [str(tool)],
+        input_file=subject,
+        output_dir=tmp_path / "out",
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "helper-found"

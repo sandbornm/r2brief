@@ -13,7 +13,7 @@ from r2b.analysis.artifact_dag import (
     compact_dag,
     empty_dag,
 )
-from r2b.extract.binwalk3 import _parse_log, kind_for_name
+from r2b.extract.binwalk3 import _index_extracted, _parse_log, find_binwalk3, kind_for_name
 
 
 def test_kind_for_name_maps_binwalk3_hits() -> None:
@@ -33,6 +33,7 @@ def test_parse_binwalk3_log(tmp_path: Path) -> None:
                         "file_path": "/tmp/x.gz",
                         "file_map": [
                             {
+                                "id": "gzip-1",
                                 "offset": 0,
                                 "size": 31,
                                 "name": "gzip",
@@ -41,6 +42,12 @@ def test_parse_binwalk3_log(tmp_path: Path) -> None:
                                 "extraction_declined": False,
                             }
                         ],
+                        "extractions": {
+                            "gzip-1": {
+                                "success": True,
+                                "extractor": "gzip_built_in",
+                            }
+                        },
                     }
                 }
             ]
@@ -52,6 +59,45 @@ def test_parse_binwalk3_log(tmp_path: Path) -> None:
     assert hits[0]["kind"] == "container"
     assert hits[0]["offset"] == 0
     assert hits[0]["confidence"] == 1.0
+    assert hits[0]["extraction_success"] is True
+    assert hits[0]["extractor"] == "gzip_built_in"
+
+
+def test_find_binwalk3_accepts_homebrew_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_which(name: str) -> str | None:
+        return "/opt/homebrew/bin/binwalk" if name == "binwalk" else None
+
+    monkeypatch.setattr("r2b.extract.binwalk3.shutil.which", fake_which)
+    monkeypatch.setattr(
+        "r2b.extract.binwalk3.subprocess.check_output",
+        lambda *args, **kwargs: "binwalk 3.1.0\n",
+    )
+
+    assert find_binwalk3() == "/opt/homebrew/bin/binwalk"
+
+
+def test_find_binwalk3_rejects_v2_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_which(name: str) -> str | None:
+        return "/usr/bin/binwalk" if name == "binwalk" else None
+
+    monkeypatch.setattr("r2b.extract.binwalk3.shutil.which", fake_which)
+    monkeypatch.setattr(
+        "r2b.extract.binwalk3.subprocess.check_output",
+        lambda *args, **kwargs: "Binwalk v2.3.4\n",
+    )
+
+    assert find_binwalk3() is None
+
+
+def test_index_extracted_reads_binwalk_hex_offsets(tmp_path: Path) -> None:
+    extracted = tmp_path / "firmware.bin.extracted" / "1000"
+    extracted.mkdir(parents=True)
+    child = extracted / "decompressed.bin"
+    child.write_bytes(b"payload")
+
+    indexed = _index_extracted(tmp_path)
+
+    assert indexed[0x1000] == str(child)
 
 
 def test_dag_from_firmware_inventory(tmp_path: Path) -> None:
@@ -149,9 +195,7 @@ def test_empty_dag_kind_matches_bytes(tmp_path: Path) -> None:
 
 
 def test_gzip_extract_with_binwalk3_if_present(tmp_path: Path) -> None:
-    import shutil
-
-    if not shutil.which("binwalk3"):
+    if not find_binwalk3():
         pytest.skip("binwalk3 not on PATH")
     payload = gzip.compress(b"hello-from-dag")
     gz = tmp_path / "tiny.gz"

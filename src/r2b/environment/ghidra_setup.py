@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 import urllib.request
@@ -38,7 +39,11 @@ class GhidraSetupResult:
 
     @property
     def ready(self) -> bool:
-        return self.headless_path is not None and self.headless_path.exists()
+        return (
+            self.headless_path is not None
+            and self.headless_path.is_file()
+            and (os.name == "nt" or os.access(self.headless_path, os.X_OK))
+        )
 
 
 def resolve_ghidra_release_url(version: str) -> str:
@@ -126,9 +131,12 @@ def setup_ghidra(
             raise GhidraSetupError(f"Archive does not exist: {archive_path}")
 
         install_dir = extract_ghidra_archive(archive_path, install_root, force=force)
+        _ensure_launchers_executable(install_dir)
         headless_path = install_dir / "support" / "analyzeHeadless"
-        if not headless_path.exists():
+        if not headless_path.is_file():
             raise GhidraSetupError(f"Installed archive does not contain support/analyzeHeadless: {install_dir}")
+        if os.name != "nt" and not os.access(headless_path, os.X_OK):
+            raise GhidraSetupError(f"Installed support/analyzeHeadless is not executable: {headless_path}")
 
         return GhidraSetupResult(
             archive_url=archive_url,
@@ -210,3 +218,20 @@ def _safe_extract_zip(zip_file: zipfile.ZipFile, destination: Path) -> None:
         if destination != target and destination not in target.parents:
             raise GhidraSetupError(f"Unsafe archive path: {info.filename}")
     zip_file.extractall(destination)
+    if os.name != "nt":
+        for info in zip_file.infolist():
+            mode = (info.external_attr >> 16) & 0o777
+            if not mode & 0o111:
+                continue
+            target = destination / info.filename
+            if target.is_file():
+                target.chmod(target.stat().st_mode | (mode & 0o111))
+
+
+def _ensure_launchers_executable(install_dir: Path) -> None:
+    if os.name == "nt":
+        return
+    for relative in ("support/analyzeHeadless", "support/launch.sh", "ghidraRun"):
+        path = install_dir / relative
+        if path.is_file():
+            path.chmod(path.stat().st_mode | 0o100)

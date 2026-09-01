@@ -13,6 +13,38 @@ from .base import AdapterUnavailable
 _LOGGER = logging.getLogger(__name__)
 
 
+def _cfg_options_for_project(project: Any) -> dict[str, Any]:
+    options: dict[str, Any] = {
+        "normalize": True,
+        "data_references": True,
+        "force_complete_scan": False,
+    }
+    main_object = project.loader.main_object
+    executable_sections = [
+        section
+        for section in getattr(main_object, "sections", ())
+        if getattr(section, "is_executable", False) and getattr(section, "memsize", 0)
+    ]
+    if executable_sections:
+        return options
+
+    regions = [
+        (int(segment.min_addr), int(segment.max_addr) + 1)
+        for segment in getattr(main_object, "segments", ())
+        if getattr(segment, "is_executable", False)
+        and int(segment.max_addr) >= int(segment.min_addr)
+    ]
+    if regions:
+        # Stripped firmware ELFs often omit section headers. CFGFast otherwise
+        # sees no scan region even though executable LOAD segments are present.
+        options.update(
+            regions=regions,
+            force_smart_scan=False,
+            force_complete_scan=True,
+        )
+    return options
+
+
 @dataclass(slots=True)
 class AngrAdapter:
     name: str = "angr"
@@ -65,11 +97,7 @@ class AngrAdapter:
         node_limit = 300
         
         try:
-            cfg_analysis = proj.analyses.CFGFast(
-                normalize=True, 
-                data_references=True,
-                force_complete_scan=False,
-            )
+            cfg_analysis = proj.analyses.CFGFast(**_cfg_options_for_project(proj))
             
             # Extract functions first
             for func_addr, func in cfg_analysis.kb.functions.items():
@@ -181,7 +209,7 @@ class AngrAdapter:
             "found": len(found_states),
             "arch": str(proj.arch),
             "entry": hex(proj.entry),
-            "command": "angr CFGFast(normalize=True, data_references=True)",
+            "command": "angr CFGFast(normalize=True, data_references=True; executable segments when sections are absent)",
             "cfg": {
                 "nodes": cfg_nodes,
                 "edges": cfg_edges,

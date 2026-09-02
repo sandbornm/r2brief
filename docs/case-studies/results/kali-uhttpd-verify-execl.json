@@ -1,0 +1,17 @@
+{
+  "binary": "/tmp/r2b-case-studies/uhttpd/usr/sbin/uhttpd",
+  "verdicts": [
+    {
+      "import": "execl",
+      "status": "dynamic",
+      "call_sites": [
+        {
+          "function": "000092e4",
+          "address": "0x00009384",
+          "argument": "<dynamic>",
+          "constant": false
+        }
+      ]
+    }
+  ]
+}

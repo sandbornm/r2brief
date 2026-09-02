@@ -1,0 +1,681 @@
+{
+  "schema_version": "r2b.briefing.v1",
+  "prompt_id": "r2b.prompt.v2",
+  "binary": "/tmp/r2b-case-studies/busybox/bin/busybox",
+  "subject": {
+    "name": "busybox",
+    "binary": "/tmp/r2b-case-studies/busybox/bin/busybox",
+    "format": "elf",
+    "arch": "arm64/64",
+    "os": "linux",
+    "subject_class": "linux_elf",
+    "function_count": 301,
+    "import_count": 299,
+    "dangerous_imports": [
+      "execl",
+      "execlp",
+      "execv",
+      "execve",
+      "execvp",
+      "memcpy",
+      "memmove",
+      "popen",
+      "realpath",
+      "scanf",
+      "sprintf",
+      "sscanf",
+      "strcat",
+      "strcpy",
+      "system"
+    ],
+    "interesting_imports": [
+      "bind",
+      "connect",
+      "fork",
+      "ioctl",
+      "mmap",
+      "prctl",
+      "recv",
+      "recvfrom",
+      "sendto",
+      "setgid",
+      "setuid",
+      "socket",
+      "system"
+    ],
+    "risk_level": null,
+    "risk_factors": [],
+    "size_bytes": 458773,
+    "triage_scope": "focused",
+    "scope_warnings": [],
+    "stripped": null,
+    "issues": [],
+    "firmware_kind": null,
+    "wrapper_family": null,
+    "carved_count": 0
+  },
+  "summary": "busybox looks like elf; arm64/64; 301 functions; imports execl, execlp, execv, execve. First region: Process launch / child control.",
+  "regions": [
+    {
+      "id": "imports:process",
+      "title": "Process launch / child control",
+      "why": "These imports cross from the current process into a child or another program.",
+      "score": 93,
+      "tags": [
+        "imports",
+        "plt",
+        "process",
+        "dangerous"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "execl\nexeclp\nexecv\nexecve\nexecvp\nfork\npopen\nsystem",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:process",
+        "xref": "execl"
+      },
+      "ask": "REGION 1/6: Process launch / child control\nBinary: busybox arm64/64 elf\nWhy this region: These imports cross from the current process into a child or another program.\n\n```text\nexecl\nexeclp\nexecv\nexecve\nexecvp\nfork\npopen\nsystem\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:process xref=execl]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.execl` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "06a79a7d0fe73c23b59c73cd59f3329b2ef37ef05569c6a6e690d4123650f118"
+        }
+      ]
+    },
+    {
+      "id": "imports:network",
+      "title": "Network ingress / egress",
+      "why": "These imports mark code that accepts or sends data across a network boundary.",
+      "score": 90,
+      "tags": [
+        "imports",
+        "plt",
+        "network"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "bind\nconnect\nrecv\nrecvfrom\nsendto\nsocket",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:network",
+        "xref": "bind"
+      },
+      "ask": "REGION 2/6: Network ingress / egress\nBinary: busybox arm64/64 elf\nWhy this region: These imports mark code that accepts or sends data across a network boundary.\n\n```text\nbind\nconnect\nrecv\nrecvfrom\nsendto\nsocket\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:network xref=bind]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.bind` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "06a79a7d0fe73c23b59c73cd59f3329b2ef37ef05569c6a6e690d4123650f118"
+        }
+      ]
+    },
+    {
+      "id": "entry:entry",
+      "title": "Entry / entry",
+      "why": "Start of busybox; establish calling convention and first callees before hunting bugs.",
+      "score": 89,
+      "tags": [
+        "entry",
+        "disasm"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "disasm",
+        "text": "\u254e   ;-- pc:\n\u250c 68: entry0 ();\n\u2502       \u254e   0x00406500      1d0080d2       mov x29, 0\n\u2502       \u254e   0x00406504      1e0080d2       mov x30, 0\n\u2502       \u254e   0x00406508      e0030091       mov x0, sp\n\u2502       \u254e   0x0040650c      c10300b0       adrp x1, 0x47f000\n\u2502       \u254e   0x00406510      21601191       add x1, x1, 0x458\n\u2502       \u254e   0x00406514      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502      \u250c\u2500\u2500< 0x00406518      01000014       b 0x40651c\n\u2502      \u2502\u254e   ; CODE XREF from entry0 @ 0x406518(x)\n\u2502      \u2514\u2500\u2500> 0x0040651c      e20300aa       mov x2, x0\n\u2502       \u254e   0x00406520      010000b0       adrp x1, 0x407000\n\u2502       \u254e   0x00406524      c40300b0       adrp x4, 0x47f000\n\u2502       \u254e   0x00406528      84f047f9       ldr x4, [x4, 0xfe0]\n\u2502       \u254e   0x0040652c      20703491       add x0, x1, 0xd1c\n\u2502       \u254e   0x00406530      418440f8       ldr x1, [x2], 8\n\u2502       \u254e   0x00406534      050080d2       mov x5, 0\n\u2502       \u254e   0x00406538      c30300b0       adrp x3, 0x47f000",
+        "address": "0x406500",
+        "function": "entry",
+        "artifact_id": null,
+        "xref": null
+      },
+      "ask": "REGION 3/6: Entry / entry (entry 0x406500)\nBinary: busybox arm64/64 elf\nWhy this region: Start of busybox; establish calling convention and first callees before hunting bugs.\n\n```asm\n\u254e   ;-- pc:\n\u250c 68: entry0 ();\n\u2502       \u254e   0x00406500      1d0080d2       mov x29, 0\n\u2502       \u254e   0x00406504      1e0080d2       mov x30, 0\n\u2502       \u254e   0x00406508      e0030091       mov x0, sp\n\u2502       \u254e   0x0040650c      c10300b0       adrp x1, 0x47f000\n\u2502       \u254e   0x00406510      21601191       add x1, x1, 0x458\n\u2502       \u254e   0x00406514      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502      \u250c\u2500\u2500< 0x00406518      01000014       b 0x40651c\n\u2502      \u2502\u254e   ; CODE XREF from entry0 @ 0x406518(x)\n\u2502      \u2514\u2500\u2500> 0x0040651c      e20300aa       mov x2, x0\n\u2502       \u254e   0x00406520      010000b0       adrp x1, 0x407000\n\u2502       \u254e   0x00406524      c40300b0       adrp x4, 0x47f000\n\u2502       \u254e   0x004\n...[truncated]\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 addr=0x406500 artifact=entry:entry xref=entry]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non\n...[truncated]",
+      "next_actions": [
+        "r2: `pdf @ 0x406500` and list calls (`agc`).",
+        "If stripped, rename this function after the first identified callee."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "06a79a7d0fe73c23b59c73cd59f3329b2ef37ef05569c6a6e690d4123650f118"
+        }
+      ]
+    },
+    {
+      "id": "imports:runtime",
+      "title": "Runtime loading / memory mapping",
+      "why": "These imports mark runtime code loading, mapped memory, or process inspection.",
+      "score": 87,
+      "tags": [
+        "imports",
+        "plt",
+        "runtime"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "mmap",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:runtime",
+        "xref": "mmap"
+      },
+      "ask": "REGION 4/6: Runtime loading / memory mapping\nBinary: busybox arm64/64 elf\nWhy this region: These imports mark runtime code loading, mapped memory, or process inspection.\n\n```text\nmmap\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:runtime xref=mmap]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.mmap` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "06a79a7d0fe73c23b59c73cd59f3329b2ef37ef05569c6a6e690d4123650f118"
+        }
+      ]
+    },
+    {
+      "id": "imports:memory",
+      "title": "Memory and path handling",
+      "why": "These imports are useful caller pivots, but an import alone says nothing about data flow.",
+      "score": 84,
+      "tags": [
+        "imports",
+        "plt",
+        "memory",
+        "dangerous"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "memcpy\nmemmove\nrealpath\nscanf\nsprintf\nsscanf\nstrcat\nstrcpy",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:memory",
+        "xref": "memcpy"
+      },
+      "ask": "REGION 5/6: Memory and path handling\nBinary: busybox arm64/64 elf\nWhy this region: These imports are useful caller pivots, but an import alone says nothing about data flow.\n\n```text\nmemcpy\nmemmove\nrealpath\nscanf\nsprintf\nsscanf\nstrcat\nstrcpy\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:memory xref=memcpy]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.memcpy` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "06a79a7d0fe73c23b59c73cd59f3329b2ef37ef05569c6a6e690d4123650f118"
+        }
+      ]
+    },
+    {
+      "id": "imports:control",
+      "title": "Kernel and identity controls",
+      "why": "These imports mark identity changes or program-specific kernel control paths.",
+      "score": 81,
+      "tags": [
+        "imports",
+        "plt",
+        "control"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "ioctl\nprctl\nsetgid\nsetuid",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:control",
+        "xref": "ioctl"
+      },
+      "ask": "REGION 6/6: Kernel and identity controls\nBinary: busybox arm64/64 elf\nWhy this region: These imports mark identity changes or program-specific kernel control paths.\n\n```text\nioctl\nprctl\nsetgid\nsetuid\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:control xref=ioctl]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.ioctl` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "06a79a7d0fe73c23b59c73cd59f3329b2ef37ef05569c6a6e690d4123650f118"
+        }
+      ]
+    }
+  ],
+  "overall_ask": "PROFESSIONAL TRIAGE \u2014 facts and region titles only. No lecture.\nBinary: busybox\nFormat/arch: elf arm64/64\nFunctions: 301; imports: 299\nDangerous imports: execl, execlp, execv, execve, execvp, memcpy, memmove, popen\nsubject_class: linux_elf\n\nRanked regions:\n1. Process launch / child control \u2014 These imports cross from the current process into a child or another program.\n2. Network ingress / egress \u2014 These imports mark code that accepts or sends data across a network boundary.\n3. Entry / entry @ entry 0x406500 \u2014 Start of busybox; establish calling convention and first callees before hunting bugs.\n4. Runtime loading / memory mapping \u2014 These imports mark runtime code loading, mapped memory, or process inspection.\n5. Memory and path handling \u2014 These imports are useful caller pivots, but an import alone says nothing about data flow.\n6. Kernel and identity controls \u2014 These imports mark identity changes or program-specific kernel control paths.\n\nAnswer in exactly 6 bullets, each ending with a cite tag [tool= addr= artifact= xref=]:\n1. Name the unusual fact; 'it is firmware' is too broad\n2. Region that best supports a claim, and what that claim is\n3. Best next ELF/function \u2014 prefer a carved child or named symbol over size\n4. What is still unknown (missing carve, stripped names, dead tool)\n5. Exact next r2 command or `r2b brief` on a child\n6. Exact next unpack step if this is still a wrapper; else 'already an ELF'\nRules: defensive only; no exploit steps; do not invent symbols; names/types you add are `proposed`.\n\nAnalyst next steps already queued:\n- This is already an\n...[truncated]",
+  "next_steps": [
+    "This is already an ELF. Rank named symbols / entry; do not unsquash it.",
+    "r2: `axt @ sym.imp.execl` and brief that caller.",
+    "Send region ask #1 (Process launch / child control) before a whole-binary question."
+  ],
+  "provenance": {
+    "schema_version": "r2b.provenance.v1",
+    "producer": {
+      "name": "r2b",
+      "version": "0.1.0"
+    },
+    "input": {
+      "path": "/tmp/r2b-case-studies/busybox/bin/busybox",
+      "name": "busybox",
+      "size_bytes": 458773,
+      "sha256": "d3aeb34aaf9ff41d12db6345a811ee142890c6e071dcbcc1006b0fc02e90b66f"
+    },
+    "plan": {
+      "quick": true,
+      "deep": false,
+      "run_angr": false,
+      "persist_trajectory": false,
+      "profile": "triage"
+    },
+    "config": {
+      "analysis": {
+        "enable_angr": false,
+        "enable_ghidra": false,
+        "enable_frida": false,
+        "enable_gef": false,
+        "gef_timeout": 60,
+        "gef_max_instructions": 10000,
+        "require_elf": false
+      },
+      "extract": {
+        "enable": false,
+        "extract_elf": false,
+        "allow_unsafe_fallback": false,
+        "timeout_s": 60,
+        "max_files": 200,
+        "max_bytes": 67108864,
+        "max_depth": 2
+      },
+      "performance": {
+        "parallel_functions": 4
+      },
+      "ghidra": {
+        "use_bridge": false,
+        "max_decompile_functions": 20,
+        "max_types": 100,
+        "max_strings": 200
+      }
+    },
+    "adapter_status": [
+      {
+        "adapter": "sniff",
+        "available": null,
+        "actions": [
+          1
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "binary_format",
+        "available": true,
+        "actions": [
+          2
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "autoprofile",
+        "available": true,
+        "actions": [
+          7
+        ],
+        "status": "skipped"
+      },
+      {
+        "adapter": "firmware",
+        "available": true,
+        "actions": [
+          8
+        ],
+        "status": "skipped"
+      },
+      {
+        "adapter": "libmagic",
+        "available": true,
+        "actions": [
+          3
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "runtime",
+        "available": null,
+        "actions": [
+          4
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "artifact_dag",
+        "available": true,
+        "actions": [
+          6
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "radare2",
+        "available": true,
+        "actions": [
+          5
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "capstone",
+        "available": true,
+        "actions": [],
+        "status": "not_run"
+      },
+      {
+        "adapter": "dwarf",
+        "available": true,
+        "actions": [],
+        "status": "not_run"
+      }
+    ],
+    "actions": [
+      {
+        "sequence": 1,
+        "action": "sniff.quick",
+        "adapter": "sniff",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/sniff",
+        "output_sha256": "a85932836799ce50f9701462762b7a02a175b0771fa6838ad9e31f9722cc373b",
+        "summary": {
+          "duration_ms": 69,
+          "keys": [
+            "file",
+            "hex_head",
+            "mode",
+            "path",
+            "readelf",
+            "sha256",
+            "size_bytes",
+            "strings",
+            "tools"
+          ]
+        }
+      },
+      {
+        "sequence": 2,
+        "action": "binary_format.quick",
+        "adapter": "binary_format",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/binary_format",
+        "output_sha256": "789d5b82614281eb03e15025199a6d183ec14ba5b949f2b517d151ad04d33a1d",
+        "summary": {
+          "duration_ms": 6,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "arch",
+            "bits",
+            "confidence",
+            "endianness",
+            "entrypoint",
+            "file_type",
+            "format",
+            "machine",
+            "parser",
+            "sections"
+          ]
+        }
+      },
+      {
+        "sequence": 3,
+        "action": "libmagic.quick",
+        "adapter": "libmagic",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/libmagic",
+        "output_sha256": "5fba9bf4f4dd6bc156e3b9879c3584f0e2fbd2e5e0e9cf626429e45e629a1d26",
+        "summary": {
+          "duration_ms": 12,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "description",
+            "mime"
+          ]
+        }
+      },
+      {
+        "sequence": 4,
+        "action": "runtime.quick",
+        "adapter": "runtime",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/runtime",
+        "output_sha256": "fcd21ebcb38c07bdb6210695378fa031c6f28c59921aa4d03eeb01226f73fd92",
+        "summary": {
+          "duration_ms": 9,
+          "keys": [
+            "abi_version",
+            "arch",
+            "bits",
+            "endianness",
+            "entrypoint",
+            "format",
+            "interp",
+            "needed",
+            "osabi"
+          ]
+        }
+      },
+      {
+        "sequence": 5,
+        "action": "radare2.quick",
+        "adapter": "radare2",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/radare2",
+        "output_sha256": "06a79a7d0fe73c23b59c73cd59f3329b2ef37ef05569c6a6e690d4123650f118",
+        "summary": {
+          "duration_ms": 336,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "capabilities",
+            "commands",
+            "entry_disassembly",
+            "entry_function",
+            "entry_points",
+            "headers",
+            "imports",
+            "info",
+            "interesting_symbols",
+            "sections",
+            "strings",
+            "symbols"
+          ]
+        }
+      },
+      {
+        "sequence": 6,
+        "action": "artifact_dag.build",
+        "adapter": "artifact_dag",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/artifact_dag",
+        "output_sha256": "0deb3be6dabf832dca947c348acd0f782bcd36f2e8d893c52a3c30ece0497278",
+        "summary": {
+          "elapsed_ms": 2,
+          "keys": [
+            "edges",
+            "nodes",
+            "notes",
+            "schema_version",
+            "sha256",
+            "summary",
+            "tools"
+          ]
+        }
+      },
+      {
+        "sequence": 7,
+        "action": "autoprofile.quick",
+        "adapter": "autoprofile",
+        "stage": "quick",
+        "status": "skipped",
+        "result_ref": null,
+        "output_sha256": null,
+        "summary": {
+          "duration_ms": 0,
+          "reason": "only scheduled for exhaustive executable profiling; the default path uses format-specific evidence"
+        }
+      },
+      {
+        "sequence": 8,
+        "action": "firmware.quick",
+        "adapter": "firmware",
+        "stage": "quick",
+        "status": "skipped",
+        "result_ref": null,
+        "output_sha256": null,
+        "summary": {
+          "duration_ms": 0,
+          "reason": "top-level subject is executable; container inventory is not applicable"
+        }
+      }
+    ],
+    "replay": {
+      "input_token": "{input}",
+      "expected_sha256": "d3aeb34aaf9ff41d12db6345a811ee142890c6e071dcbcc1006b0fc02e90b66f",
+      "argv": [
+        "r2b",
+        "brief",
+        "{input}",
+        "--quick",
+        "--no-save",
+        "--json"
+      ],
+      "shell": "r2b brief \"$R2B_INPUT\" --quick --no-save --json",
+      "shell_uses_current_config": true,
+      "python": "import os\nfrom pathlib import Path\nfrom r2b import AnalysisOptions, analyze\nfrom r2b.config import AppConfig\n\nbinary = Path(os.environ.get('R2B_INPUT', '/tmp/r2b-case-studies/busybox/bin/busybox'))\nexpected_sha256 = 'd3aeb34aaf9ff41d12db6345a811ee142890c6e071dcbcc1006b0fc02e90b66f'\nconfig = AppConfig.model_validate({'analysis': {'enable_angr': False, 'enable_ghidra': False, 'enable_frida': False, 'enable_gef': False, 'gef_timeout': 60, 'gef_max_instructions': 10000, 'require_elf': False}, 'extract': {'enable': False, 'extract_elf': False, 'allow_unsafe_fallback': False, 'timeout_s': 60, 'max_files': 200, 'max_bytes': 67108864, 'max_depth': 2}, 'performance': {'parallel_functions': 4}, 'ghidra': {'use_bridge': False, 'max_decompile_functions': 20, 'max_types': 100, 'max_strings': 200}})\nreport = analyze(\n    binary,\n    config=config,\n    options=AnalysisOptions(\n        profile='triage',\n        extract=False,\n    ),\n)\nassert report.payload['provenance']['input']['sha256'] == expected_sha256\nprint(report.briefing['summary'])\n"
+    }
+  },
+  "handoff": {
+    "schema_version": "r2b.handoff.v1",
+    "binary": "/tmp/r2b-case-studies/busybox/bin/busybox",
+    "record_id": null,
+    "summary": "busybox looks like elf; arm64/64; 301 functions; imports execl, execlp, execv, execve. First region: Process launch / child control.",
+    "subject": {
+      "name": "busybox",
+      "format": "elf",
+      "arch": "arm64/64",
+      "stripped": null,
+      "dangerous_imports": [
+        "execl",
+        "execlp",
+        "execv",
+        "execve",
+        "execvp",
+        "memcpy",
+        "memmove",
+        "popen"
+      ],
+      "risk_level": null,
+      "subject_class": "linux_elf",
+      "size_bytes": 458773,
+      "triage_scope": "focused",
+      "scope_warnings": []
+    },
+    "regions": [
+      {
+        "id": "imports:process",
+        "title": "Process launch / child control",
+        "addr": null,
+        "why": "These imports cross from the current process into a child or another program.",
+        "tags": [
+          "imports",
+          "plt",
+          "process",
+          "dangerous"
+        ],
+        "snippet": "execl\nexeclp\nexecv\nexecve\nexecvp\nfork\npopen\nsystem"
+      },
+      {
+        "id": "imports:network",
+        "title": "Network ingress / egress",
+        "addr": null,
+        "why": "These imports mark code that accepts or sends data across a network boundary.",
+        "tags": [
+          "imports",
+          "plt",
+          "network"
+        ],
+        "snippet": "bind\nconnect\nrecv\nrecvfrom\nsendto\nsocket"
+      },
+      {
+        "id": "entry:entry",
+        "title": "Entry / entry",
+        "addr": "0x406500",
+        "why": "Start of busybox; establish calling convention and first callees before hunting bugs.",
+        "tags": [
+          "entry",
+          "disasm"
+        ],
+        "snippet": "\u254e   ;-- pc:\n\u250c 68: entry0 ();\n\u2502       \u254e   0x00406500      1d0080d2       mov x29, 0\n\u2502       \u254e   0x00406504      1e0080d2       mov x30, 0\n\u2502       \u254e   0x00406508      e0030091       mov x0, sp\n\u2502       \u254e   0x0040650c      c10300b0       adrp x1, 0x47f000\n\u2502       \u254e   0x00406510      21601191       add x1, x1, 0x458\n\u2502       \u254e   0x00406514      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502      \u250c\u2500\u2500< 0x00406518      01000014       b 0x40651c\n\u2502      \u2502\u254e   ; CODE XREF from entry0 @ 0x406518(x)\n\u2502      \u2514\u2500\u2500> 0x0040651c      e20300aa       mov x2, x0\n\u2502       \u254e   0x00406520      010000b0       adrp x1, 0x407000"
+      },
+      {
+        "id": "imports:runtime",
+        "title": "Runtime loading / memory mapping",
+        "addr": null,
+        "why": "These imports mark runtime code loading, mapped memory, or process inspection.",
+        "tags": [
+          "imports",
+          "plt",
+          "runtime"
+        ],
+        "snippet": "mmap"
+      },
+      {
+        "id": "imports:memory",
+        "title": "Memory and path handling",
+        "addr": null,
+        "why": "These imports are useful caller pivots, but an import alone says nothing about data flow.",
+        "tags": [
+          "imports",
+          "plt",
+          "memory",
+          "dangerous"
+        ],
+        "snippet": "memcpy\nmemmove\nrealpath\nscanf\nsprintf\nsscanf\nstrcat\nstrcpy"
+      },
+      {
+        "id": "imports:control",
+        "title": "Kernel and identity controls",
+        "addr": null,
+        "why": "These imports mark identity changes or program-specific kernel control paths.",
+        "tags": [
+          "imports",
+          "plt",
+          "control"
+        ],
+        "snippet": "ioctl\nprctl\nsetgid\nsetuid"
+      }
+    ],
+    "next_argv": [
+      "r2b verify /tmp/r2b-case-studies/busybox/bin/busybox --import execl --json",
+      "r2b verify /tmp/r2b-case-studies/busybox/bin/busybox --import execv --json",
+      "r2b verify /tmp/r2b-case-studies/busybox/bin/busybox --import execve --json",
+      "r2b verify /tmp/r2b-case-studies/busybox/bin/busybox --import execvp --json"
+    ],
+    "requires_scope": false,
+    "scope_options": []
+  }
+}

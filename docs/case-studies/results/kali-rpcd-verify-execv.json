@@ -1,0 +1,23 @@
+{
+  "binary": "/tmp/r2b-case-studies/rpcd/sbin/rpcd",
+  "verdicts": [
+    {
+      "import": "execv",
+      "status": "dynamic",
+      "call_sites": [
+        {
+          "function": "00003da0",
+          "address": "0x000040ac",
+          "argument": "<dynamic>",
+          "constant": false
+        },
+        {
+          "function": "000048d4",
+          "address": "0x00004c1c",
+          "argument": "<dynamic>",
+          "constant": false
+        }
+      ]
+    }
+  ]
+}

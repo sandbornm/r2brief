@@ -1,0 +1,463 @@
+{
+  "schema_version": "r2b.briefing.v1",
+  "prompt_id": "r2b.prompt.v2",
+  "binary": "/tmp/r2b-case-studies/ubus/bin/ubus",
+  "subject": {
+    "name": "ubus",
+    "binary": "/tmp/r2b-case-studies/ubus/bin/ubus",
+    "format": "elf",
+    "arch": "arm64/64",
+    "os": "linux",
+    "subject_class": "linux_elf",
+    "function_count": 45,
+    "import_count": 49,
+    "dangerous_imports": [
+      "memmove"
+    ],
+    "interesting_imports": [],
+    "risk_level": null,
+    "risk_factors": [],
+    "size_bytes": 65552,
+    "triage_scope": "focused",
+    "scope_warnings": [],
+    "stripped": null,
+    "issues": [],
+    "firmware_kind": null,
+    "wrapper_family": null,
+    "carved_count": 0
+  },
+  "summary": "ubus looks like elf; arm64/64; 45 functions; imports memmove. First region: Entry / entry.",
+  "regions": [
+    {
+      "id": "entry:entry",
+      "title": "Entry / entry",
+      "why": "Start of ubus; establish calling convention and first callees before hunting bugs.",
+      "score": 89,
+      "tags": [
+        "entry",
+        "disasm"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "disasm",
+        "text": ";-- pc:\n\u250c 76: entry0 ();\n\u2502           0x000017f8      1d0080d2       mov x29, 0\n\u2502           0x000017fc      1e0080d2       mov x30, 0\n\u2502           0x00001800      e0030091       mov x0, sp\n\u2502           0x00001804      e10000d0       adrp x1, 0x1f000\n\u2502           0x00001808      21003191       add x1, x1, 0xc40\n\u2502           0x0000180c      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502       \u250c\u2500< 0x00001810      01000014       b 0x1814\n\u2502       \u2502   ; CODE XREF from entry0 @ 0x1810(x)\n\u2502       \u2514\u2500> 0x00001814      e20300aa       mov x2, x0\n\u2502           0x00001818      050080d2       mov x5, 0\n\u2502           0x0000181c      e40000d0       adrp x4, 0x1f000\n\u2502           0x00001820      84c847f9       ldr x4, [x4, 0xf90]\n\u2502           0x00001824      418440f8       ldr x1, [x2], 8\n\u2502           0x00001828      e30000d0       adrp x3, 0x1f000\n\u2502           0x0000182c      638447f9       ldr x3, [x3, 0xf08]\n\u2502           0x00001830      e00000d0       adrp x0, 0x1f000",
+        "address": "0x17f8",
+        "function": "entry",
+        "artifact_id": null,
+        "xref": null
+      },
+      "ask": "REGION 1/2: Entry / entry (entry 0x17f8)\nBinary: ubus arm64/64 elf\nWhy this region: Start of ubus; establish calling convention and first callees before hunting bugs.\n\n```asm\n;-- pc:\n\u250c 76: entry0 ();\n\u2502           0x000017f8      1d0080d2       mov x29, 0\n\u2502           0x000017fc      1e0080d2       mov x30, 0\n\u2502           0x00001800      e0030091       mov x0, sp\n\u2502           0x00001804      e10000d0       adrp x1, 0x1f000\n\u2502           0x00001808      21003191       add x1, x1, 0xc40\n\u2502           0x0000180c      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502       \u250c\u2500< 0x00001810      01000014       b 0x1814\n\u2502       \u2502   ; CODE XREF from entry0 @ 0x1810(x)\n\u2502       \u2514\u2500> 0x00001814      e20300aa       mov x2, x0\n\u2502           0x00001818      050080d2       mov x5, 0\n\u2502           0x0000181c      e40000d0       adrp x4, 0x1f000\n\u2502           0x00001820      84c847f\n...[truncated]\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 addr=0x17f8 artifact=entry:entry xref=entry]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious c\n...[truncated]",
+      "next_actions": [
+        "r2: `pdf @ 0x17f8` and list calls (`agc`).",
+        "If stripped, rename this function after the first identified callee."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "aefed1d85cea328e0b1969dd27600d38ff86b06d8e707a4be88b33b26ec8d6e2"
+        }
+      ]
+    },
+    {
+      "id": "imports:memory",
+      "title": "Memory and path handling",
+      "why": "These imports are useful caller pivots, but an import alone says nothing about data flow.",
+      "score": 84,
+      "tags": [
+        "imports",
+        "plt",
+        "memory",
+        "dangerous"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "memmove",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:memory",
+        "xref": "memmove"
+      },
+      "ask": "REGION 2/2: Memory and path handling\nBinary: ubus arm64/64 elf\nWhy this region: These imports are useful caller pivots, but an import alone says nothing about data flow.\n\n```text\nmemmove\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:memory xref=memmove]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.memmove` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "aefed1d85cea328e0b1969dd27600d38ff86b06d8e707a4be88b33b26ec8d6e2"
+        }
+      ]
+    }
+  ],
+  "overall_ask": "PROFESSIONAL TRIAGE \u2014 facts and region titles only. No lecture.\nBinary: ubus\nFormat/arch: elf arm64/64\nFunctions: 45; imports: 49\nDangerous imports: memmove\nsubject_class: linux_elf\n\nRanked regions:\n1. Entry / entry @ entry 0x17f8 \u2014 Start of ubus; establish calling convention and first callees before hunting bugs.\n2. Memory and path handling \u2014 These imports are useful caller pivots, but an import alone says nothing about data flow.\n\nAnswer in exactly 6 bullets, each ending with a cite tag [tool= addr= artifact= xref=]:\n1. Name the unusual fact; 'it is firmware' is too broad\n2. Region that best supports a claim, and what that claim is\n3. Best next ELF/function \u2014 prefer a carved child or named symbol over size\n4. What is still unknown (missing carve, stripped names, dead tool)\n5. Exact next r2 command or `r2b brief` on a child\n6. Exact next unpack step if this is still a wrapper; else 'already an ELF'\nRules: defensive only; no exploit steps; do not invent symbols; names/types you add are `proposed`.\n\nAnalyst next steps already queued:\n- This is already an ELF. Rank named symbols / entry; do not unsquash it.\n- r2: `axt @ sym.imp.memmove` and brief that caller.\n- Open Entry / entry at 0x17f8 and send that region ask first.",
+  "next_steps": [
+    "This is already an ELF. Rank named symbols / entry; do not unsquash it.",
+    "r2: `axt @ sym.imp.memmove` and brief that caller.",
+    "Open Entry / entry at 0x17f8 and send that region ask first."
+  ],
+  "provenance": {
+    "schema_version": "r2b.provenance.v1",
+    "producer": {
+      "name": "r2b",
+      "version": "0.1.0"
+    },
+    "input": {
+      "path": "/tmp/r2b-case-studies/ubus/bin/ubus",
+      "name": "ubus",
+      "size_bytes": 65552,
+      "sha256": "75196f1dfb03f2ea6a77f1f53608bbf1495d74613361a16e26587644f6072f8c"
+    },
+    "plan": {
+      "quick": true,
+      "deep": false,
+      "run_angr": false,
+      "persist_trajectory": false,
+      "profile": "triage"
+    },
+    "config": {
+      "analysis": {
+        "enable_angr": false,
+        "enable_ghidra": false,
+        "enable_frida": false,
+        "enable_gef": false,
+        "gef_timeout": 60,
+        "gef_max_instructions": 10000,
+        "require_elf": false
+      },
+      "extract": {
+        "enable": false,
+        "extract_elf": false,
+        "allow_unsafe_fallback": false,
+        "timeout_s": 60,
+        "max_files": 200,
+        "max_bytes": 67108864,
+        "max_depth": 2
+      },
+      "performance": {
+        "parallel_functions": 4
+      },
+      "ghidra": {
+        "use_bridge": false,
+        "max_decompile_functions": 20,
+        "max_types": 100,
+        "max_strings": 200
+      }
+    },
+    "adapter_status": [
+      {
+        "adapter": "sniff",
+        "available": null,
+        "actions": [
+          1
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "binary_format",
+        "available": true,
+        "actions": [
+          2
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "autoprofile",
+        "available": true,
+        "actions": [
+          7
+        ],
+        "status": "skipped"
+      },
+      {
+        "adapter": "firmware",
+        "available": true,
+        "actions": [
+          8
+        ],
+        "status": "skipped"
+      },
+      {
+        "adapter": "libmagic",
+        "available": true,
+        "actions": [
+          3
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "runtime",
+        "available": null,
+        "actions": [
+          4
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "artifact_dag",
+        "available": true,
+        "actions": [
+          6
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "radare2",
+        "available": true,
+        "actions": [
+          5
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "capstone",
+        "available": true,
+        "actions": [],
+        "status": "not_run"
+      },
+      {
+        "adapter": "dwarf",
+        "available": true,
+        "actions": [],
+        "status": "not_run"
+      }
+    ],
+    "actions": [
+      {
+        "sequence": 1,
+        "action": "sniff.quick",
+        "adapter": "sniff",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/sniff",
+        "output_sha256": "4e70cb0452d3a9d7fd8a4bfd33160396c90d566b5af107e81a006aa9e083466b",
+        "summary": {
+          "duration_ms": 39,
+          "keys": [
+            "file",
+            "hex_head",
+            "mode",
+            "path",
+            "readelf",
+            "sha256",
+            "size_bytes",
+            "strings",
+            "tools"
+          ]
+        }
+      },
+      {
+        "sequence": 2,
+        "action": "binary_format.quick",
+        "adapter": "binary_format",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/binary_format",
+        "output_sha256": "2170433c9119b5d1abfd6d43aace282d3c11c3f86ba94478f4c672289687f34a",
+        "summary": {
+          "duration_ms": 3,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "arch",
+            "bits",
+            "confidence",
+            "endianness",
+            "entrypoint",
+            "file_type",
+            "format",
+            "machine",
+            "parser",
+            "sections"
+          ]
+        }
+      },
+      {
+        "sequence": 3,
+        "action": "libmagic.quick",
+        "adapter": "libmagic",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/libmagic",
+        "output_sha256": "cdcb737496885d245ac7eb7e505875a65e6d2da5b44fe42c187baafc0743eee1",
+        "summary": {
+          "duration_ms": 6,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "description",
+            "mime"
+          ]
+        }
+      },
+      {
+        "sequence": 4,
+        "action": "runtime.quick",
+        "adapter": "runtime",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/runtime",
+        "output_sha256": "d8a56ca08fba8f8749de7c7ac288430ae87b2c4a20f9823df1ff93b4babe6fc8",
+        "summary": {
+          "duration_ms": 3,
+          "keys": [
+            "abi_version",
+            "arch",
+            "bits",
+            "endianness",
+            "entrypoint",
+            "format",
+            "interp",
+            "needed",
+            "osabi"
+          ]
+        }
+      },
+      {
+        "sequence": 5,
+        "action": "radare2.quick",
+        "adapter": "radare2",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/radare2",
+        "output_sha256": "aefed1d85cea328e0b1969dd27600d38ff86b06d8e707a4be88b33b26ec8d6e2",
+        "summary": {
+          "duration_ms": 278,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "capabilities",
+            "commands",
+            "entry_disassembly",
+            "entry_function",
+            "entry_points",
+            "headers",
+            "imports",
+            "info",
+            "interesting_symbols",
+            "sections",
+            "strings",
+            "symbols"
+          ]
+        }
+      },
+      {
+        "sequence": 6,
+        "action": "artifact_dag.build",
+        "adapter": "artifact_dag",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/artifact_dag",
+        "output_sha256": "a2f95233995a49ada9b9ff1e987d9882d35b1899f0aa8f9370bd255265789d69",
+        "summary": {
+          "elapsed_ms": 2,
+          "keys": [
+            "edges",
+            "nodes",
+            "notes",
+            "schema_version",
+            "sha256",
+            "summary",
+            "tools"
+          ]
+        }
+      },
+      {
+        "sequence": 7,
+        "action": "autoprofile.quick",
+        "adapter": "autoprofile",
+        "stage": "quick",
+        "status": "skipped",
+        "result_ref": null,
+        "output_sha256": null,
+        "summary": {
+          "duration_ms": 0,
+          "reason": "only scheduled for exhaustive executable profiling; the default path uses format-specific evidence"
+        }
+      },
+      {
+        "sequence": 8,
+        "action": "firmware.quick",
+        "adapter": "firmware",
+        "stage": "quick",
+        "status": "skipped",
+        "result_ref": null,
+        "output_sha256": null,
+        "summary": {
+          "duration_ms": 0,
+          "reason": "top-level subject is executable; container inventory is not applicable"
+        }
+      }
+    ],
+    "replay": {
+      "input_token": "{input}",
+      "expected_sha256": "75196f1dfb03f2ea6a77f1f53608bbf1495d74613361a16e26587644f6072f8c",
+      "argv": [
+        "r2b",
+        "brief",
+        "{input}",
+        "--quick",
+        "--no-save",
+        "--json"
+      ],
+      "shell": "r2b brief \"$R2B_INPUT\" --quick --no-save --json",
+      "shell_uses_current_config": true,
+      "python": "import os\nfrom pathlib import Path\nfrom r2b import AnalysisOptions, analyze\nfrom r2b.config import AppConfig\n\nbinary = Path(os.environ.get('R2B_INPUT', '/tmp/r2b-case-studies/ubus/bin/ubus'))\nexpected_sha256 = '75196f1dfb03f2ea6a77f1f53608bbf1495d74613361a16e26587644f6072f8c'\nconfig = AppConfig.model_validate({'analysis': {'enable_angr': False, 'enable_ghidra': False, 'enable_frida': False, 'enable_gef': False, 'gef_timeout': 60, 'gef_max_instructions': 10000, 'require_elf': False}, 'extract': {'enable': False, 'extract_elf': False, 'allow_unsafe_fallback': False, 'timeout_s': 60, 'max_files': 200, 'max_bytes': 67108864, 'max_depth': 2}, 'performance': {'parallel_functions': 4}, 'ghidra': {'use_bridge': False, 'max_decompile_functions': 20, 'max_types': 100, 'max_strings': 200}})\nreport = analyze(\n    binary,\n    config=config,\n    options=AnalysisOptions(\n        profile='triage',\n        extract=False,\n    ),\n)\nassert report.payload['provenance']['input']['sha256'] == expected_sha256\nprint(report.briefing['summary'])\n"
+    }
+  },
+  "handoff": {
+    "schema_version": "r2b.handoff.v1",
+    "binary": "/tmp/r2b-case-studies/ubus/bin/ubus",
+    "record_id": null,
+    "summary": "ubus looks like elf; arm64/64; 45 functions; imports memmove. First region: Entry / entry.",
+    "subject": {
+      "name": "ubus",
+      "format": "elf",
+      "arch": "arm64/64",
+      "stripped": null,
+      "dangerous_imports": [
+        "memmove"
+      ],
+      "risk_level": null,
+      "subject_class": "linux_elf",
+      "size_bytes": 65552,
+      "triage_scope": "focused",
+      "scope_warnings": []
+    },
+    "regions": [
+      {
+        "id": "entry:entry",
+        "title": "Entry / entry",
+        "addr": "0x17f8",
+        "why": "Start of ubus; establish calling convention and first callees before hunting bugs.",
+        "tags": [
+          "entry",
+          "disasm"
+        ],
+        "snippet": ";-- pc:\n\u250c 76: entry0 ();\n\u2502           0x000017f8      1d0080d2       mov x29, 0\n\u2502           0x000017fc      1e0080d2       mov x30, 0\n\u2502           0x00001800      e0030091       mov x0, sp\n\u2502           0x00001804      e10000d0       adrp x1, 0x1f000\n\u2502           0x00001808      21003191       add x1, x1, 0xc40\n\u2502           0x0000180c      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502       \u250c\u2500< 0x00001810      01000014       b 0x1814\n\u2502       \u2502   ; CODE XREF from entry0 @ 0x1810(x)\n\u2502       \u2514\u2500> 0x00001814      e20300aa       mov x2, x0\n\u2502           0x00001818      050080d2       mov x5, 0"
+      },
+      {
+        "id": "imports:memory",
+        "title": "Memory and path handling",
+        "addr": null,
+        "why": "These imports are useful caller pivots, but an import alone says nothing about data flow.",
+        "tags": [
+          "imports",
+          "plt",
+          "memory",
+          "dangerous"
+        ],
+        "snippet": "memmove"
+      }
+    ],
+    "next_argv": [],
+    "requires_scope": false,
+    "scope_options": []
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "binary": "/tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq",
+  "verdicts": [
+    {
+      "import": "popen",
+      "status": "dynamic",
+      "call_sites": [
+        {
+          "function": "000133e4",
+          "address": "0x0001352c",
+          "argument": "<dynamic>",
+          "constant": false
+        },
+        {
+          "function": "00023e24",
+          "address": "0x00023efc",
+          "argument": "<dynamic>",
+          "constant": false
+        }
+      ]
+    }
+  ]
+}

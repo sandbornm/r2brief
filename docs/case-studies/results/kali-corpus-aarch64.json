@@ -1,0 +1,270 @@
+{
+  "schema_version": "r2b.case-replay.v1",
+  "case_id": "corpus-aarch64-openwrt-packages",
+  "recorded_at": "2026-09-02",
+  "host": {
+    "os": "Kali GNU/Linux Rolling 2026.3",
+    "uname": "Linux kali-raspberry-pi5 6.1.92-v8+ aarch64",
+    "cpus": 4,
+    "mem_kib": 8132988,
+    "python": "3.11.13",
+    "r2b": "0.1.0",
+    "radare2": "radare2 6.0.5 0 @ linux-arm-64"
+  },
+  "fetch": {
+    "command": "./scripts/fetch_case_studies.sh /tmp/r2b-case-studies",
+    "package_and_binary_sha256_matched_script": true,
+    "target_executed": false
+  },
+  "subjects": [
+    {
+      "name": "uhttpd",
+      "package": "uhttpd_2025.07.06~7e64e8ba-r5_aarch64_cortex-a53.ipk",
+      "package_sha256": "0a2d2858c81ec39c3d07048d9c79622602106b90d84a8534f112cd9ad883ab3f",
+      "binary": "/tmp/r2b-case-studies/uhttpd/usr/sbin/uhttpd",
+      "binary_sha256": "2dea2e1017dd4839b375fff5a531b0d8c3317d8d031a3d44f0c2849cda1b0941",
+      "size_bytes": 66259,
+      "function_count": 116,
+      "import_count": 117,
+      "regions": [
+        "imports:process",
+        "imports:network",
+        "entry:entry",
+        "imports:runtime",
+        "imports:memory"
+      ],
+      "next_argv": [
+        "r2b verify /tmp/r2b-case-studies/uhttpd/usr/sbin/uhttpd --import execl --json"
+      ],
+      "brief_wall_s": 25.087,
+      "brief_raw": "results/kali-uhttpd-quick.json",
+      "darwin_expectation": "one GOT-indirect at 0x9384",
+      "verify": [
+        {
+          "import": "execl",
+          "status": "dynamic",
+          "call_sites": [
+            {
+              "function": "000092e4",
+              "address": "0x00009384",
+              "argument": "<dynamic>",
+              "constant": false
+            }
+          ],
+          "wall_s": 7.877,
+          "raw": "results/kali-uhttpd-verify-execl.json"
+        }
+      ],
+      "kali_site_addresses": [
+        "0x00009384"
+      ],
+      "sites_match_darwin": true
+    },
+    {
+      "name": "dnsmasq",
+      "package": "dnsmasq_2.93-r1_aarch64_cortex-a53.ipk",
+      "package_sha256": "6647ebdd4b7aa044f757c40801580891f9993799bea19d4f68a55be0da6ff7be",
+      "binary": "/tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq",
+      "binary_sha256": "a433c23caa56669d6d7ee2d896f157442941ab0ca6d37cc46f6bea6e43d84d7f",
+      "size_bytes": 334841,
+      "function_count": 170,
+      "import_count": 175,
+      "regions": [
+        "imports:process",
+        "imports:network",
+        "entry:entry",
+        "imports:memory",
+        "imports:control"
+      ],
+      "next_argv": [
+        "r2b verify /tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq --import execl --json",
+        "r2b verify /tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq --import popen --json"
+      ],
+      "brief_wall_s": 23.783,
+      "brief_raw": "results/kali-dnsmasq-quick.json",
+      "darwin_expectation": "two dynamic sites",
+      "verify": [
+        {
+          "import": "popen",
+          "status": "dynamic",
+          "call_sites": [
+            {
+              "function": "000133e4",
+              "address": "0x0001352c",
+              "argument": "<dynamic>",
+              "constant": false
+            },
+            {
+              "function": "00023e24",
+              "address": "0x00023efc",
+              "argument": "<dynamic>",
+              "constant": false
+            }
+          ],
+          "wall_s": 16.985,
+          "raw": "results/kali-dnsmasq-verify-popen.json"
+        }
+      ],
+      "kali_site_addresses": [
+        "0x0001352c",
+        "0x00023efc"
+      ],
+      "sites_match_darwin": true
+    },
+    {
+      "name": "rpcd",
+      "package": "rpcd_2025.09.01~bba95191-r2_aarch64_cortex-a53.ipk",
+      "package_sha256": "18a2dcbf0b0abe2a5d01e6e6b545b166dcde2116b4555f8ce694384d67b94fb6",
+      "binary": "/tmp/r2b-case-studies/rpcd/sbin/rpcd",
+      "binary_sha256": "ac6f18d11fe3d13ad5cd11ebf06861cb28b9464053351078020a7562ef9879ee",
+      "size_bytes": 66139,
+      "function_count": 145,
+      "import_count": 147,
+      "regions": [
+        "imports:process",
+        "entry:entry",
+        "imports:runtime",
+        "imports:memory"
+      ],
+      "next_argv": [
+        "r2b verify /tmp/r2b-case-studies/rpcd/sbin/rpcd --import execl --json",
+        "r2b verify /tmp/r2b-case-studies/rpcd/sbin/rpcd --import execv --json"
+      ],
+      "brief_wall_s": 30.943,
+      "brief_raw": "results/kali-rpcd-quick.json",
+      "darwin_expectation": "six dynamic sites across execl and execv",
+      "verify": [
+        {
+          "import": "execl",
+          "status": "dynamic",
+          "call_sites": [
+            {
+              "function": "0000a7d4",
+              "address": "0x0000acdc",
+              "argument": "<dynamic>",
+              "constant": false
+            },
+            {
+              "function": "0000afc4",
+              "address": "0x0000b224",
+              "argument": "<dynamic>",
+              "constant": false
+            },
+            {
+              "function": "0000b9b4",
+              "address": "0x0000bde8",
+              "argument": "<dynamic>",
+              "constant": false
+            }
+          ],
+          "wall_s": 10.906,
+          "raw": "results/kali-rpcd-verify-execl.json"
+        },
+        {
+          "import": "execv",
+          "status": "dynamic",
+          "call_sites": [
+            {
+              "function": "00003da0",
+              "address": "0x000040ac",
+              "argument": "<dynamic>",
+              "constant": false
+            },
+            {
+              "function": "000048d4",
+              "address": "0x00004c1c",
+              "argument": "<dynamic>",
+              "constant": false
+            }
+          ],
+          "wall_s": 8.904,
+          "raw": "results/kali-rpcd-verify-execv.json"
+        }
+      ],
+      "kali_site_addresses": [
+        "0x0000acdc",
+        "0x0000b224",
+        "0x0000bde8",
+        "0x000040ac",
+        "0x00004c1c"
+      ],
+      "sites_match_darwin": true
+    },
+    {
+      "name": "busybox",
+      "package": "busybox_1.36.1-r3_aarch64_cortex-a53.ipk",
+      "package_sha256": "3b6afb873a1325031ed04a2d35d96817fcbbaaa04e32e30962201ad2ffb05d77",
+      "binary": "/tmp/r2b-case-studies/busybox/bin/busybox",
+      "binary_sha256": "d3aeb34aaf9ff41d12db6345a811ee142890c6e071dcbcc1006b0fc02e90b66f",
+      "size_bytes": 458773,
+      "function_count": 301,
+      "import_count": 299,
+      "regions": [
+        "imports:process",
+        "imports:network",
+        "entry:entry",
+        "imports:runtime",
+        "imports:memory",
+        "imports:control"
+      ],
+      "next_argv": [
+        "r2b verify /tmp/r2b-case-studies/busybox/bin/busybox --import execl --json",
+        "r2b verify /tmp/r2b-case-studies/busybox/bin/busybox --import execv --json",
+        "r2b verify /tmp/r2b-case-studies/busybox/bin/busybox --import execve --json",
+        "r2b verify /tmp/r2b-case-studies/busybox/bin/busybox --import execvp --json"
+      ],
+      "brief_wall_s": 28.195,
+      "brief_raw": "results/kali-busybox-quick.json",
+      "darwin_expectation": "one dynamic caller",
+      "verify": [
+        {
+          "import": "execl",
+          "status": "dynamic",
+          "call_sites": [
+            {
+              "function": "0040be40",
+              "address": "0x0040bf7c",
+              "argument": "<dynamic>",
+              "constant": false
+            }
+          ],
+          "wall_s": 31.198,
+          "raw": "results/kali-busybox-verify-execl.json"
+        }
+      ],
+      "kali_site_addresses": [
+        "0x0040bf7c"
+      ],
+      "sites_match_darwin": true
+    },
+    {
+      "name": "ubus",
+      "package": "ubus_2025.10.17~60e04048-r1_aarch64_cortex-a53.ipk",
+      "package_sha256": "574f1380d2e58672b2c6ddd4e20e80f5d4103ad89c99760b65a3ef4d554db957",
+      "binary": "/tmp/r2b-case-studies/ubus/bin/ubus",
+      "binary_sha256": "75196f1dfb03f2ea6a77f1f53608bbf1495d74613361a16e26587644f6072f8c",
+      "size_bytes": 65552,
+      "function_count": 45,
+      "import_count": 49,
+      "regions": [
+        "entry:entry",
+        "imports:memory"
+      ],
+      "next_argv": [],
+      "brief_wall_s": 25.587,
+      "brief_raw": "results/kali-ubus-quick.json",
+      "darwin_expectation": "thin brief; no process verify",
+      "verify": [],
+      "kali_site_addresses": [],
+      "sites_match_darwin": null
+    }
+  ],
+  "notes": [
+    "Package and binary SHA-256 matched scripts/fetch_case_studies.sh.",
+    "next_argv queued r2b verify for process-launch imports; it did not queue decompile.",
+    "ubus next_argv is empty (thin brief). Darwin text offered one-function decompile at entry; current product does not auto-queue decompile.",
+    "uhttpd execl site 0x00009384 matches Darwin 0x9384. Other Darwin expectations were site counts only.",
+    "Targets were not executed. No model call. No decompile.",
+    "Did not verify extra next_argv imports: dnsmasq execl; busybox execv/execve/execvp."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "binary": "/tmp/r2b-case-studies/busybox/bin/busybox",
+  "verdicts": [
+    {
+      "import": "execl",
+      "status": "dynamic",
+      "call_sites": [
+        {
+          "function": "0040be40",
+          "address": "0x0040bf7c",
+          "argument": "<dynamic>",
+          "constant": false
+        }
+      ]
+    }
+  ]
+}

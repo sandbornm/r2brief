@@ -1,0 +1,625 @@
+{
+  "schema_version": "r2b.briefing.v1",
+  "prompt_id": "r2b.prompt.v2",
+  "binary": "/tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq",
+  "subject": {
+    "name": "dnsmasq",
+    "binary": "/tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq",
+    "format": "elf",
+    "arch": "arm64/64",
+    "os": "linux",
+    "subject_class": "linux_elf",
+    "function_count": 170,
+    "import_count": 175,
+    "dangerous_imports": [
+      "execl",
+      "memcpy",
+      "memmove",
+      "popen",
+      "sprintf",
+      "strcat",
+      "strcpy"
+    ],
+    "interesting_imports": [
+      "accept",
+      "bind",
+      "connect",
+      "fork",
+      "ioctl",
+      "listen",
+      "prctl",
+      "recvfrom",
+      "sendto",
+      "setgid",
+      "setuid",
+      "socket"
+    ],
+    "risk_level": null,
+    "risk_factors": [],
+    "size_bytes": 334841,
+    "triage_scope": "focused",
+    "scope_warnings": [],
+    "stripped": null,
+    "issues": [],
+    "firmware_kind": null,
+    "wrapper_family": null,
+    "carved_count": 0
+  },
+  "summary": "dnsmasq looks like elf; arm64/64; 170 functions; imports execl, memcpy, memmove, popen. First region: Process launch / child control.",
+  "regions": [
+    {
+      "id": "imports:process",
+      "title": "Process launch / child control",
+      "why": "These imports cross from the current process into a child or another program.",
+      "score": 93,
+      "tags": [
+        "imports",
+        "plt",
+        "process",
+        "dangerous"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "execl\nfork\npopen",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:process",
+        "xref": "execl"
+      },
+      "ask": "REGION 1/5: Process launch / child control\nBinary: dnsmasq arm64/64 elf\nWhy this region: These imports cross from the current process into a child or another program.\n\n```text\nexecl\nfork\npopen\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:process xref=execl]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.execl` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "72a6946c5cd10d061ce474807587cbc5234bb75860ddd0e5d93a84d38e0e5bf8"
+        }
+      ]
+    },
+    {
+      "id": "imports:network",
+      "title": "Network ingress / egress",
+      "why": "These imports mark code that accepts or sends data across a network boundary.",
+      "score": 90,
+      "tags": [
+        "imports",
+        "plt",
+        "network"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "accept\nbind\nconnect\nlisten\nrecvfrom\nsendto\nsocket",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:network",
+        "xref": "accept"
+      },
+      "ask": "REGION 2/5: Network ingress / egress\nBinary: dnsmasq arm64/64 elf\nWhy this region: These imports mark code that accepts or sends data across a network boundary.\n\n```text\naccept\nbind\nconnect\nlisten\nrecvfrom\nsendto\nsocket\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:network xref=accept]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.accept` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "72a6946c5cd10d061ce474807587cbc5234bb75860ddd0e5d93a84d38e0e5bf8"
+        }
+      ]
+    },
+    {
+      "id": "entry:entry",
+      "title": "Entry / entry",
+      "why": "Start of dnsmasq; establish calling convention and first callees before hunting bugs.",
+      "score": 89,
+      "tags": [
+        "entry",
+        "disasm"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "disasm",
+        "text": ";-- pc:\n\u250c 376: entry0 ();\n\u2502           0x0000a580      1d0080d2       mov x29, 0\n\u2502           0x0000a584      1e0080d2       mov x30, 0\n\u2502           0x0000a588      e0030091       mov x0, sp\n\u2502           0x0000a58c      a10200b0       adrp x1, 0x5f000\n\u2502           0x0000a590      21a02191       add x1, x1, 0x868\n\u2502           0x0000a594      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502       \u250c\u2500< 0x0000a598      01000014       b 0xa59c\n\u2502       \u2502   ; CODE XREF from entry0 @ 0xa598(x)\n\u2502       \u2514\u2500> 0x0000a59c      e20300aa       mov x2, x0\n\u2502           0x0000a5a0      050080d2       mov x5, 0\n\u2502           0x0000a5a4      a40200b0       adrp x4, 0x5f000\n\u2502           0x0000a5a8      846047f9       ldr x4, [x4, 0xec0]\n\u2502           0x0000a5ac      418440f8       ldr x1, [x2], 8\n\u2502           0x0000a5b0      a30200b0       adrp x3, 0x5f000\n\u2502           0x0000a5b4      635446f9       ldr x3, [x3, 0xca8]\n\u2502           0x0000a5b8      a00200b0       adrp x0, 0x5f000",
+        "address": "0xa580",
+        "function": "entry",
+        "artifact_id": null,
+        "xref": null
+      },
+      "ask": "REGION 3/5: Entry / entry (entry 0xa580)\nBinary: dnsmasq arm64/64 elf\nWhy this region: Start of dnsmasq; establish calling convention and first callees before hunting bugs.\n\n```asm\n;-- pc:\n\u250c 376: entry0 ();\n\u2502           0x0000a580      1d0080d2       mov x29, 0\n\u2502           0x0000a584      1e0080d2       mov x30, 0\n\u2502           0x0000a588      e0030091       mov x0, sp\n\u2502           0x0000a58c      a10200b0       adrp x1, 0x5f000\n\u2502           0x0000a590      21a02191       add x1, x1, 0x868\n\u2502           0x0000a594      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502       \u250c\u2500< 0x0000a598      01000014       b 0xa59c\n\u2502       \u2502   ; CODE XREF from entry0 @ 0xa598(x)\n\u2502       \u2514\u2500> 0x0000a59c      e20300aa       mov x2, x0\n\u2502           0x0000a5a0      050080d2       mov x5, 0\n\u2502           0x0000a5a4      a40200b0       adrp x4, 0x5f000\n\u2502           0x0000a5a8      846047\n...[truncated]\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 addr=0xa580 artifact=entry:entry xref=entry]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obv\n...[truncated]",
+      "next_actions": [
+        "r2: `pdf @ 0xa580` and list calls (`agc`).",
+        "If stripped, rename this function after the first identified callee."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "72a6946c5cd10d061ce474807587cbc5234bb75860ddd0e5d93a84d38e0e5bf8"
+        }
+      ]
+    },
+    {
+      "id": "imports:memory",
+      "title": "Memory and path handling",
+      "why": "These imports are useful caller pivots, but an import alone says nothing about data flow.",
+      "score": 84,
+      "tags": [
+        "imports",
+        "plt",
+        "memory",
+        "dangerous"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "memcpy\nmemmove\nsprintf\nstrcat\nstrcpy",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:memory",
+        "xref": "memcpy"
+      },
+      "ask": "REGION 4/5: Memory and path handling\nBinary: dnsmasq arm64/64 elf\nWhy this region: These imports are useful caller pivots, but an import alone says nothing about data flow.\n\n```text\nmemcpy\nmemmove\nsprintf\nstrcat\nstrcpy\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:memory xref=memcpy]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.memcpy` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "72a6946c5cd10d061ce474807587cbc5234bb75860ddd0e5d93a84d38e0e5bf8"
+        }
+      ]
+    },
+    {
+      "id": "imports:control",
+      "title": "Kernel and identity controls",
+      "why": "These imports mark identity changes or program-specific kernel control paths.",
+      "score": 81,
+      "tags": [
+        "imports",
+        "plt",
+        "control"
+      ],
+      "snippet": {
+        "source": "radare2",
+        "kind": "inventory",
+        "text": "ioctl\nprctl\nsetgid\nsetuid",
+        "address": null,
+        "function": null,
+        "artifact_id": "imports:control",
+        "xref": "ioctl"
+      },
+      "ask": "REGION 5/5: Kernel and identity controls\nBinary: dnsmasq arm64/64 elf\nWhy this region: These imports mark identity changes or program-specific kernel control paths.\n\n```text\nioctl\nprctl\nsetgid\nsetuid\n```\n\nCite each claim as [tool=NAME addr=0x\u2026 artifact=ID xref=SYM]. Invented names/types: prefix proposed.\nEvidence: [tool=radare2 artifact=imports:control xref=ioctl]\nYou are briefing a professional RE. Do not define terms. Do not restate the listing.\nAnswer in exactly 4 bullets:\n1. The non-obvious claim this snippet supports (or 'nothing interesting') + cite tag\n2. Trust boundary / attacker-controlled data visible HERE only + cite tag\n3. Highest-value next address, callee, or carved file \u2014 and why it could surprise + cite tag\n4. One exact next command (r2, unsquashfs, or r2b brief <carve>) + cite tag\nRules: cite [tool= addr= artifact= xref=] from Evidence; invented names/types: `proposed`; do not invent symbols absent from the snippet; no exploit/PoC; no tutorial.",
+      "next_actions": [
+        "r2: `ii` then `axt @ sym.imp.ioctl` to find the first caller.",
+        "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim."
+      ],
+      "evidence_refs": [
+        {
+          "action": 5,
+          "result_ref": "/quick_scan/radare2",
+          "output_sha256": "72a6946c5cd10d061ce474807587cbc5234bb75860ddd0e5d93a84d38e0e5bf8"
+        }
+      ]
+    }
+  ],
+  "overall_ask": "PROFESSIONAL TRIAGE \u2014 facts and region titles only. No lecture.\nBinary: dnsmasq\nFormat/arch: elf arm64/64\nFunctions: 170; imports: 175\nDangerous imports: execl, memcpy, memmove, popen, sprintf, strcat, strcpy\nsubject_class: linux_elf\n\nRanked regions:\n1. Process launch / child control \u2014 These imports cross from the current process into a child or another program.\n2. Network ingress / egress \u2014 These imports mark code that accepts or sends data across a network boundary.\n3. Entry / entry @ entry 0xa580 \u2014 Start of dnsmasq; establish calling convention and first callees before hunting bugs.\n4. Memory and path handling \u2014 These imports are useful caller pivots, but an import alone says nothing about data flow.\n5. Kernel and identity controls \u2014 These imports mark identity changes or program-specific kernel control paths.\n\nAnswer in exactly 6 bullets, each ending with a cite tag [tool= addr= artifact= xref=]:\n1. Name the unusual fact; 'it is firmware' is too broad\n2. Region that best supports a claim, and what that claim is\n3. Best next ELF/function \u2014 prefer a carved child or named symbol over size\n4. What is still unknown (missing carve, stripped names, dead tool)\n5. Exact next r2 command or `r2b brief` on a child\n6. Exact next unpack step if this is still a wrapper; else 'already an ELF'\nRules: defensive only; no exploit steps; do not invent symbols; names/types you add are `proposed`.\n\nAnalyst next steps already queued:\n- This is already an ELF. Rank named symbols / entry; do not unsquash it.\n- r2: `axt @ sym.imp.execl` and brief that caller.\n- Send region ask #1\n...[truncated]",
+  "next_steps": [
+    "This is already an ELF. Rank named symbols / entry; do not unsquash it.",
+    "r2: `axt @ sym.imp.execl` and brief that caller.",
+    "Send region ask #1 (Process launch / child control) before a whole-binary question."
+  ],
+  "provenance": {
+    "schema_version": "r2b.provenance.v1",
+    "producer": {
+      "name": "r2b",
+      "version": "0.1.0"
+    },
+    "input": {
+      "path": "/tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq",
+      "name": "dnsmasq",
+      "size_bytes": 334841,
+      "sha256": "a433c23caa56669d6d7ee2d896f157442941ab0ca6d37cc46f6bea6e43d84d7f"
+    },
+    "plan": {
+      "quick": true,
+      "deep": false,
+      "run_angr": false,
+      "persist_trajectory": false,
+      "profile": "triage"
+    },
+    "config": {
+      "analysis": {
+        "enable_angr": false,
+        "enable_ghidra": false,
+        "enable_frida": false,
+        "enable_gef": false,
+        "gef_timeout": 60,
+        "gef_max_instructions": 10000,
+        "require_elf": false
+      },
+      "extract": {
+        "enable": false,
+        "extract_elf": false,
+        "allow_unsafe_fallback": false,
+        "timeout_s": 60,
+        "max_files": 200,
+        "max_bytes": 67108864,
+        "max_depth": 2
+      },
+      "performance": {
+        "parallel_functions": 4
+      },
+      "ghidra": {
+        "use_bridge": false,
+        "max_decompile_functions": 20,
+        "max_types": 100,
+        "max_strings": 200
+      }
+    },
+    "adapter_status": [
+      {
+        "adapter": "sniff",
+        "available": null,
+        "actions": [
+          1
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "binary_format",
+        "available": true,
+        "actions": [
+          2
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "autoprofile",
+        "available": true,
+        "actions": [
+          7
+        ],
+        "status": "skipped"
+      },
+      {
+        "adapter": "firmware",
+        "available": true,
+        "actions": [
+          8
+        ],
+        "status": "skipped"
+      },
+      {
+        "adapter": "libmagic",
+        "available": true,
+        "actions": [
+          3
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "runtime",
+        "available": null,
+        "actions": [
+          4
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "artifact_dag",
+        "available": true,
+        "actions": [
+          6
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "radare2",
+        "available": true,
+        "actions": [
+          5
+        ],
+        "status": "completed"
+      },
+      {
+        "adapter": "capstone",
+        "available": true,
+        "actions": [],
+        "status": "not_run"
+      },
+      {
+        "adapter": "dwarf",
+        "available": true,
+        "actions": [],
+        "status": "not_run"
+      }
+    ],
+    "actions": [
+      {
+        "sequence": 1,
+        "action": "sniff.quick",
+        "adapter": "sniff",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/sniff",
+        "output_sha256": "9119469e0a73c38d0f5149128a90c5ab120c6bdb15a8c61f47aa9271a9aefa02",
+        "summary": {
+          "duration_ms": 33,
+          "keys": [
+            "file",
+            "hex_head",
+            "mode",
+            "path",
+            "readelf",
+            "sha256",
+            "size_bytes",
+            "strings",
+            "tools"
+          ]
+        }
+      },
+      {
+        "sequence": 2,
+        "action": "binary_format.quick",
+        "adapter": "binary_format",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/binary_format",
+        "output_sha256": "220c5f25efefd7823b056904d69030803993134ad93d2d17510f803188781bc8",
+        "summary": {
+          "duration_ms": 2,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "arch",
+            "bits",
+            "confidence",
+            "endianness",
+            "entrypoint",
+            "file_type",
+            "format",
+            "machine",
+            "parser",
+            "sections"
+          ]
+        }
+      },
+      {
+        "sequence": 3,
+        "action": "libmagic.quick",
+        "adapter": "libmagic",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/libmagic",
+        "output_sha256": "cdcb737496885d245ac7eb7e505875a65e6d2da5b44fe42c187baafc0743eee1",
+        "summary": {
+          "duration_ms": 4,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "description",
+            "mime"
+          ]
+        }
+      },
+      {
+        "sequence": 4,
+        "action": "runtime.quick",
+        "adapter": "runtime",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/runtime",
+        "output_sha256": "7aff11e235334246c8259f102f5e467fffb4e191701e4e61f657a469cd8d653f",
+        "summary": {
+          "duration_ms": 2,
+          "keys": [
+            "abi_version",
+            "arch",
+            "bits",
+            "endianness",
+            "entrypoint",
+            "format",
+            "interp",
+            "needed",
+            "osabi"
+          ]
+        }
+      },
+      {
+        "sequence": 5,
+        "action": "radare2.quick",
+        "adapter": "radare2",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/radare2",
+        "output_sha256": "72a6946c5cd10d061ce474807587cbc5234bb75860ddd0e5d93a84d38e0e5bf8",
+        "summary": {
+          "duration_ms": 209,
+          "functions_count": 0,
+          "cfg_nodes": 0,
+          "cfg_edges": 0,
+          "keys": [
+            "capabilities",
+            "commands",
+            "entry_disassembly",
+            "entry_function",
+            "entry_points",
+            "headers",
+            "imports",
+            "info",
+            "interesting_symbols",
+            "sections",
+            "strings",
+            "symbols"
+          ]
+        }
+      },
+      {
+        "sequence": 6,
+        "action": "artifact_dag.build",
+        "adapter": "artifact_dag",
+        "stage": "quick",
+        "status": "completed",
+        "result_ref": "/quick_scan/artifact_dag",
+        "output_sha256": "61fb10f4567fda8607143d1deca48ffdf52092cc25437409a752bd5de4560849",
+        "summary": {
+          "elapsed_ms": 1,
+          "keys": [
+            "edges",
+            "nodes",
+            "notes",
+            "schema_version",
+            "sha256",
+            "summary",
+            "tools"
+          ]
+        }
+      },
+      {
+        "sequence": 7,
+        "action": "autoprofile.quick",
+        "adapter": "autoprofile",
+        "stage": "quick",
+        "status": "skipped",
+        "result_ref": null,
+        "output_sha256": null,
+        "summary": {
+          "duration_ms": 0,
+          "reason": "only scheduled for exhaustive executable profiling; the default path uses format-specific evidence"
+        }
+      },
+      {
+        "sequence": 8,
+        "action": "firmware.quick",
+        "adapter": "firmware",
+        "stage": "quick",
+        "status": "skipped",
+        "result_ref": null,
+        "output_sha256": null,
+        "summary": {
+          "duration_ms": 0,
+          "reason": "top-level subject is executable; container inventory is not applicable"
+        }
+      }
+    ],
+    "replay": {
+      "input_token": "{input}",
+      "expected_sha256": "a433c23caa56669d6d7ee2d896f157442941ab0ca6d37cc46f6bea6e43d84d7f",
+      "argv": [
+        "r2b",
+        "brief",
+        "{input}",
+        "--quick",
+        "--no-save",
+        "--json"
+      ],
+      "shell": "r2b brief \"$R2B_INPUT\" --quick --no-save --json",
+      "shell_uses_current_config": true,
+      "python": "import os\nfrom pathlib import Path\nfrom r2b import AnalysisOptions, analyze\nfrom r2b.config import AppConfig\n\nbinary = Path(os.environ.get('R2B_INPUT', '/tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq'))\nexpected_sha256 = 'a433c23caa56669d6d7ee2d896f157442941ab0ca6d37cc46f6bea6e43d84d7f'\nconfig = AppConfig.model_validate({'analysis': {'enable_angr': False, 'enable_ghidra': False, 'enable_frida': False, 'enable_gef': False, 'gef_timeout': 60, 'gef_max_instructions': 10000, 'require_elf': False}, 'extract': {'enable': False, 'extract_elf': False, 'allow_unsafe_fallback': False, 'timeout_s': 60, 'max_files': 200, 'max_bytes': 67108864, 'max_depth': 2}, 'performance': {'parallel_functions': 4}, 'ghidra': {'use_bridge': False, 'max_decompile_functions': 20, 'max_types': 100, 'max_strings': 200}})\nreport = analyze(\n    binary,\n    config=config,\n    options=AnalysisOptions(\n        profile='triage',\n        extract=False,\n    ),\n)\nassert report.payload['provenance']['input']['sha256'] == expected_sha256\nprint(report.briefing['summary'])\n"
+    }
+  },
+  "handoff": {
+    "schema_version": "r2b.handoff.v1",
+    "binary": "/tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq",
+    "record_id": null,
+    "summary": "dnsmasq looks like elf; arm64/64; 170 functions; imports execl, memcpy, memmove, popen. First region: Process launch / child control.",
+    "subject": {
+      "name": "dnsmasq",
+      "format": "elf",
+      "arch": "arm64/64",
+      "stripped": null,
+      "dangerous_imports": [
+        "execl",
+        "memcpy",
+        "memmove",
+        "popen",
+        "sprintf",
+        "strcat",
+        "strcpy"
+      ],
+      "risk_level": null,
+      "subject_class": "linux_elf",
+      "size_bytes": 334841,
+      "triage_scope": "focused",
+      "scope_warnings": []
+    },
+    "regions": [
+      {
+        "id": "imports:process",
+        "title": "Process launch / child control",
+        "addr": null,
+        "why": "These imports cross from the current process into a child or another program.",
+        "tags": [
+          "imports",
+          "plt",
+          "process",
+          "dangerous"
+        ],
+        "snippet": "execl\nfork\npopen"
+      },
+      {
+        "id": "imports:network",
+        "title": "Network ingress / egress",
+        "addr": null,
+        "why": "These imports mark code that accepts or sends data across a network boundary.",
+        "tags": [
+          "imports",
+          "plt",
+          "network"
+        ],
+        "snippet": "accept\nbind\nconnect\nlisten\nrecvfrom\nsendto\nsocket"
+      },
+      {
+        "id": "entry:entry",
+        "title": "Entry / entry",
+        "addr": "0xa580",
+        "why": "Start of dnsmasq; establish calling convention and first callees before hunting bugs.",
+        "tags": [
+          "entry",
+          "disasm"
+        ],
+        "snippet": ";-- pc:\n\u250c 376: entry0 ();\n\u2502           0x0000a580      1d0080d2       mov x29, 0\n\u2502           0x0000a584      1e0080d2       mov x30, 0\n\u2502           0x0000a588      e0030091       mov x0, sp\n\u2502           0x0000a58c      a10200b0       adrp x1, 0x5f000\n\u2502           0x0000a590      21a02191       add x1, x1, 0x868\n\u2502           0x0000a594      1fec7c92       and sp, x0, 0xfffffffffffffff0\n\u2502       \u250c\u2500< 0x0000a598      01000014       b 0xa59c\n\u2502       \u2502   ; CODE XREF from entry0 @ 0xa598(x)\n\u2502       \u2514\u2500> 0x0000a59c      e20300aa       mov x2, x0\n\u2502           0x0000a5a0      050080d2       mov x5, 0"
+      },
+      {
+        "id": "imports:memory",
+        "title": "Memory and path handling",
+        "addr": null,
+        "why": "These imports are useful caller pivots, but an import alone says nothing about data flow.",
+        "tags": [
+          "imports",
+          "plt",
+          "memory",
+          "dangerous"
+        ],
+        "snippet": "memcpy\nmemmove\nsprintf\nstrcat\nstrcpy"
+      },
+      {
+        "id": "imports:control",
+        "title": "Kernel and identity controls",
+        "addr": null,
+        "why": "These imports mark identity changes or program-specific kernel control paths.",
+        "tags": [
+          "imports",
+          "plt",
+          "control"
+        ],
+        "snippet": "ioctl\nprctl\nsetgid\nsetuid"
+      }
+    ],
+    "next_argv": [
+      "r2b verify /tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq --import execl --json",
+      "r2b verify /tmp/r2b-case-studies/dnsmasq/usr/sbin/dnsmasq --import popen --json"
+    ],
+    "requires_scope": false,
+    "scope_options": []
+  }
+}

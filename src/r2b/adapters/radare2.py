@@ -15,6 +15,8 @@ from .base import AdapterUnavailable
 
 _LOGGER = logging.getLogger(__name__)
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+_LISTING_LINE_CAP = 160
+_PD_FALLBACK_OPS = 24
 _SYMBOL_HINTS = (
     "subghz",
     "nfc_",
@@ -29,6 +31,43 @@ _SYMBOL_HINTS = (
     "decoder",
     "poller",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class DecompilerBackends:
+    backends: tuple[str, ...]
+    r2ghidra: bool
+    r2dec: bool
+    pdc: bool
+
+
+def parse_decompiler_backends(ld_output: str, core_plugins: str = "") -> DecompilerBackends:
+    """Parse `LD` (and optional `Lc`) without treating builtin `pdc` as r2ghidra."""
+    backends = _plugin_names(ld_output)
+    cores = _plugin_names(core_plugins)
+    names = set(backends) | set(cores)
+    return DecompilerBackends(
+        backends=tuple(backends),
+        r2ghidra=any(name in {"pdg", "r2ghidra"} for name in backends),
+        r2dec=any(name in {"pdd", "r2dec"} for name in names),
+        pdc="pdc" in names,
+    )
+
+
+def _plugin_names(raw: str) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for line in _ANSI_RE.sub("", raw or "").splitlines():
+        token = line.strip().split()[0] if line.strip() else ""
+        if not token:
+            continue
+        key = token.lower().strip(",")
+        if key in {"usage:", "ld", "lc", "|", "---"} or key.startswith("r2b_"):
+            continue
+        if key not in seen:
+            seen.add(key)
+            names.append(key)
+    return names
 
 
 @dataclass(slots=True)
@@ -128,6 +167,99 @@ class Radare2Adapter:
                 break
         return hits
 
+    @staticmethod
+    def _clean_listing(raw: str | None) -> str:
+        return _ANSI_RE.sub("", raw or "").strip()
+
+    @staticmethod
+    def _listing_is_useful(listing: str) -> bool:
+        if not listing.strip():
+            return False
+        for line in reversed(listing.splitlines()):
+            stripped = line.strip()
+            if not stripped or "0x" not in stripped:
+                continue
+            return "invalid" not in stripped.lower()
+        return "invalid" not in listing.lower()
+
+    @classmethod
+    def _cap_listing(cls, listing: str) -> str:
+        lines = listing.splitlines()
+        if len(lines) <= _LISTING_LINE_CAP:
+            return listing
+        return "\n".join(lines[:_LISTING_LINE_CAP])
+
+    @classmethod
+    def _decompiler_caps(cls, session: Any) -> DecompilerBackends:
+        ld = cls._clean_listing(session.cmd("LD") or "")
+        lc = cls._clean_listing(session.cmd("Lc") or "")
+        return parse_decompiler_backends(ld, lc)
+
+    @classmethod
+    def _try_decompile(
+        cls,
+        session: Any,
+        addr: int,
+        caps: DecompilerBackends,
+    ) -> dict[str, str] | None:
+        commands: list[str] = []
+        if caps.r2ghidra:
+            commands.append("pdg")
+        if caps.r2dec:
+            commands.append("pdd")
+        if not commands:
+            return None
+        try:
+            session.cmd(f"s {addr:#x}")
+        except Exception:
+            return None
+        for command in commands:
+            try:
+                text = cls._clean_listing(session.cmd(command))
+            except Exception:
+                continue
+            if text and len(text) > 8 and "invalid command" not in text.lower()[:80]:
+                return {"command": command, "text": text[:8000]}
+        return None
+
+    @classmethod
+    def _pdj_listing(cls, session: Any, addr: int) -> str | None:
+        ops = cls._cmdj(session, f"pdj {_PD_FALLBACK_OPS} @ {addr:#x}")
+        if not isinstance(ops, list) or not ops:
+            return None
+        lines: list[str] = []
+        for op in ops:
+            if not isinstance(op, dict):
+                continue
+            opcode = str(op.get("opcode") or op.get("disasm") or "")
+            if not opcode or opcode.lower() == "invalid":
+                continue
+            offset = op.get("offset")
+            addr_s = hex(offset) if isinstance(offset, int) else str(offset or "")
+            raw = op.get("bytes") or ""
+            lines.append(f"{addr_s}  {raw}  {opcode}".rstrip())
+        return "\n".join(lines) if lines else None
+
+    @classmethod
+    def _function_listing(cls, session: Any, addr: int) -> str | None:
+        """Function-aware listing. `pD N` can tear an instruction (CGC `c7 invalid`)."""
+        try:
+            session.cmd(f"s {addr:#x}")
+            session.cmd(f"af @ {addr:#x}")
+        except Exception:
+            _LOGGER.debug("af @ %s failed; trying listing anyway", hex(addr))
+        for command in (f"pdf @ {addr:#x}", f"pd {_PD_FALLBACK_OPS} @ {addr:#x}"):
+            try:
+                listing = cls._clean_listing(session.cmd(command))
+            except Exception:
+                listing = ""
+            if listing and cls._listing_is_useful(listing):
+                return cls._cap_listing(listing)
+        structured = cls._pdj_listing(session, addr)
+        if structured:
+            return cls._cap_listing(structured)
+        return None
+
     @classmethod
     def _quick_entry(
         cls,
@@ -167,8 +299,7 @@ class Radare2Adapter:
             return {"name": name, "offset": offset}, None
         if addr < 0:
             return None, None
-        listing = session.cmd(f"pD 32 @ {addr}") or ""
-        listing = _ANSI_RE.sub("", listing).strip()
+        listing = cls._function_listing(session, addr)
         return {"name": name, "offset": addr}, listing or None
 
     def quick_scan(self, binary: Path) -> dict[str, object]:
@@ -189,6 +320,10 @@ class Radare2Adapter:
                 symbols if isinstance(symbols, list) else [],
                 entry_points if isinstance(entry_points, list) else [],
             )
+            try:
+                decompilers = self._decompiler_caps(session)
+            except Exception:
+                decompilers = parse_decompiler_backends("")
         except Exception as exc:  # pragma: no cover - runtime guard
             _LOGGER.exception("radare2 quick scan failed: %s", exc)
             raise AdapterUnavailable(f"radare2 quick scan failed: {exc}") from exc
@@ -206,10 +341,14 @@ class Radare2Adapter:
             "symbols": symbol_list[:400],
             "interesting_symbols": self._interesting_symbols(symbol_list),
             "entry_points": entry_points if isinstance(entry_points, list) else [],
-
             "entry_function": entry_function,
             "entry_disassembly": entry_disassembly,
-            "commands": ["ij", "iHj", "iij", "izj", "iSj", "isj", "iej", "pD"],
+            "capabilities": {
+                "decompilers": list(decompilers.backends),
+                "r2ghidra": decompilers.r2ghidra,
+                "r2dec": decompilers.r2dec,
+            },
+            "commands": ["ij", "iHj", "iij", "izj", "iSj", "isj", "iej", "af", "pdf"],
         }
 
     def verify_scan(self, binary: Path, imports: list[str]) -> list[dict[str, Any]]:
@@ -380,6 +519,11 @@ class Radare2Adapter:
             # Entry function disassembly
             entry_disassembly = None
             entry_function = None
+            entry_decompile = None
+            try:
+                decompilers = self._decompiler_caps(session)
+            except Exception:
+                decompilers = parse_decompiler_backends("")
             if functions:
                 preferred_names = {"main", "entry0", "sym.main", "_main", "entry"}
                 entry_function = next(
@@ -390,9 +534,15 @@ class Radare2Adapter:
                     entry_offset = entry_function.get("offset")
                     if entry_offset is not None:
                         try:
-                            entry_disassembly = session.cmd(f"pdf @ {entry_offset}")
+                            entry_disassembly = self._clean_listing(
+                                session.cmd(f"pdf @ {entry_offset}")
+                            )
                         except Exception:  # pragma: no cover - best effort
                             entry_disassembly = None
+                        if isinstance(entry_offset, int):
+                            entry_decompile = self._try_decompile(
+                                session, entry_offset, decompilers
+                            )
                             
             # Get cross-references for main functions
             xref_map: dict[str, list[dict[str, Any]]] = {}
@@ -429,6 +579,12 @@ class Radare2Adapter:
             "disassembly": disassembly,
             "entry_disassembly": entry_disassembly,
             "entry_function": entry_function,
+            "entry_decompile": entry_decompile,
+            "capabilities": {
+                "decompilers": list(decompilers.backends),
+                "r2ghidra": decompilers.r2ghidra,
+                "r2dec": decompilers.r2dec,
+            },
             "snippets": function_snippets,
             "commands": ["aaa", "aflj", "axj", "agj", "pd 256", "agfj", "pDj", "axtj", "afbj"],
         }

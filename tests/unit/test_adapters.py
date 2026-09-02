@@ -162,6 +162,194 @@ class TestRadare2Adapter:
         assert "axt @ reloc.execl" in session.commands
         assert session.closed is True
 
+    def test_quick_entry_uses_function_listing_not_raw_bytes(self):
+        """Unanalyzed `pD N` can tear an instruction; `pdf` after `af` must win."""
+        from r2b.adapters.radare2 import Radare2Adapter
+
+        torn = (
+            "            ;-- main:\n"
+            "            0x08048880      55             push ebp\n"
+            "            0x0804889e      c7             invalid\n"
+        )
+        pdf = (
+            "┌ 382: int main (char **argv, char **envp);\n"
+            "│           0x08048880      55             push ebp\n"
+            "│           0x0804889e      c745f40000..   mov dword [var_ch], 0\n"
+            "│           0x08048930      e8cb000000     call dbg.cgc_check\n"
+        )
+
+        class FakeSession:
+            def __init__(self) -> None:
+                self.commands: list[str] = []
+
+            def cmd(self, command: str) -> str:
+                self.commands.append(command)
+                if command.startswith("pD"):
+                    return torn
+                if command.startswith("pdf"):
+                    return pdf
+                if command.startswith("pdj"):
+                    return "[]"
+                if command.startswith("pd "):
+                    return pdf
+                return ""
+
+        session = FakeSession()
+        entry, listing = Radare2Adapter._quick_entry(
+            session,
+            [{"name": "main", "vaddr": 0x08048880, "type": "FUNC"}],
+            [],
+        )
+        assert entry is not None
+        assert entry["name"] == "main"
+        assert listing is not None
+        last = [line for line in listing.splitlines() if line.strip()][-1]
+        assert "invalid" not in last.lower()
+        assert "cgc_check" in listing
+        assert any(cmd.startswith("pdf") or cmd.startswith("pd ") for cmd in session.commands)
+        assert not any(cmd.startswith("aaa") or cmd.startswith("aaaa") for cmd in session.commands)
+
+    def test_quick_entry_falls_back_to_pd_when_pdf_empty(self):
+        from r2b.adapters.radare2 import Radare2Adapter
+
+        class FakeSession:
+            def __init__(self) -> None:
+                self.commands: list[str] = []
+
+            def cmd(self, command: str) -> str:
+                self.commands.append(command)
+                if command.startswith("pD"):
+                    return "0x0804889e      c7             invalid\n"
+                if command.startswith("pdf"):
+                    return ""
+                if command.startswith("pd "):
+                    return "0x08048880  push ebp\n0x08048881  mov ebp, esp\n"
+                return ""
+
+        _entry, listing = Radare2Adapter._quick_entry(
+            FakeSession(),
+            [{"name": "main", "vaddr": 0x08048880}],
+            [],
+        )
+        assert listing is not None
+        assert "push ebp" in listing
+        assert "invalid" not in listing.lower()
+
+    def test_builtin_pdc_is_not_r2ghidra(self):
+        from r2b.adapters.radare2 import parse_decompiler_backends
+
+        caps = parse_decompiler_backends("pdc\n")
+        assert caps.r2ghidra is False
+        assert caps.r2dec is False
+        assert caps.pdc is True
+        assert "pdc" in caps.backends
+
+    def test_pdg_in_ld_is_r2ghidra(self):
+        from r2b.adapters.radare2 import parse_decompiler_backends
+
+        caps = parse_decompiler_backends("pdc\npdg\n")
+        assert caps.r2ghidra is True
+        assert "pdg" in caps.backends
+
+    def test_pdd_in_ld_is_r2dec(self):
+        from r2b.adapters.radare2 import parse_decompiler_backends
+
+        caps = parse_decompiler_backends("pdc\npdd\n")
+        assert caps.r2dec is True
+        assert caps.r2ghidra is False
+        assert "pdd" in caps.backends
+
+    def test_try_decompile_prefers_pdg_when_listed(self):
+        from r2b.adapters.radare2 import Radare2Adapter, parse_decompiler_backends
+
+        class FakeSession:
+            def __init__(self) -> None:
+                self.commands: list[str] = []
+
+            def cmd(self, command: str) -> str:
+                self.commands.append(command)
+                if command == "pdg":
+                    return "ulong main(void) { return 0; }\n"
+                if command == "pdd":
+                    return "int main() { return 0; }\n"
+                return ""
+
+        caps = parse_decompiler_backends("pdc\npdg\npdd\n")
+        result = Radare2Adapter._try_decompile(FakeSession(), 0x1000, caps)
+        assert result is not None
+        assert result["command"] == "pdg"
+        assert "main" in result["text"]
+
+    def test_try_decompile_skips_when_no_plugin(self):
+        from r2b.adapters.radare2 import Radare2Adapter, parse_decompiler_backends
+
+        class FakeSession:
+            def cmd(self, command: str) -> str:
+                raise AssertionError(f"unexpected command {command}")
+
+        caps = parse_decompiler_backends("pdc\n")
+        assert Radare2Adapter._try_decompile(FakeSession(), 0x1000, caps) is None
+
+    def test_env_probe_does_not_claim_r2ghidra_from_builtin_pdc(self):
+        from r2b.environment.detectors import _r2_decompiler_checks
+
+        with (
+            patch("r2b.environment.detectors.shutil.which", return_value="/usr/bin/r2"),
+            patch(
+                "r2b.environment.detectors.subprocess.check_output",
+                return_value=b"pdc\nR2B_CORE\n",
+            ),
+        ):
+            checks = _r2_decompiler_checks()
+        by_name = {item.name: item for item in checks}
+        assert by_name["r2ghidra"].available is False
+        assert by_name["r2dec"].available is False
+
+
+_PALINDROME = Path("/home/kali/work/github/r2brief/.r2b-corpus/work/darpa-cgc-eval/bin/Palindrome")
+_HELLO = Path(__file__).resolve().parents[2] / "samples" / "bin" / "arm64" / "hello"
+
+
+def _radare2_available() -> bool:
+    from r2b.adapters.radare2 import Radare2Adapter
+
+    return Radare2Adapter().is_available()
+
+
+class TestRadare2QuickListingLive:
+    """Live r2 listing quality. Skips when r2 or the corpus binary is missing."""
+
+    @pytest.mark.skipif(
+        not _PALINDROME.is_file() or not _radare2_available(),
+        reason="radare2 or Palindrome corpus binary missing",
+    )
+    def test_palindrome_quick_listing_is_not_torn_invalid(self):
+        from r2b.adapters.radare2 import Radare2Adapter
+
+        result = Radare2Adapter().quick_scan(_PALINDROME)
+        listing = str(result.get("entry_disassembly") or "")
+        assert listing.strip()
+        code_lines = [line for line in listing.splitlines() if "0x" in line]
+        assert code_lines
+        assert "invalid" not in code_lines[-1].lower()
+        joined = "\n".join(code_lines).lower()
+        assert "invalid" not in joined
+        assert "call" in joined
+        assert "cgc_check" in listing
+        commands = " ".join(str(cmd) for cmd in result.get("commands") or [])
+        assert "aaaa" not in commands.split()
+
+    @pytest.mark.skipif(not _HELLO.is_file() or not _radare2_available(), reason="radare2 or hello sample missing")
+    def test_quick_scan_reports_decompiler_caps_from_ld(self):
+        from r2b.adapters.radare2 import Radare2Adapter
+
+        result = Radare2Adapter().quick_scan(_HELLO)
+        caps = result.get("capabilities") or {}
+        backends = list(caps.get("decompilers") or [])
+        assert caps.get("r2ghidra") is bool("pdg" in backends or "r2ghidra" in backends)
+        if "pdd" in backends:
+            assert caps.get("r2dec") is True
+
 
 class TestCapstoneAdapter:
     """Tests for CapstoneAdapter."""

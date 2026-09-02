@@ -5,6 +5,10 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- `handoff.next_argv` no longer auto-queues `r2b decompile`. It emits
+  `verify` for process-launch imports, extract/brief for wrappers, and
+  `records show` when a record exists. Empty is valid. Function VAs stay
+  on `handoff.regions[].addr`.
 - `r2b decompile` expands `~` in `ghidra.project_dir` and defaults to
   `~/r2b/ghidra-projects`. analyzeHeadless rejects XDG paths whose
   elements start with `.` (including `~/.local/share`), which made the
@@ -24,8 +28,9 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 - Review artifacts include a deterministic evidence-maturity screen. Raw
   pivots remain visible but can be marked low-signal; complete negative import
   verification can lower priority, while partial coverage cannot.
-- `handoff.next_argv` follows subject class: ELF `verify`/`decompile ADDR`,
-  firmware child `brief` or `--extract`. Missing file is exit 1.
+- `handoff.next_argv` follows subject class: ELF `verify` for
+  process-launch imports, firmware child `brief` or `--extract`.
+  Missing file is exit 1.
 - CI smokes `r2b brief /bin/ls --quick --json`. Dependabot is monthly
   grouped. `analyze --json` emits the briefing. `pilot` is hidden.
 - Artifact DAG, sandboxed extract, citation grounding, setup flavors.

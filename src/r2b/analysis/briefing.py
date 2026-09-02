@@ -22,7 +22,6 @@ HANDOFF_SCHEMA_VERSION = "r2b.handoff.v1"
 _HANDOFF_SNIPPET_LINES = 12
 _VERIFY_IMPORTS = ("system", "popen", "execve", "execl", "execvp", "execv")
 _BUFFER_IMPORTS = ("strcpy", "strcat", "sprintf", "vsprintf", "gets", "scanf", "sscanf")
-_CODE_SNIPPET_KINDS = frozenset({"disasm", "decompile"})
 _BRIEF_CHILD_RE = re.compile(r"r2b brief\s+(\S+)")
 _PLACEHOLDER_PATHS = frozenset({"BIN", "<child", "<carve>", "<carve"})
 MAX_REGIONS = 6
@@ -398,7 +397,6 @@ def build_handoff(
     already_verified = bool(briefing.get("verified_imports"))
     regions_out: list[dict[str, Any]] = []
     child_cmds: list[str] = []
-    code_addr: str | None = None
     for region in briefing.get("regions") or []:
         if not isinstance(region, dict):
             continue
@@ -406,7 +404,6 @@ def build_handoff(
         text = str(snippet.get("text") or "")
         snippet_text = "\n".join(text.splitlines()[:_HANDOFF_SNIPPET_LINES])
         addr = snippet.get("address")
-        kind = str(snippet.get("kind") or "")
         regions_out.append(
             {
                 "id": region.get("id"),
@@ -417,14 +414,6 @@ def build_handoff(
                 "snippet": snippet_text,
             }
         )
-        if (
-            not is_container
-            and kind in _CODE_SNIPPET_KINDS
-            and addr
-            and str(addr) not in {"0", "0x0", "0x00"}
-            and code_addr is None
-        ):
-            code_addr = str(addr)
         for action in region.get("next_actions") or []:
             cmd = _child_brief_cmd(str(action))
             if cmd and cmd not in child_cmds:
@@ -444,8 +433,6 @@ def build_handoff(
                     next_argv.append(
                         f"r2b verify {quoted} --import {_r2_import_name(str(name))} --json"
                     )
-        if code_addr:
-            next_argv.append(f"r2b decompile {quoted} {code_addr} --json")
     if record_id:
         next_argv.append(f"r2b records show {record_id[:16]} --json")
     return {

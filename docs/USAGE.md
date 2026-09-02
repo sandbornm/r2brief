@@ -67,11 +67,13 @@ Overlays only configure that optional call. Claude Code / Codex / Grok
 exec the CLI. They are not this process.
 
 `--json` briefing always includes `handoff` (`r2b.handoff.v1`): ranked
-regions with 12-line snippets and `next_argv` (`r2b verify` /
-`decompile ADDR` / `records show`). That is the second-round input for
-another agent. `--ask` is one optional LLM pass on the same briefing;
-`ask_result` rides on the JSON. A planner with its own model skips
-`--ask` and execs `handoff.next_argv`.
+regions with 12-line snippets and `next_argv` (`r2b verify` for
+`system`/`popen`/`exec*`, child `brief`/`--extract` on wrappers,
+`records show`). Function addresses stay on `handoff.regions[].addr`;
+`r2b decompile BIN ADDR` is explicit, not auto-queued. `--ask` is one
+optional LLM pass on the same briefing; `ask_result` rides on the JSON.
+A planner with its own model skips `--ask` and execs `handoff.next_argv`
+when it is non-empty.
 
 Do not feed a briefing into a model to pick the next adapter. That
 duplicates omp / Claude Code plan mode and makes `brief --quick`

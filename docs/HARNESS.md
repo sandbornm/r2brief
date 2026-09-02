@@ -51,11 +51,14 @@ turn `brief` into an LLM plan that then runs `analyze`.
 
 `handoff` is the agent-facing slice: `next_argv` plus compact regions
 (no ask templates). Prefer it over re-parsing `overall_ask`. ELF:
-`verify` only for `system`/`popen`/`exec*`, `decompile` only a function
-VA. Wrapper: `brief` a carved child or `--extract`. Never `decompile 0x0`
-on the blob. `next_argv` may be empty (no useful function VA, or a broad
-runtime/monolith that needs scope first). When `handoff.requires_scope=true`,
-choose one of `scope_options`—dependency, crash address, export, subsystem, or
+`verify` only for `system`/`popen`/`exec*`. Function VAs stay on
+`handoff.regions[].addr`; do not auto-queue `decompile` (Ghidra is
+optional, and decompiling rank-1 `main` is not a reliable next
+command). Wrapper: `brief` a carved child or `--extract`. Never
+`decompile 0x0` on the blob. `next_argv` may be empty (no process-launch
+import, no carved child, or a broad runtime/monolith that needs scope
+first). When `handoff.requires_scope=true`, choose one of
+`scope_options`—dependency, crash address, export, subsystem, or
 version diff—before executing a generic follow-up.
 
 ```bash

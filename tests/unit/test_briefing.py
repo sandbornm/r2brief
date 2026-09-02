@@ -371,7 +371,7 @@ def test_briefing_does_not_dump_full_adapter_bags(tmp_path: Path):
     assert dumped.count("```") <= 24
 
 
-def test_handoff_elf_emits_verify_and_function_decompile(tmp_path: Path) -> None:
+def test_handoff_elf_emits_verify_not_decompile(tmp_path: Path) -> None:
     analysis = _sample_analysis(tmp_path)
     analysis["quick_scan"]["firmware"]["is_elf"] = True
     analysis["quick_scan"]["firmware"]["top_level_format"] = "elf"
@@ -380,9 +380,31 @@ def test_handoff_elf_emits_verify_and_function_decompile(tmp_path: Path) -> None
     briefing = build_briefing(analysis)
     argv = briefing["handoff"]["next_argv"]
     assert any("--import system" in cmd for cmd in argv)
-    assert any("decompile" in cmd and "0x1000" in cmd for cmd in argv)
+    assert not any("decompile" in cmd for cmd in argv)
+    assert any(region.get("addr") for region in briefing["handoff"]["regions"])
     assert not any("--extract" in cmd for cmd in argv)
     assert "Firmware container:" not in briefing["overall_ask"]
+
+
+def test_handoff_entry_only_elf_has_empty_next_argv(tmp_path: Path) -> None:
+    binary = tmp_path / "service"
+    analysis = {
+        "binary": str(binary),
+        "quick_scan": {
+            "firmware": {"is_elf": True, "top_level_format": "elf", "container_type": "executable"},
+            "radare2": {
+                "info": {"bin": {"arch": "x86", "bits": 32, "os": "linux"}, "core": {"format": "elf"}},
+                "imports": [{"name": "cgc_receive"}, {"name": "cgc_transmit"}],
+                "entry_function": {"name": "main", "offset": 0x8048880},
+                "entry_disassembly": "0x8048880  push ebp\n",
+            },
+        },
+        "deep_scan": {},
+        "issues": [],
+    }
+    briefing = build_briefing(analysis)
+    assert briefing["handoff"]["next_argv"] == []
+    assert briefing["handoff"]["regions"][0]["addr"]
 
 
 def test_handoff_strcpy_only_does_not_loop_brief(tmp_path: Path) -> None:

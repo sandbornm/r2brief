@@ -99,6 +99,26 @@ The r2b path matches the labeled function and the 8-bit versus 32-bit
 count. It does not recover the CQE POV (send-to-other-user, wrap, crash
 in `strlen`) and did not score like a CRS.
 
+### Fidelity ladder
+
+Every label the corpus actually ships, and whether this run reached it:
+
+| Level | Palindrome (`CADET_00001`) | basic_messaging (`CROMU_00001`) | r2b |
+|---|---|---|---|
+| Challenge ID | sample, not a CQE scorer in the LL index used here | CQE qualifier | identified via cb-multios names |
+| CWE | 121 | 190 → 131 → 120 | not emitted; matched after decompile |
+| Author prose | 64-byte stack, read 128 | 8-bit unread count, wrap >255, crash in `strlen`; self-send is not enough | matched after decompile |
+| Source `#ifdef PATCHED` | `sizeof(string)` vs `128` in `cgc_check` | `unsigned int` vs `unsigned char count` in `cgc_list_unread_messages` | same sites in the Linux port |
+| DWARF name | `cgc_check` @ `0x08048a00` | `cgc_list_unread_messages` @ `0x0804a7e0` | yes |
+| Instruction | `mov ecx, 0x80` vs `0x40` | `mov byte [count]` vs `mov dword [count]` | yes |
+| POLL | 1 XML: `race` / `racecar` | 899 release + 101 testing; protocol only | pass on sampled POLLs |
+| Official POV | type 1, masks 0/0/0, one 147-byte write | type 1; create `userone`/`usertwo`; 256+ sends **to the other user**; then login triggers unread dump | patched: no core. unpatched: core not registered under qemu-user |
+| angr / KLEE | unconstrained EIP; easter egg `^`; KLEE `service.c:65` | not a published tutorial target | no crashing input generated |
+| CQE CRS score | n/a for this sample | max 1.85/4 (CodeJitsu); Mayhem 0.58; Shellphish/ToB 0; ToB still proved a POV | not a CRS score |
+
+The DECREE sample and this cb-multios Linux build share source semantics and
+differ in VAs. angr's easter-egg address `0x804833E` is the DECREE binary.
+
 ## Runtime
 
 POLLs completed against both variants inside a `linux/amd64` container

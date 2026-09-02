@@ -240,6 +240,68 @@
       "r2b_alignment": "reaches cgc_list_unread_messages and the uchar vs uint count; does not recover the CQE POV or CRS score"
     }
   },
+  "fidelity_ladder": [
+    {
+      "level": "challenge_id",
+      "Palindrome": "CADET_00001 sample",
+      "basic_messaging": "CROMU_00001 CQE qualifier",
+      "r2b": "cb-multios names"
+    },
+    {
+      "level": "cwe",
+      "Palindrome": "121",
+      "basic_messaging": "190 then 131 then 120",
+      "r2b": "not emitted; matched after decompile"
+    },
+    {
+      "level": "author_prose",
+      "Palindrome": "64-byte stack, read 128",
+      "basic_messaging": "8-bit unread count, wrap >255, crash in strlen; self-send not enough",
+      "r2b": "matched after decompile"
+    },
+    {
+      "level": "source_patched_ifdef",
+      "Palindrome": "cgc_check: sizeof(string) vs 128",
+      "basic_messaging": "cgc_list_unread_messages: unsigned int vs unsigned char count",
+      "r2b": "same sites"
+    },
+    {
+      "level": "dwarf_name",
+      "Palindrome": "cgc_check @ 0x08048a00",
+      "basic_messaging": "cgc_list_unread_messages @ 0x0804a7e0",
+      "r2b": "yes"
+    },
+    {
+      "level": "instruction",
+      "Palindrome": "mov ecx, 0x80 vs 0x40",
+      "basic_messaging": "mov byte [count] vs mov dword [count]",
+      "r2b": "yes"
+    },
+    {
+      "level": "poll",
+      "Palindrome": "1 XML: race / racecar",
+      "basic_messaging": "899 release + 101 testing; protocol only",
+      "r2b": "pass on sampled POLLs"
+    },
+    {
+      "level": "official_pov",
+      "Palindrome": "type 1 masks 0/0/0; one 147-byte write",
+      "basic_messaging": "type 1; userone/usertwo; 256+ sends to the other user (cb-multios pov.c 781 transmits, 259 usertwo writes)",
+      "r2b": "patched no core; unpatched core not registered under qemu-user"
+    },
+    {
+      "level": "symbolic_crash_finders",
+      "Palindrome": "angr unconstrained EIP; KLEE service.c:65",
+      "basic_messaging": "no published tutorial",
+      "r2b": "no crashing input generated"
+    },
+    {
+      "level": "cqe_crs_score",
+      "Palindrome": "n/a",
+      "basic_messaging": "max 1.85/4 CodeJitsu; ForAllSecure 0.58; Shellphish/ToB 0; ToB proved a POV",
+      "r2b": "not a CRS score"
+    }
+  ],
   "replay": [
     "python3 scripts/corpus_intake.py fetch darpa-cgc-multios",
     "python3 scripts/corpus_intake.py verify darpa-cgc-multios",

@@ -30,19 +30,23 @@ manifest's seven memory, lifetime, arithmetic, null, and command-injection
 CWEs, then stratify by flow variant and optimization level.
 
 CGC supplies the harder middle tier. Its native port has patched and unpatched
-binaries, POLLs for normal behavior, and POVs for the planted flaws. Build the
-`Palindrome` and `basic_messaging` controls in a disposable Linux builder.
-Compare the static brief and targeted decompilation across each pair. Run POLLs
-or POVs only in a throwaway VM or container with no egress, no host mounts, a
+binaries, POLLs for normal behavior, and POVs for the planted flaws. The
+manifest sparse-checkouts Palindrome, basic_messaging, and a frozen stride of
+seven more `linux-working.txt` names. Build those controls in a disposable
+Linux builder. Compare the static brief and `handoff.next_argv` decompile
+loop across each pair without reading the README first. Run POLLs or POVs
+only in a throwaway VM or container with no egress, no host mounts, a
 non-root user, resource limits, and core dumps kept inside the scratch volume.
 The ordinary r2b benchmark should remain static.
 
 The Kali Pi result is recorded in
 [`darpa-cgc-pilot.md`](case-studies/darpa-cgc-pilot.md) and
 [`darpa-cgc-pilot.json`](case-studies/darpa-cgc-pilot.json). Quick briefs of
-all four i386 ELFs ranked only `entry:main`. Targeted decompilation reached
-`cgc_check` and `cgc_list_unread_messages`. POLLs passed both variants.
-Official type 1 POVs did not register a core under qemu-user without gdb.
+all 18 i386 ELFs ranked only `entry:main`. Following `next_argv` decompiled
+the planted site on Palindrome (`cgc_check`, 0x80 vs 0x40). It missed
+basic_messaging and six other challenges under a two-hop budget. POLLs
+passed both original variants. Official type 1 POVs did not register a core
+under qemu-user without gdb.
 
 A local intake smoke on 2026-09-01 compiled Juliet's baseline CWE-121
 `src_char_declare_cpy_01` into separate good-only and bad-only arm64 Mach-O

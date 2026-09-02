@@ -234,9 +234,12 @@ Do not re-run archived plans. Type `r2b`. `import r2b` is the library.
 - Do not revive `brief --goal`.
 - Later: PyPI `r2brief`, XDG `~/.cache/r2b` / `~/.config/r2b`.
 - Compile is the web panel, not a CLI verb.
-- DARPA CGC pilot: recorded in
-  `docs/case-studies/darpa-cgc-pilot.md`. Kali Pi ran the isolated
-  `linux/amd64` build, quick briefs, POLLs, and POVs. Ghidra one-function
-  decompile of `cgc_check` and `cgc_list_unread_messages` was taken on the
-  same host. Do not install the `analyzers` extra on the Pi.
+- DARPA CGC: recorded in `docs/case-studies/darpa-cgc-pilot.md`. The
+  advertised loop is brief → `handoff.next_argv` → at most two callee
+  hops. That reached `cgc_check` on Palindrome and missed
+  `cgc_list_unread_messages` on basic_messaging. Do not treat the
+  source-named decompile of `cgc_list_unread_messages` as a loop hit.
+  `r2b decompile` needs `ghidra.project_dir` without `.`-prefixed path
+  elements (default `~/r2b/ghidra-projects`). Do not install the
+  `analyzers` extra on the Pi.
 - Archive: `docs/archive/r2b-cli-rename.md` (done). `docs/plans/2026-01-27-unified-tool-execution.md` is superseded (do not absorb a planner).

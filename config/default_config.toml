@@ -95,7 +95,9 @@ bridge_port = 13100
 bridge_timeout = 30
 
 # install_dir is machine-local; set GHIDRA_INSTALL_DIR or override in a local config.
-project_dir = "~/.local/share/r2b/ghidra-projects"
+# analyzeHeadless rejects path elements that start with '.', so this cannot
+# live under XDG ~/.local/share.
+project_dir = "~/r2b/ghidra-projects"
 max_decompile_functions = 20
 max_types = 100
 max_strings = 200

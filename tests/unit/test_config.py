@@ -159,6 +159,20 @@ class TestGhidraSettings:
         assert settings.bridge_host == "192.168.1.1"
         assert settings.bridge_port == 9999
 
+    def test_project_dir_from_tilde_is_home_not_literal(self):
+        """Shipped toml stores ~; Ghidra must not mkdir a cwd-relative ~ tree."""
+        settings = GhidraSettings.model_validate(
+            {"project_dir": "~/r2b/ghidra-projects"}
+        )
+
+        assert settings.project_dir == Path.home() / "r2b/ghidra-projects"
+        assert "~" not in settings.project_dir.parts
+
+    def test_shipped_ghidra_project_dir_has_no_dot_path_elements(self):
+        """analyzeHeadless rejects path elements that start with '.' such as .local."""
+        config = load_config()
+
+        assert not any(part.startswith(".") for part in config.ghidra.project_dir.parts)
 
 
 class TestMerge:

@@ -10,7 +10,7 @@ analyzed; it is never executed. Third-party binaries are not committed.
 | [OpenWrt uHTTPD: following a request to `execl`](uhttpd-aarch64.md) | What path, dispatch, process, and configuration boundaries sit between an HTTP request and CGI launch? |
 | [Review width on three AArch64 programs](review-width-aarch64.md) | When do independent lenses expose a new evidence capsule, and when does another pass add nothing? |
 | [AArch64 first-pass corpus](corpus-aarch64.md) | Which real programs produce a concrete follow-up, and which correctly stop with a thin brief? |
-| [DARPA CGC Palindrome and basic_messaging](darpa-cgc-pilot.md) | Does a quick brief distinguish a CGC patched/unpatched pair, and does one-function decompile reach the planted change? |
+| [DARPA CGC Palindrome and basic_messaging](darpa-cgc-pilot.md) | Does following `handoff.next_argv` reach a planted CGC change without reading the README, or only on a cherry-picked sample? |
 
 GNU Hello is kept separately as a [calibration sample](../calibration/hello-aarch64.md),
 not presented as an investigation. It catches noisy risk language on a known

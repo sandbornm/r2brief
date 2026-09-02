@@ -2,14 +2,25 @@
   "schema_version": "r2b.case-study.v1",
   "case_id": "darpa-cgc-pilot",
   "generated_at": "2026-09-02T05:30:00Z",
-  "status": "pilot recorded",
+  "status": "blind loop recorded",
   "dataset": {
     "vendor": "Trail of Bits cb-multios",
     "source": "https://github.com/trailofbits/cb-multios",
     "commit": "810d7b24b1f62f56ef49b148fe155b0d0629cad2",
     "architecture": "i386",
     "platform": "linux/amd64 container on ARM64 Kali Pi",
-    "selection": ["Palindrome", "basic_messaging"]
+    "selection": [
+      "Palindrome",
+      "basic_messaging",
+      "ASL6parse",
+      "CNMP",
+      "FISHYXML",
+      "Matchmaker",
+      "Overflow_Parking",
+      "root64_and_parcour",
+      "stream_vm2"
+    ],
+    "selection_rule": "Palindrome + basic_messaging + every 28th linux-working.txt line from line 8"
   },
   "host": {
     "uname": "Linux kali-raspberry-pi5 6.1.92-v8+ aarch64",
@@ -132,10 +143,10 @@
   },
   "targeted_decompile": {
     "tool": "Ghidra 12.1.2 analyzeHeadless + DecompileTargets.java",
-    "cli": "r2b decompile returned success=false on this host (empty C, analyzeHeadless rc=1); the same headless script reached both routines when invoked directly",
+    "cli": "After expanding ghidra.project_dir and moving it off ~/.local, r2b decompile of ranked main then of cgc_check succeeded. cgc_list_unread_messages was reached only in a source-guided pass, not the blind loop.",
     "reached": {
-      "cgc_check": true,
-      "cgc_list_unread_messages": true
+      "cgc_check": "via handoff.next_argv plus one callee hop",
+      "cgc_list_unread_messages": "source-guided only; not a loop hit"
     }
   },
   "runtime": {
@@ -216,7 +227,7 @@
         "angr example finds unconstrained EIP from symbolic stdin and the ^ easter egg; DECREE easter-egg address 0x804833E does not match this Linux port.",
         "KLEE on cb-multios Palindrome reports memory error at service.c:65 almost immediately."
       ],
-      "r2b_alignment": "reaches cgc_check and the 0x80 vs 0x40 receive bound; does not emit a crashing input"
+      "r2b_alignment": "brief → decompile main → callee hop decompiles cgc_check and the 0x80 vs 0x40 receive bound; does not emit a crashing input"
     },
     "basic_messaging": {
       "cgc_id": "CROMU_00001",
@@ -237,7 +248,7 @@
         "ForAllSecure, CodeJitsu, and CSDS defended 100% against the reference POV.",
         "Author: sending messages to self is not enough to trigger."
       ],
-      "r2b_alignment": "reaches cgc_list_unread_messages and the uchar vs uint count; does not recover the CQE POV or CRS score"
+      "r2b_alignment": "blind loop missed; source-guided decompile reaches uchar vs uint count; does not recover the CQE POV or CRS score"
     }
   },
   "fidelity_ladder": [
@@ -309,11 +320,75 @@
     "r2b brief Palindrome --quick --no-save --json",
     "r2b review brief.json --mode rules --json"
   ],
+  "blind_loop": {
+    "protocol": [
+      "r2b brief BINARY --quick --no-save --json",
+      "execute handoff.next_argv (r2b decompile ranked address)",
+      "up to 2 extra hops: named callees in decompiled C except libcgc I/O, vaddr from r2 isj"
+    ],
+    "source_consulted_at_runtime": false,
+    "all_briefs_ranked": ["entry:main"],
+    "site_decompiled": ["Palindrome"],
+    "name_on_path_site_not_decompiled": ["CNMP"],
+    "miss": [
+      "basic_messaging",
+      "ASL6parse",
+      "FISHYXML",
+      "Matchmaker",
+      "Overflow_Parking",
+      "root64_and_parcour",
+      "stream_vm2"
+    ],
+    "counts": {
+      "challenges": 9,
+      "binaries": 18,
+      "site_decompiled": 1,
+      "name_on_path": 2
+    },
+    "sha256": {
+      "Palindrome": "96398b59a75a1cc5266946f0e0f1d7ba4c4abee3d917406be080ee58ba665582",
+      "Palindrome_patched": "1c0c86076fd149328b96269feebe4424201da2ea623d7d02067a18c1960791ec",
+      "basic_messaging": "7047c86528d59905b098e2abaf140b6e8671b8fcfd260032d4dc91f5b4982f3e",
+      "basic_messaging_patched": "a8ced942dd6252d8f938baed04f06d73881c998dcfc5e1ad50e6faa02b5518df",
+      "ASL6parse": "a9768a0b81de43bcf1898995ba74773ee9579404e46cd2c763a12e87e055afab",
+      "ASL6parse_patched": "9ed8cf34c3de8e2e23f392d90c9024f75a881af2e4943b14be63815e1f5ff945",
+      "CNMP": "83c530ed41118edb95c86a9270ad6b4304031fb0c23095f5d907da4472a1f5f3",
+      "CNMP_patched": "e6e3d95715ff2e0de2ca5b99c8d12f93efd5e19563067f29b51f8cdecd71e7ef",
+      "FISHYXML": "e9ba64afc76e71ca82691394640fae840b1aae901f9944e8c23b3245d034daab",
+      "FISHYXML_patched": "19ff425de0331714f7da944ec9c4756e2191e9174911588a9e403d60d59412b8",
+      "Matchmaker": "01eff334bdbea35300560be4b5ed74383a3a6c72183cbd976098cff2b7dab432",
+      "Matchmaker_patched": "d1a6ed8e9eaf2208f2edb48ad3f16fec9cc6b5d3242ce6397c62c0f8a4305b67",
+      "Overflow_Parking": "c4698497bd6ee8d19c74fff6a8bf442206c969c5f57125a5f75f09665338f6d8",
+      "Overflow_Parking_patched": "98b140c95dfc961953b2fd9b03fc0efab1d1feca8793862315dd399715d8d3aa",
+      "root64_and_parcour": "41e5c714a69d2127ef7c1aed10761464833363b8f1eaa50181a76562971efcf3",
+      "root64_and_parcour_patched": "66a60233e812cab319d8295466e011e91153bfee35f90591d54c399f1ca9c4e1",
+      "stream_vm2": "683273263feddfd891adff9a1ca1188be2f42484e597127eb87821d6a0f59075",
+      "stream_vm2_patched": "1c511d36d039188762967016b29112779d380154f30b1ebb0c55cf1df917efcc"
+    },
+    "palindrome_site": {
+      "function": "cgc_check",
+      "address": "0x8048a00",
+      "unpatched": "cgc_receive_delim(0, string, 0x80, '\\n'); char string[64];",
+      "patched": "cgc_receive_delim(0, string, 0x40, '\\n'); char string[64];",
+      "path": "brief ranks main 0x8048880 → decompile main → callee cgc_check → decompile 0x8048a00"
+    },
+    "tools_alone": {
+      "r2_pdf_main": "r2 -qc 'aaa; pdf @ main' already shows call dbg.cgc_check",
+      "brief_snippet": "12-line snippet stops on a broken c7 invalid encoding and does not show the call",
+      "r2b_extra": "handoff.next_argv decompiles the ranked address to Ghidra C, then hops named callees"
+    },
+    "decompile_cli": {
+      "was": "empty C; analyzeHeadless rc=1",
+      "cause": "unexpanded ~ created a cwd-relative ~ tree; Ghidra rejects path elements starting with '.' such as .local",
+      "fix": "expanduser on ghidra.project_dir; default ~/r2b/ghidra-projects"
+    }
+  },
   "limits": [
     "Identical quick ranking across each pair is the recorded result, not a scoring failure. The brief never sees strcpy/recv; the patch lives in libcgc-facing helpers named by DWARF.",
+    "Following handoff.next_argv decompiled the planted site on Palindrome only (1/9). CNMP showed cgc_insert_joke as a callee. The other seven missed under a 2-hop budget.",
+    "The earlier source-guided decompile of cgc_list_unread_messages is not a loop result.",
     "verify was not forced: there is no relevant external import sink.",
     "Official type 1 POVs did not register a core under qemu-user linux/amd64 without gdb. POLLs passed on both variants. Patched POVs correctly did not core.",
-    "r2b decompile CLI returned empty C on this host; Ghidra headless with DecompileTargets.java reached both routines.",
     "Raw target bytes, POLL/POV transcripts, and the builder image stay out of git."
   ]
 }

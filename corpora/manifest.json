@@ -38,6 +38,13 @@
       "sparse_paths": [
         "challenges/Palindrome",
         "challenges/basic_messaging",
+        "challenges/ASL6parse",
+        "challenges/CNMP",
+        "challenges/FISHYXML",
+        "challenges/Matchmaker",
+        "challenges/Overflow_Parking",
+        "challenges/root64_and_parcour",
+        "challenges/stream_vm2",
         "cmake",
         "exclude",
         "include",

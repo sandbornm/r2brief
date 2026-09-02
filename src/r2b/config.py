@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .paths import find_checkout_root, shipped_config_dir
 
@@ -139,10 +139,24 @@ class GhidraSettings(BaseModel):
     bridge_port: int = 13100
     bridge_timeout: int = 30
     install_dir: Path | None = None
-    project_dir: Path = Field(default=Path("~/.local/share/r2b/ghidra-projects").expanduser())
+    project_dir: Path = Field(default=Path("~/r2b/ghidra-projects").expanduser())
     max_decompile_functions: int = 20
     max_types: int = 100
     max_strings: int = 200
+
+    @field_validator("project_dir", mode="before")
+    @classmethod
+    def _expand_project_dir(cls, value: Any) -> Path:
+        if value in (None, ""):
+            return Path("~/r2b/ghidra-projects").expanduser()
+        return Path(str(value)).expanduser()
+
+    @field_validator("install_dir", mode="before")
+    @classmethod
+    def _expand_install_dir(cls, value: Any) -> Path | None:
+        if value in (None, ""):
+            return None
+        return Path(str(value)).expanduser()
 
 
 

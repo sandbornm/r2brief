@@ -5,6 +5,10 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- `r2b decompile` expands `~` in `ghidra.project_dir` and defaults to
+  `~/r2b/ghidra-projects`. analyzeHeadless rejects XDG paths whose
+  elements start with `.` (including `~/.local/share`), which made the
+  advertised `handoff.next_argv` decompile command return empty C.
 - CLI binaries are `r2b` and `r2b-web`. Library import, schema ids, and
   `R2B_*` env vars use the same surface.
 - AArch64 verification recognizes direct `bl` and indirect `blr` calls and

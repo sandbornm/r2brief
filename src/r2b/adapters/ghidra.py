@@ -109,13 +109,14 @@ class GhidraAdapter:
         script = self._script_path("DecompileTargets.java")
 
         hex_addr = address.lower().removeprefix("0x")
-        self.project_dir.mkdir(parents=True, exist_ok=True)
+        project_dir = Path(self.project_dir).expanduser()
+        project_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(suffix=".c", delete=False) as tmp:
             output_path = tmp.name
 
         command = [
             str(self.detection.headless_path),
-            str(self.project_dir),
+            str(project_dir),
             f"r2b-fn-{binary.name}",
             "-import",
             str(binary),
@@ -143,6 +144,7 @@ class GhidraAdapter:
                 "c": text,
                 "returncode": completed.returncode,
                 "stderr": (completed.stderr or "")[-800:],
+                "stdout": (completed.stdout or "")[-2000:],
             }
         finally:
             Path(output_path).unlink(missing_ok=True)
@@ -253,9 +255,8 @@ class GhidraAdapter:
 
         project_name = project_name or self.default_project
         script = script or self._script_path("R2BHeadless.java")
-
-        # Ensure project directory exists
-        self.project_dir.mkdir(parents=True, exist_ok=True)
+        project_dir = Path(self.project_dir).expanduser()
+        project_dir.mkdir(parents=True, exist_ok=True)
 
         # Create temp file for JSON output
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
@@ -263,7 +264,7 @@ class GhidraAdapter:
 
         command = [
             str(self.detection.headless_path),
-            str(self.project_dir),
+            str(project_dir),
             project_name,
             "-import", str(binary),
             "-overwrite",

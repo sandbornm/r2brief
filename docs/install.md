@@ -61,6 +61,16 @@ uv run r2b env --json
 uv run r2b brief /bin/ls --quick --verify --json
 ```
 
+The installer also proves the package import, entry point, environment report,
+and a no-save briefing. For the short command used throughout the docs:
+
+```bash
+source .venv/bin/activate
+r2b brief /bin/ls --quick --json
+```
+
+Without activation, use `uv run --no-sync r2b ...` from the checkout.
+
 No `R2B_CONFIG` in a checkout. Local exo / vLLM: skip the key, set
 `base_url` in `config/local.toml`. Overlay list:
 [README](../README.md#optional-model-hosts).

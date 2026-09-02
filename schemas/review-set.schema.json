@@ -32,6 +32,7 @@
       "minItems": 1,
       "items": { "$ref": "review.schema.json#/$defs/baseOrderEntry" }
     },
+    "noise_assessment": { "$ref": "review.schema.json#/$defs/noiseAssessment" },
     "lenses": {
       "type": "array",
       "minItems": 1,

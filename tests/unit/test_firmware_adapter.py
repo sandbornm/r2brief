@@ -28,7 +28,7 @@ def test_firmware_adapter_detects_embedded_components(tmp_path: Path):
     path = tmp_path / "router.bin"
     path.write_bytes(firmware)
 
-    result = FirmwareAdapter(run_binwalk=False).quick_scan(path)
+    result = FirmwareAdapter(run_binwalk=False, enable_carving=True).quick_scan(path)
 
     assert result["mode"] == "firmware_inventory"
     assert result["is_elf"] is False
@@ -45,6 +45,48 @@ def test_firmware_adapter_detects_embedded_components(tmp_path: Path):
     carved_path = Path(elf_target["carved_path"])
     assert carved_path.exists()
     assert carved_path.read_bytes().startswith(b"\x7fELF")
+
+
+def test_firmware_inventory_does_not_write_without_extract(tmp_path: Path):
+    firmware = bytearray(b"\x00" * 0x2200)
+    firmware[0x1000:0x1004] = b"hsqs"
+    firmware[0x2000:0x2004] = b"\x7fELF"
+    path = tmp_path / "router.bin"
+    path.write_bytes(firmware)
+    artifacts_dir = tmp_path / "artifacts"
+
+    result = FirmwareAdapter(
+        run_binwalk=False,
+        artifacts_dir=artifacts_dir,
+    ).quick_scan(path)
+
+    assert result["recommended_targets"]
+    assert result["carved_targets"] == []
+    assert result["extraction"]["enabled"] is False
+    assert not artifacts_dir.exists()
+
+
+def test_firmware_carving_honors_aggregate_budget(tmp_path: Path):
+    firmware = bytearray(b"\x00" * 0x5000)
+    firmware[0x1000:0x1004] = b"hsqs"
+    firmware[0x2000:0x2004] = b"\x7fELF"
+    firmware[0x3000:0x3004] = b"hsqs"
+    path = tmp_path / "router.bin"
+    path.write_bytes(firmware)
+
+    result = FirmwareAdapter(
+        run_binwalk=False,
+        enable_carving=True,
+        artifacts_dir=tmp_path / "artifacts",
+        max_carve_bytes=4096,
+        max_total_carve_bytes=5000,
+        max_carved_files=2,
+    ).quick_scan(path)
+
+    targets = result["carved_targets"]
+    assert len(targets) <= 2
+    assert sum(item["carved_size"] for item in targets) <= 5000
+    assert result["extraction"]["max_total_carve_bytes"] == 5000
 
 
 def test_firmware_adapter_detects_tplink_cloud_and_img0(tmp_path: Path):

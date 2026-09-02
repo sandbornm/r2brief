@@ -30,6 +30,8 @@ RUN apt-get update && \
         python3-dev \
         radare2 \
         curl \
+        bubblewrap \
+        squashfs-tools \
         # ARM cross-compilation toolchains
         gcc-arm-linux-gnueabihf \
         libc6-dev-armhf-cross \

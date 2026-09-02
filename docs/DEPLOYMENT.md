@@ -108,6 +108,18 @@ shipped services in v0.1.
 
 - Quarantine untrusted bytes and deny network egress on intake workers.
 - Never execute a target in the core or extraction tier.
+- Firmware inventory is read-only. `--extract` is explicit, and external
+  extractors fail closed unless bubblewrap can remove network access. The
+  `allow_unsafe_fallback` override is for an already isolated host only.
+- `/api/tools/execute` and `/api/ghidra/execute-script` are disabled by
+  default. Enabling `[web].enable_script_execution` also requires an
+  `Authorization: Bearer` value matching `R2B_WEB_EXECUTION_TOKEN`.
+- Frida or GEF requests through `/api/analyze` require the same token and
+  `[web].enable_native_execution=true`.
+- The reference Compose ports bind to loopback and drop Linux capabilities.
+  A public deployment still needs authentication, TLS, request limits, and a
+  separate disposable execution worker; do not expose this Flask service
+  directly to the internet.
 - Put runtime analysis on a separate queue and isolation boundary.
 - Verify hashes after download and before publishing results.
 - Use short-lived object-store credentials or signed URLs; never embed secrets

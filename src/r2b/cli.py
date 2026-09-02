@@ -278,7 +278,7 @@ def review(
     ),
     json_output: bool = typer.Option(False, "--json", help="Emit versioned review JSON"),
 ) -> None:
-    """Compare the fixed point-table order with an optional model order."""
+    """Screen evidence maturity and optionally compare a model order."""
 
     try:
         selected_mode = normalize_review_mode(mode)
@@ -332,22 +332,35 @@ def _render_review(payload: dict[str, Any]) -> None:
     table = Table(title=f"Region review · {payload.get('mode')}")
     table.add_column("Rules", justify="right")
     table.add_column("Model", justify="right")
+    table.add_column("Signal")
+    table.add_column("Evidence")
     table.add_column("Region")
     model_order = payload.get("model_order")
     model_ranks = {
         str(item.get("region_id")): item.get("rank")
         for item in model_order if isinstance(item, dict)
     } if isinstance(model_order, list) else {}
+    assessment = payload.get("noise_assessment")
+    noise_rows = assessment.get("regions") if isinstance(assessment, dict) else []
+    noise_by_region = {
+        str(item.get("region_id")): item
+        for item in noise_rows
+        if isinstance(item, dict)
+    } if isinstance(noise_rows, list) else {}
     for item in payload.get("base_order") or []:
         if not isinstance(item, dict):
             continue
         region_id = str(item.get("region_id") or "")
+        noise = noise_by_region.get(region_id, {})
         table.add_row(
             str(item.get("rank") or "-"),
             str(model_ranks.get(region_id, "-")),
+            str(noise.get("disposition") or "-").replace("_", " "),
+            str(noise.get("claim_strength") or "-"),
             f"{item.get('title') or region_id} [dim]({region_id})[/]",
         )
     console.print(table)
+    _render_noise_summary(payload)
     disagreements = payload.get("disagreements") or []
     if disagreements:
         console.print(f"[yellow]{len(disagreements)} rank disagreement(s)[/]")
@@ -376,8 +389,26 @@ def _render_review_set(payload: dict[str, Any]) -> None:
             str(item.get("model_calls")),
         )
     console.print(table)
+    _render_noise_summary(payload)
     console.print(
         "[dim]One briefing; independent fan-out; evidence IDs are deduplicated in the overlay.[/]"
+    )
+
+
+def _render_noise_summary(payload: dict[str, Any]) -> None:
+    assessment = payload.get("noise_assessment")
+    summary = assessment.get("summary") if isinstance(assessment, dict) else None
+    if not isinstance(summary, dict):
+        return
+    behavior_ids = assessment.get("supported_behavior_region_ids")
+    behavior_count = len(behavior_ids) if isinstance(behavior_ids, list) else 0
+    console.print(
+        "[dim]Evidence screen: "
+        f"{summary.get('actionable', 0)} actionable · "
+        f"{summary.get('needs_confirmation', 0)} needs confirmation · "
+        f"{summary.get('low_signal', 0)} low-signal · "
+        f"{behavior_count} supported behavior. "
+        "Low-signal does not mean safe.[/]"
     )
 
 

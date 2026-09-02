@@ -165,9 +165,12 @@ class FirmwareAdapter:
     artifacts_dir: Path | None = None
     max_scan_bytes: int = 256 * _MIB
     max_carve_bytes: int = 64 * _MIB
+    max_total_carve_bytes: int = 64 * _MIB
+    max_carved_files: int = 25
     max_hits_per_signature: int = 40
     binwalk_timeout: int = 45
     run_binwalk: bool = True
+    enable_carving: bool = False
 
     def is_available(self) -> bool:
         return True
@@ -213,7 +216,11 @@ class FirmwareAdapter:
             ][:25]
         for artifact in artifacts:
             artifact.update(self._analysis_routing(artifact))
-        carved_targets = self._carve_targets(binary, artifacts, recommended_targets, size_bytes)
+        carved_targets = (
+            self._carve_targets(binary, artifacts, recommended_targets, size_bytes)
+            if self.enable_carving
+            else []
+        )
         fanout_tasks = self._build_fanout_tasks(carved_targets or recommended_targets)
 
         return {
@@ -239,10 +246,12 @@ class FirmwareAdapter:
             "string_signals": string_signals,
             "entropy": entropy,
             "extraction": {
-                "enabled": True,
-                "output_dir": str(self._output_dir(binary)),
+                "enabled": self.enable_carving,
+                "output_dir": str(self._output_dir(binary)) if self.enable_carving else None,
                 "carved_count": len(carved_targets),
                 "max_carve_bytes": self.max_carve_bytes,
+                "max_total_carve_bytes": self.max_total_carve_bytes,
+                "max_carved_files": self.max_carved_files,
                 "strategy": "bounded signature carving; use binwalk/unsquashfs for full filesystem extraction",
             },
             "notes": self._notes(
@@ -593,12 +602,19 @@ class FirmwareAdapter:
             }
         )
         carved: list[dict[str, Any]] = []
+        total_carved = 0
         with binary.open("rb") as handle:
-            for index, target in enumerate(recommended_targets[:25], start=1):
+            for index, target in enumerate(recommended_targets[: self.max_carved_files], start=1):
                 offset = int(target.get("offset", -1))
                 if offset <= 0 or offset >= size_bytes:
                     continue
-                carve_size = self._carve_size(target, offset, offsets, size_bytes)
+                remaining = self.max_total_carve_bytes - total_carved
+                if remaining <= 0:
+                    break
+                carve_size = min(
+                    self._carve_size(target, offset, offsets, size_bytes),
+                    remaining,
+                )
                 if carve_size <= 0:
                     continue
                 handle.seek(offset)
@@ -608,6 +624,7 @@ class FirmwareAdapter:
                 filename = self._carve_filename(index, target, data)
                 path = output_dir / filename
                 path.write_bytes(data)
+                total_carved += len(data)
                 carved_target = dict(target)
                 carved_target.update({
                     "carved_path": str(path),

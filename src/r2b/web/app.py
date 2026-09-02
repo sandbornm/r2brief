@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import queue
+import secrets
 import threading
 import time
 import uuid
@@ -113,6 +114,28 @@ def _format_size(size_bytes: int) -> str:
     if size_bytes >= 1024:
         return f"{size_bytes / 1024:.0f} KB"
     return f"{size_bytes} B"
+
+
+def _execution_denial(state: AppState, setting: str) -> tuple[Any, int] | None:
+    """Require both an explicit capability gate and a per-request bearer token."""
+    web = getattr(state.config, "web", None)
+    if getattr(web, setting, False) is not True:
+        return jsonify({
+            "error": f"execution disabled; set [web].{setting}=true to opt in"
+        }), 403
+
+    token_env = str(getattr(web, "execution_token_env", "") or "")
+    expected = os.getenv(token_env) if token_env else None
+    if not expected:
+        return jsonify({
+            "error": f"execution gate is enabled but {token_env or 'execution_token_env'} is unset"
+        }), 503
+
+    authorization = request.headers.get("Authorization", "")
+    supplied = authorization[7:] if authorization.startswith("Bearer ") else ""
+    if not supplied or not secrets.compare_digest(supplied, expected):
+        return jsonify({"error": "valid execution bearer token required"}), 401
+    return None
 
 
 def _analysis_result_cache_key(binary: Path, plan: Any, config: AppConfig) -> str:
@@ -1510,6 +1533,11 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             if "enable_ghidra" not in body:
                 enable_ghidra = True
 
+        if enable_gef or enable_frida:
+            denial = _execution_denial(state, "enable_native_execution")
+            if denial is not None:
+                return denial
+
         debug.analysis_start(binary_path or "unknown", {
             "analysis_profile": analysis_profile,
             "quick_only": quick_only,
@@ -2098,6 +2126,9 @@ Generate ONLY the script code, no explanations before or after. The script shoul
     @app.post("/api/ghidra/execute-script")
     def execute_ghidra_script() -> Any:
         """Execute a Ghidra script via bridge or headless mode."""
+        denial = _execution_denial(state, "enable_script_execution")
+        if denial is not None:
+            return denial
         data = request.get_json() or {}
         session_id = data.get("session_id")
         script = data.get("script", "")
@@ -2204,6 +2235,9 @@ Generate ONLY the script code, no explanations before or after. The script shoul
             execution: Execution result with status, stdout, stderr
             result: Parsed output data
         """
+        denial = _execution_denial(state, "enable_script_execution")
+        if denial is not None:
+            return denial
         data = request.get_json() or {}
 
         # Validate required fields

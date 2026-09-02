@@ -441,7 +441,9 @@ def build_handoff(
             for name in list(subject.get("dangerous_imports") or []):
                 base = _basename(str(name))
                 if base in _VERIFY_IMPORTS and sum(" verify " in cmd for cmd in next_argv) < 4:
-                    next_argv.append(f"r2b verify {quoted} --import {base} --json")
+                    next_argv.append(
+                        f"r2b verify {quoted} --import {_r2_import_name(str(name))} --json"
+                    )
         if code_addr:
             next_argv.append(f"r2b decompile {quoted} {code_addr} --json")
     if record_id:
@@ -1001,6 +1003,7 @@ def _import_regions(r2_quick: dict[str, Any]) -> list[RegionAsk]:
         hits = [names_by_base[base] for base in bases]
         dangerous = any(base in _DANGEROUS_IMPORTS for base in bases)
         artifact_id = f"imports:{group_id}"
+        first_import = _r2_import_name(names_by_base[bases[0]])
         regions.append(
             RegionAsk(
                 id=artifact_id,
@@ -1012,11 +1015,11 @@ def _import_regions(r2_quick: dict[str, Any]) -> list[RegionAsk]:
                     source="radare2",
                     kind="inventory",
                     text="\n".join(hits[:16]),
-                    xref=bases[0],
+                    xref=first_import,
                     artifact_id=artifact_id,
                 ),
                 next_actions=[
-                    f"r2: `ii` then `axt @ sym.imp.{bases[0]}` to find the first caller.",
+                    f"r2: `ii` then `axt @ sym.imp.{first_import}` to find the first caller.",
                     "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim.",
                 ],
             )
@@ -1344,7 +1347,7 @@ def _overall_next_steps(
         steps.append("This is already an executable. Rank named symbols / entry; do not unpack it as firmware.")
     if subject.get("dangerous_imports"):
         first = subject["dangerous_imports"][0]
-        steps.append(f"r2: `axt @ sym.imp.{_basename(first)}` and brief that caller.")
+        steps.append(f"r2: `axt @ sym.imp.{_r2_import_name(first)}` and brief that caller.")
     if regions:
         top = regions[0]
         addr = top.snippet.address if top.snippet else None
@@ -1500,6 +1503,11 @@ def _basename(symbol: str) -> str:
         name = name.split("_", 1)[1]
     name = re.sub(r"_chk$", "", name)
     return name
+
+
+def _r2_import_name(symbol: str) -> str:
+    """Preserve the importer-visible symbol spelling used by radare2 flags."""
+    return re.sub(r"^(sym\.imp\.|imp\.|sym\.)", "", symbol).split("@", 1)[0]
 
 
 def _arch_label(info: dict[str, Any], profile: dict[str, Any]) -> str | None:

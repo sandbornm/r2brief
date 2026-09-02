@@ -151,12 +151,26 @@ def _plan_for(
         else:
             notes.append("Optional symbolic: uv sync --extra symbolic")
         apt.extend(["binwalk3", "squashfs-tools"])
-        notes.append("Extractors stay off until `brief --extract`.")
+        if facts.os == "linux":
+            apt.append("bubblewrap")
+        else:
+            skip.append({
+                "name": "extractor-isolation",
+                "reason": "bubblewrap requires Linux; use a no-egress Linux worker for untrusted extraction",
+            })
+        notes.append("Extractors stay off until `brief --extract` and fail closed without bubblewrap.")
         notes.append("Optional --ask SDKs: uv sync --extra llm (Ollama needs none).")
     else:
         extra = "analyzers"
         why = "16 GB+ x86_64 — full extra set. Still don't dump whole-binary Ghidra."
-        apt.extend(["binwalk3", "squashfs-tools", "bubblewrap"])
+        apt.extend(["binwalk3", "squashfs-tools"])
+        if facts.os == "linux":
+            apt.append("bubblewrap")
+        else:
+            skip.append({
+                "name": "extractor-isolation",
+                "reason": "bubblewrap requires Linux; use a no-egress Linux worker for untrusted extraction",
+            })
         notes.append("r2b ghidra setup --version 11.4.2 then export GHIDRA_INSTALL_DIR")
         notes.append("Optional --ask SDKs: uv sync --extra llm (Ollama needs none).")
         if facts.node:

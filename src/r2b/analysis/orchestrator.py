@@ -83,6 +83,9 @@ class AnalysisOrchestrator:
         adapters.append(cast(AnalyzerAdapter, AutoProfileAdapter()))
         adapters.append(cast(AnalyzerAdapter, FirmwareAdapter(
             artifacts_dir=config.output.artifacts_dir / "firmware",
+            enable_carving=config.extract.enable,
+            max_total_carve_bytes=config.extract.max_bytes,
+            max_carved_files=config.extract.max_files,
         )))
         adapters.append(cast(AnalyzerAdapter, LibmagicAdapter()))
         adapters.append(cast(AnalyzerAdapter, Radare2Adapter()))
@@ -759,6 +762,7 @@ class AnalysisOrchestrator:
                     max_files=settings.max_files,
                     max_bytes=settings.max_bytes,
                     max_depth=settings.max_depth,
+                    allow_unsafe_fallback=settings.allow_unsafe_fallback,
                 ),
                 run_extractors=run_extractors,
                 extract_elf=settings.extract_elf,
@@ -766,7 +770,7 @@ class AnalysisOrchestrator:
             compact = compact_dag(dag)
             result.quick_scan["artifact_dag"] = compact
             digest = str(dag.get("sha256") or "")
-            if digest:
+            if digest and self._config.output.save_artifacts:
                 dump_dag(
                     self._config.output.artifacts_dir / "dags" / digest[:2] / digest / "dag.json",
                     dag,

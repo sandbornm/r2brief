@@ -102,6 +102,27 @@ r2b review brief.json --mode llm --thesis 'trace request data to process launch'
 r2b review brief.json --mode both --thesis 'trace request data to process launch' --json
 ```
 
+Every review also includes a deterministic `noise_assessment`. It labels each
+region as `actionable`, `needs_confirmation`, or `low_signal`, and records the
+claim strength separately as `observed`, `corroborated`, `lead`, or `inventory`.
+This prevents an import, raw string, signature, or generic entry point from
+reading like confirmed behavior. `focus_region_ids` omits low-signal regions
+without deleting them from the artifact.
+`supported_behavior_region_ids` is stricter: it requires runtime evidence or
+both a caller/xref and data flow. A direct call site alone does not enter it.
+
+The screen can use `brief --verify` results. A fully covered import group with
+only `no-callers` or `all-constant` results can become low-signal. Partial
+coverage cannot lower the group, and a dynamic or mixed caller makes it
+actionable. Low-signal means “defer with the current evidence,” not “safe.”
+
+```bash
+r2b brief ./httpd --quick --verify --no-save --json > brief.json
+r2b review brief.json --mode both \
+  --thesis 'put corroborated caller and data-flow evidence ahead of raw pivots' \
+  --json
+```
+
 | Mode | Model call | Output |
 |---|---:|---|
 | `rules` | no | immutable base order copied from the briefing |
@@ -115,8 +136,9 @@ must cite an evidence ID assigned to that region. Unknown, duplicate, or
 missing region IDs and unknown evidence IDs fail closed.
 
 This validation constrains references; it does not prove the model's prose.
-Reasons remain proposals. `r2b.review.v1` records the briefing and candidate
-hashes plus provider/transport metadata. Tool calls are disabled in this first
+The model may only propose another order. It cannot assign the deterministic
+disposition or declare a region benign. `r2b.review.v1` records the briefing
+and candidate hashes plus provider/transport metadata. Tool calls are disabled in this first
 contract version (`tool_rounds=0`), so review cannot run a target, shell
 command, verifier, or decompiler.
 

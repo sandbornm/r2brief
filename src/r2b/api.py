@@ -185,6 +185,7 @@ def analyze(
         Path(config_path).expanduser() if config_path is not None else None
     )
     loaded.analysis.enable_trajectory_recording = False
+    loaded.output.save_artifacts = False
     if opts.extract:
         loaded.extract.enable = True
 
@@ -296,7 +297,8 @@ def review(
 
     With no ``width``, this returns the original ``r2b.review.v1`` document.
     Set ``width`` to fan out independent lenses and return
-    ``r2b.review-set.v1``. No review executes tools or changes briefing scores.
+    ``r2b.review-set.v1``. Both include a deterministic evidence-maturity
+    screen. No review executes tools or changes briefing scores.
     """
 
     if isinstance(analysis, AnalysisReport):

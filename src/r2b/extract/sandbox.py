@@ -1,15 +1,18 @@
 """Run extractors with a tight timeout, isolated output dir, and no network.
 
-Uses bubblewrap when present (``--unshare-net``). Falls back to a subprocess
-with a scrubbed environment. Neither path is a full VM; both bound depth/size
-are enforced by the caller after the process exits.
+Uses bubblewrap when present (``--unshare-net``). If bubblewrap is unavailable,
+execution fails closed unless the caller explicitly accepts an unsafe subprocess
+fallback. Byte and file output is sampled while the process runs and pruned to
+the configured limits before results are returned.
 """
 
 from __future__ import annotations
 
 import os
+import signal
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -21,6 +24,7 @@ class ExtractLimits:
     max_files: int = 200
     max_bytes: int = 64 * 1024 * 1024
     max_depth: int = 2
+    allow_unsafe_fallback: bool = False
 
 
 @dataclass(slots=True)
@@ -120,49 +124,102 @@ def run_sandboxed(
             extra_ro_binds=extra_ro_binds,
         )
         notes.append("extractor ran under bubblewrap --unshare-net")
+    elif limits.allow_unsafe_fallback:
+        notes.append(
+            "UNSAFE override: bubblewrap missing; extractor ran without filesystem or network isolation"
+        )
     else:
-        notes.append("bubblewrap missing; extractor ran as a timed subprocess without network isolation")
-
-    try:
-        completed = subprocess.run(
-            wrapped,
-            cwd=str(output_dir),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=max(1, limits.timeout_s),
-            check=False,
+        notes.append(
+            "extractor blocked: bubblewrap is unavailable and allow_unsafe_fallback is false"
         )
-        notes.extend(enforce_limits(output_dir, limits))
         return SandboxResult(
             argv=list(argv),
-            returncode=completed.returncode,
-            stdout=completed.stdout[-8000:],
-            stderr=completed.stderr[-8000:],
+            returncode=126,
+            stdout="",
+            stderr="extractor isolation unavailable",
             timed_out=False,
-            sandbox=sandbox,
+            sandbox="unavailable",
             output_dir=output_dir,
             notes=notes,
         )
-    except subprocess.TimeoutExpired as exc:
-        stdout = (exc.stdout or b"") if isinstance(exc.stdout, (bytes, bytearray)) else (exc.stdout or "")
-        stderr = (exc.stderr or b"") if isinstance(exc.stderr, (bytes, bytearray)) else (exc.stderr or "")
-        if isinstance(stdout, (bytes, bytearray)):
-            stdout = stdout.decode("utf-8", "replace")
-        if isinstance(stderr, (bytes, bytearray)):
-            stderr = stderr.decode("utf-8", "replace")
-        notes.append(f"extractor timed out after {limits.timeout_s}s")
-        notes.extend(enforce_limits(output_dir, limits))
-        return SandboxResult(
-            argv=list(argv),
-            returncode=124,
-            stdout=str(stdout)[-8000:],
-            stderr=str(stderr)[-8000:],
-            timed_out=True,
-            sandbox=sandbox,
-            output_dir=output_dir,
-            notes=notes,
-        )
+
+    process = subprocess.Popen(
+        wrapped,
+        cwd=str(output_dir),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + max(1, limits.timeout_s)
+    returncode = 0
+    timed_out = False
+    stdout = ""
+    stderr = ""
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out = True
+            returncode = 124
+            notes.append(f"extractor timed out after {limits.timeout_s}s")
+            _terminate_process_group(process)
+            stdout, stderr = process.communicate()
+            break
+        try:
+            stdout, stderr = process.communicate(timeout=min(0.25, remaining))
+            returncode = int(process.returncode or 0)
+            break
+        except subprocess.TimeoutExpired:
+            files, total = _output_usage(output_dir)
+            if files > limits.max_files or total > limits.max_bytes:
+                returncode = 125
+                notes.append(
+                    "extractor terminated after crossing the live output limit: "
+                    f"{files} files / {total} bytes"
+                )
+                _terminate_process_group(process)
+                stdout, stderr = process.communicate()
+                break
+
+    notes.extend(enforce_limits(output_dir, limits))
+    return SandboxResult(
+        argv=list(argv),
+        returncode=returncode,
+        stdout=stdout[-8000:],
+        stderr=stderr[-8000:],
+        timed_out=timed_out,
+        sandbox=sandbox,
+        output_dir=output_dir,
+        notes=notes,
+    )
+
+
+def _output_usage(output_dir: Path) -> tuple[int, int]:
+    files = 0
+    total = 0
+    for path in output_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            total += path.stat().st_size
+            files += 1
+        except OSError:
+            continue
+    return files, total
+
+
+def _terminate_process_group(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=1)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            process.kill()
 
 
 def _bwrap_argv(

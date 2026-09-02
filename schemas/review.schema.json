@@ -37,6 +37,7 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/baseOrderEntry" }
     },
+    "noise_assessment": { "$ref": "#/$defs/noiseAssessment" },
     "model_order": {
       "oneOf": [
         { "type": "null" },
@@ -106,6 +107,90 @@
         "base_rank": { "type": "integer", "minimum": 1 },
         "model_rank": { "type": "integer", "minimum": 1 },
         "rank_shift": { "type": "integer" }
+      }
+    },
+    "noiseAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "method",
+        "model_role",
+        "summary",
+        "focus_region_ids",
+        "supported_behavior_region_ids",
+        "regions"
+      ],
+      "properties": {
+        "policy_id": { "const": "r2b.noise.v1" },
+        "method": { "const": "deterministic_evidence_maturity" },
+        "model_role": { "const": "ordering_only" },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["actionable", "needs_confirmation", "low_signal"],
+          "properties": {
+            "actionable": { "type": "integer", "minimum": 0 },
+            "needs_confirmation": { "type": "integer", "minimum": 0 },
+            "low_signal": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "focus_region_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "supported_behavior_region_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "regions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/noiseRegion" }
+        }
+      }
+    },
+    "noiseRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "region_id",
+        "base_rank",
+        "disposition",
+        "claim_strength",
+        "reason",
+        "missing_evidence",
+        "verification_evidence",
+        "evidence_ids"
+      ],
+      "properties": {
+        "region_id": { "type": "string", "minLength": 1 },
+        "base_rank": { "type": "integer", "minimum": 1 },
+        "disposition": {
+          "enum": ["actionable", "needs_confirmation", "low_signal"]
+        },
+        "claim_strength": {
+          "enum": ["observed", "corroborated", "lead", "inventory"]
+        },
+        "reason": { "type": "string", "minLength": 1 },
+        "missing_evidence": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "verification_evidence": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
       }
     },
     "modelMetadata": {

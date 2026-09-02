@@ -297,6 +297,7 @@ def _safe_config(config: AppConfig | None) -> dict[str, Any]:
         "extract": {
             "enable": config.extract.enable,
             "extract_elf": config.extract.extract_elf,
+            "allow_unsafe_fallback": config.extract.allow_unsafe_fallback,
             "timeout_s": config.extract.timeout_s,
             "max_files": config.extract.max_files,
             "max_bytes": config.extract.max_bytes,

@@ -57,6 +57,7 @@ def test_mid_ram_workstation_is_lab() -> None:
     plan = recommend_setup(facts=facts)
     assert plan["uv_extra"] == "r2"
     assert "binwalk3" in plan["apt"]
+    assert "bubblewrap" in plan["apt"]
 
 
 def test_flavor_override_does_not_change_recommended() -> None:
@@ -93,6 +94,7 @@ def test_darwin_lab_never_emits_linux_package_commands() -> None:
     assert plan["flavor"] == "lab"
     assert not any("apt-get" in cmd for cmd in plan["commands"])
     assert not any(row["name"] == "ghidra" for row in plan["skip"])
+    assert any(row["name"] == "extractor-isolation" for row in plan["skip"])
     assert any("r2b ghidra setup" in note for note in plan["notes"])
 
 

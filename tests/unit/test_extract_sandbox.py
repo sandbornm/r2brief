@@ -46,7 +46,52 @@ def test_sandbox_path_includes_absolute_tool_directory(tmp_path: Path) -> None:
         [str(tool)],
         input_file=subject,
         output_dir=tmp_path / "out",
+        limits=ExtractLimits(allow_unsafe_fallback=True),
     )
 
     assert result.returncode == 0
     assert result.stdout == "helper-found"
+
+
+def test_sandbox_fails_closed_without_bubblewrap(tmp_path: Path, monkeypatch) -> None:
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    marker = tmp_path / "ran"
+    monkeypatch.setattr("r2b.extract.sandbox.shutil.which", lambda _name: None)
+
+    result = run_sandboxed(
+        ["/bin/sh", "-c", f"touch {marker}"],
+        input_file=subject,
+        output_dir=tmp_path / "out",
+    )
+
+    assert result.returncode == 126
+    assert result.sandbox == "unavailable"
+    assert not marker.exists()
+    assert any("blocked" in note for note in result.notes)
+
+
+def test_sandbox_stops_extractor_that_crosses_live_file_cap(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    tool = tmp_path / "extractor"
+    tool.write_text(
+        "#!/bin/sh\ni=0\nwhile [ $i -lt 10 ]; do printf x > file-$i; i=$((i+1)); done\nsleep 2\n",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    monkeypatch.setattr("r2b.extract.sandbox.shutil.which", lambda _name: None)
+
+    result = run_sandboxed(
+        [str(tool)],
+        input_file=subject,
+        output_dir=tmp_path / "out",
+        limits=ExtractLimits(max_files=2, allow_unsafe_fallback=True),
+    )
+
+    assert result.returncode == 125
+    assert any("live output limit" in note for note in result.notes)
+    assert len([path for path in result.output_dir.rglob("*") if path.is_file()]) <= 2

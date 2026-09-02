@@ -106,6 +106,31 @@ def test_import_basename_normalizes_macho_and_pe_symbols():
     assert _basename("MSVCRT.dll_strcpy") == "strcpy"
 
 
+def test_import_commands_preserve_fortified_symbol_spelling(tmp_path: Path):
+    binary = tmp_path / "fortified"
+    analysis = {
+        "binary": str(binary),
+        "quick_scan": {
+            "binary_format": {"format": "macho", "arch": "arm64", "bits": 64},
+            "radare2": {
+                "info": {"bin": {"arch": "arm", "bits": 64, "os": "macos"}},
+                "imports": [{"name": "__strcpy_chk"}],
+            },
+        },
+        "deep_scan": {},
+        "issues": [],
+    }
+
+    briefing = build_briefing(analysis)
+    steps = " ".join(briefing["next_steps"])
+    region_steps = " ".join(
+        action for region in briefing["regions"] for action in region["next_actions"]
+    )
+
+    assert "sym.imp.__strcpy_chk" in steps
+    assert "sym.imp.__strcpy_chk" in region_steps
+
+
 def test_large_code_target_marks_generic_ranking_unscored(tmp_path: Path):
     binary = tmp_path / "large-runtime.dylib"
     with binary.open("wb") as handle:

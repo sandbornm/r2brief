@@ -441,6 +441,16 @@ class TestAnalyzeEndpoint:
         assert settings['enable_gef'] is False
         assert settings['enable_frida'] is False
 
+    def test_native_execution_requires_web_gate(self, app_client, minimal_elf):
+        response = app_client.post(
+            '/api/analyze',
+            json={'binary': str(minimal_elf), 'enable_frida': True},
+            content_type='application/json',
+        )
+
+        assert response.status_code == 403
+        assert 'enable_native_execution' in response.get_json()['error']
+
     def test_analyze_returns_job_id(self, app_client, minimal_elf):
         """Test analyze returns job ID for valid binary."""
         response = app_client.post(

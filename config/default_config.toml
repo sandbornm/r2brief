@@ -42,6 +42,9 @@ enable_trajectory_recording = true
 # ELF subjects skip extractors unless extract_elf=true (inventory still builds a DAG).
 enable = false
 extract_elf = false
+# Without bubblewrap, extraction fails closed. This escape hatch removes
+# network isolation and should only be used for trusted files on an isolated host.
+allow_unsafe_fallback = false
 timeout_s = 60
 max_files = 200
 max_bytes = 67108864
@@ -63,6 +66,13 @@ auto_migrate = true
 
 [ui]
 show_compiler = false
+
+[web]
+# These routes execute analyst-supplied scripts or native target code. Enabling
+# either also requires a bearer token from execution_token_env on each request.
+enable_script_execution = false
+enable_native_execution = false
+execution_token_env = "R2B_WEB_EXECUTION_TOKEN"
 
 [ghidra]
 # Ghidra decompilation supports two modes:

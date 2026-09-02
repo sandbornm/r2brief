@@ -23,6 +23,28 @@ REVIEW_SET_SCHEMA_VERSION = "r2b.review-set.v1"
 REVIEW_SET_PROMPT_ID = "r2b.review-set.prompt.v1"
 MAX_REVIEW_WIDTH = 4
 ReviewMode = Literal["rules", "llm", "both", "compare"]
+NOISE_POLICY_ID = "r2b.noise.v1"
+
+_DISPOSITION_ORDER = {
+    "actionable": 0,
+    "needs_confirmation": 1,
+    "low_signal": 2,
+}
+_OBSERVED_TAGS = frozenset({"observed", "runtime-observed", "dynamic-evidence"})
+_OBSERVED_SOURCES = frozenset({"frida", "gef", "gdb", "qemu"})
+_SUPPORT_TAGS = frozenset({"caller", "xref", "dataflow", "verified"})
+_INVENTORY_TAGS = frozenset(
+    {
+        "artifact_dag",
+        "firmware",
+        "firmware-child",
+        "gap",
+        "graph",
+        "issue",
+        "overview",
+    }
+)
+_CALL_TOKEN = "sym.imp."
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +98,10 @@ Return one JSON object and no prose. The object must have exactly one key:
 "order" must contain every supplied candidate exactly once. Each entry must
 have exactly "region_id", "reason", and "evidence_ids". Use only region IDs
 and evidence IDs supplied in the candidate JSON. Do not invent an address,
-symbol, call, behavior, severity, or vulnerability. A reason may state that
-the evidence is weak.
+symbol, call, behavior, severity, or vulnerability. Prefer observed behavior,
+a caller/xref, argument or data flow, and decompiled code over import, string,
+signature, symbol-name, or entry inventory alone. Inventory is a lead, not
+behavior. Absence of supporting evidence is not proof that a region is benign.
 
 This is {REVIEW_PROMPT_ID}. You are proposing an order, not changing the
 deterministic scores or proving a security finding."""
@@ -140,6 +164,11 @@ def review_briefing(
         },
         "candidate_count": len(candidates),
         "base_order": base_order,
+        "noise_assessment": _noise_assessment(
+            document,
+            base_order=base_order,
+            evidence_by_region=evidence_by_region,
+        ),
         "model_order": None,
         "disagreements": [],
         "model": None,
@@ -306,6 +335,11 @@ def review_briefing_set(
         },
         "candidate_count": len(candidates),
         "base_order": base_order,
+        "noise_assessment": _noise_assessment(
+            document,
+            base_order=base_order,
+            evidence_by_region=evidence_by_region,
+        ),
         "lenses": lens_documents,
         "passes": passes,
         "overlay": _review_overlay(
@@ -315,6 +349,267 @@ def review_briefing_set(
             top_k=effective_top_k,
         ),
     }
+
+
+def _noise_assessment(
+    briefing: Mapping[str, Any],
+    *,
+    base_order: list[dict[str, Any]],
+    evidence_by_region: Mapping[str, frozenset[str]],
+) -> dict[str, Any]:
+    """Classify evidence maturity without changing briefing scores or order."""
+
+    regions = briefing.get("regions")
+    assert isinstance(regions, list)
+    by_id = {
+        str(item["id"]): item
+        for item in regions
+        if isinstance(item, Mapping) and item.get("id") is not None
+    }
+    verified = _verified_imports(briefing)
+    rows: list[dict[str, Any]] = []
+    for base in base_order:
+        region_id = str(base["region_id"])
+        raw = by_id[region_id]
+        disposition, strength, reason, missing, verification = _region_disposition(
+            raw,
+            verified=verified,
+        )
+        rows.append(
+            {
+                "region_id": region_id,
+                "base_rank": int(base["rank"]),
+                "disposition": disposition,
+                "claim_strength": strength,
+                "reason": reason,
+                "missing_evidence": missing,
+                "verification_evidence": verification,
+                "evidence_ids": sorted(evidence_by_region[region_id]),
+            }
+        )
+
+    summary = {name: 0 for name in _DISPOSITION_ORDER}
+    for row in rows:
+        summary[str(row["disposition"])] += 1
+    focus = [
+        str(row["region_id"])
+        for row in rows
+        if row["disposition"] != "low_signal"
+    ]
+    supported_behavior = [
+        str(row["region_id"])
+        for row in rows
+        if _supports_behavior(by_id[str(row["region_id"])], row)
+    ]
+    return {
+        "policy_id": NOISE_POLICY_ID,
+        "method": "deterministic_evidence_maturity",
+        "model_role": "ordering_only",
+        "summary": summary,
+        "focus_region_ids": focus,
+        "supported_behavior_region_ids": supported_behavior,
+        "regions": rows,
+    }
+
+
+def _supports_behavior(region: Mapping[str, Any], row: Mapping[str, Any]) -> bool:
+    if row.get("claim_strength") == "observed":
+        return True
+    tags = {str(tag).lower() for tag in (region.get("tags") or [])}
+    has_flow = bool(tags & {"dataflow", "data-flow"})
+    has_call = bool(tags & {"caller", "xref", "verified"})
+    return has_flow and has_call
+
+
+def _region_disposition(
+    region: Mapping[str, Any],
+    *,
+    verified: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, str, str, list[str], list[str]]:
+    tags = {str(tag).lower() for tag in (region.get("tags") or [])}
+    raw_snippet = region.get("snippet")
+    snippet = raw_snippet if isinstance(raw_snippet, Mapping) else {}
+    source = str(snippet.get("source") or "").lower()
+    kind = str(snippet.get("kind") or "").lower()
+    text = str(snippet.get("text") or "")
+
+    if tags & _OBSERVED_TAGS or source in _OBSERVED_SOURCES:
+        return (
+            "actionable",
+            "observed",
+            "Runtime evidence records behavior that occurred.",
+            [],
+            [],
+        )
+
+    if "imports" in tags:
+        return _import_disposition(text, verified=verified)
+
+    if "string" in tags or kind == "strings":
+        return (
+            "low_signal",
+            "lead",
+            "A raw string hit has no caller or data flow attached.",
+            ["caller_or_xref", "data_flow"],
+            [],
+        )
+
+    if tags & {"signature", "signatures"} or kind == "signature":
+        return (
+            "low_signal",
+            "lead",
+            "A signature match has no caller, data flow, or runtime corroboration.",
+            ["corroborating_code_or_runtime_evidence"],
+            [],
+        )
+
+    if kind == "decompile" or tags & _SUPPORT_TAGS:
+        return (
+            "actionable",
+            "corroborated",
+            "The capsule includes code or an explicit corroborating reference.",
+            ["runtime_observation"],
+            [],
+        )
+
+    if kind == "disasm" and _CALL_TOKEN in text.lower():
+        return (
+            "actionable",
+            "corroborated",
+            "The disassembly shows a direct imported-call site.",
+            ["argument_or_data_flow", "runtime_observation"],
+            [],
+        )
+
+    if tags & _INVENTORY_TAGS:
+        if tags & {"issue", "gap"}:
+            return (
+                "actionable",
+                "inventory",
+                "This is an analysis coverage gap, not a security finding.",
+                ["missing_analyzer_output"],
+                [],
+            )
+        if tags & {"firmware", "firmware-child", "artifact_dag"}:
+            return (
+                "actionable",
+                "inventory",
+                "This is routing evidence for the next artifact, not behavior.",
+                [],
+                [],
+            )
+        return (
+            "low_signal",
+            "inventory",
+            "Generic inventory does not support a behavior claim.",
+            ["specific_artifact_or_code_pivot"],
+            [],
+        )
+
+    if kind == "disasm" or tags & {"function", "symbols", "protocol", "entry"}:
+        return (
+            "needs_confirmation",
+            "lead",
+            "Static code or a symbol name is a useful pivot but lacks data flow.",
+            ["caller_or_xref", "argument_or_data_flow"],
+            [],
+        )
+
+    return (
+        "needs_confirmation",
+        "lead",
+        "The evidence capsule needs a caller, data flow, or runtime check.",
+        ["corroborating_evidence"],
+        [],
+    )
+
+
+def _import_disposition(
+    text: str,
+    *,
+    verified: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, str, str, list[str], list[str]]:
+    names = {_import_basename(line) for line in text.splitlines() if line.strip()}
+    names.discard("")
+    covered = {name: verified[name] for name in names if name in verified}
+    fully_covered = bool(names) and len(covered) == len(names)
+    statuses = {str(item.get("status") or "") for item in covered.values()}
+
+    if fully_covered and statuses and statuses <= {"no-callers", "all-constant"}:
+        facts = [f"{name}:{covered[name].get('status')}" for name in sorted(covered)]
+        return (
+            "low_signal",
+            "corroborated",
+            "Verifier coverage found no dynamic argument path for the listed imports; "
+            "this lowers priority but does not prove safety.",
+            ["indirect_calls_or_environment_effects"],
+            facts,
+        )
+    if any(status in {"dynamic", "mixed"} for status in statuses):
+        facts = [
+            f"{name}:{covered[name].get('status')}"
+            for name in sorted(covered)
+            if str(covered[name].get("status") or "") in {"dynamic", "mixed"}
+        ]
+        return (
+            "actionable",
+            "corroborated",
+            "A verifier found a caller with an unresolved or mixed argument.",
+            ["input_provenance", "runtime_observation"],
+            facts,
+        )
+    return (
+        "needs_confirmation",
+        "lead",
+        "Import inventory names a possible sink but shows no caller or argument flow.",
+        ["caller_or_xref", "argument_or_data_flow"],
+        [],
+    )
+
+
+def _verified_imports(briefing: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    values: dict[str, Mapping[str, Any]] = {}
+    raw_values = briefing.get("verified_imports")
+    for raw in raw_values if isinstance(raw_values, list) else []:
+        if not isinstance(raw, Mapping):
+            continue
+        name = _import_basename(str(raw.get("import") or ""))
+        status = str(raw.get("status") or "")
+        if name and _valid_verification_result(status, raw.get("call_sites")):
+            values[name] = raw
+    return values
+
+
+def _valid_verification_result(status: str, raw_sites: Any) -> bool:
+    if not isinstance(raw_sites, list):
+        return False
+    constants = [site.get("constant") for site in raw_sites if isinstance(site, Mapping)]
+    if len(constants) != len(raw_sites) or not all(isinstance(value, bool) for value in constants):
+        return False
+    if status == "no-callers":
+        return not constants
+    if status == "all-constant":
+        return bool(constants) and all(constants)
+    if status == "dynamic":
+        return bool(constants) and not any(constants)
+    if status == "mixed":
+        return bool(constants) and any(constants) and not all(constants)
+    return False
+
+
+def _import_basename(name: str) -> str:
+    value = name.strip().split()[-1] if name.strip() else ""
+    value = value.rsplit("/", 1)[-1]
+    value = value.split("@", 1)[0]
+    prefixes = ("sym.imp.", "imp.", "__imp_", "__imp__")
+    while prefix := next((item for item in prefixes if value.startswith(item)), None):
+        value = value[len(prefix) :]
+    if ".dll_" in value.lower():
+        value = value[value.lower().index(".dll_") + 5 :]
+    value = value.lstrip("_")
+    if value.endswith("_chk"):
+        value = value[:-4].rstrip("_")
+    return value.lower()
 
 
 def _review_lenses(
@@ -757,6 +1052,7 @@ def _json_object(value: Mapping[str, Any], label: str) -> dict[str, Any]:
 
 __all__ = [
     "MAX_REVIEW_WIDTH",
+    "NOISE_POLICY_ID",
     "REVIEW_PROMPT_ID",
     "REVIEW_SCHEMA_VERSION",
     "REVIEW_SET_PROMPT_ID",

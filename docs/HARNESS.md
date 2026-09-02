@@ -92,6 +92,9 @@ Checkout: `uv sync`. Wheel: `r2b[std]` or skinny `r2b[r2]`.
 - Do: `brief --quick` first. `verify` on `system`/`popen`/`exec*`. One
   `decompile ADDR`. Tag records. `insights --tag` to collapse duplicate SHA.
   Use `review --mode both` only when a thesis-specific second order is useful.
+  Read `noise_assessment.focus_region_ids` for the deterministic evidence
+  screen. `low_signal` means the current capsule lacks support; it is not a
+  benign verdict. Model review remains ordering-only.
 - Don't: whole-binary Ghidra dumps. `--extract` on a tiny ELF fixture. Teach.
   Invent symbols. Put keys in toml. Feed a briefing into a model to pick
   adapters inside this process.

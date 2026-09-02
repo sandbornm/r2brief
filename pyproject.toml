@@ -112,6 +112,7 @@ only-include = [
   "tests",
   "schemas",
   "config",
+  "corpora",
   "scripts",
   "docs",
   "ghidra",

@@ -32,6 +32,7 @@ samples/firmware/
 # Host-copied aarch64 ELFs; regenerate with scripts/fetch_samples.sh. Manifest stays.
 samples/bin/arm64/vendor/
 work/
+.r2b-corpus/
 
 # Accidental local dirs
 MagicMock/

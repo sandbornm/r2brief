@@ -84,6 +84,7 @@ class ExtractSettings(BaseModel):
 
     enable: bool = False
     extract_elf: bool = False
+    allow_unsafe_fallback: bool = False
     timeout_s: int = 60
     max_files: int = 200
     max_bytes: int = 64 * 1024 * 1024
@@ -124,6 +125,14 @@ class UISettings(BaseModel):
     show_compiler: bool = False
 
 
+class WebSettings(BaseModel):
+    """Opt-in gates for web routes that can execute target-controlled code."""
+
+    enable_script_execution: bool = False
+    enable_native_execution: bool = False
+    execution_token_env: str = "R2B_WEB_EXECUTION_TOKEN"
+
+
 class GhidraSettings(BaseModel):
     use_bridge: bool = False
     bridge_host: str = "127.0.0.1"
@@ -145,6 +154,7 @@ class AppConfig(BaseModel):
     performance: PerformanceSettings = Field(default_factory=PerformanceSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     ui: UISettings = Field(default_factory=UISettings)
+    web: WebSettings = Field(default_factory=WebSettings)
     ghidra: GhidraSettings = Field(default_factory=GhidraSettings)
     raw: dict[str, Any] = Field(default_factory=dict)
 
@@ -254,6 +264,8 @@ def load_config(config_path: Path | None = None) -> AppConfig:
         config.storage = StorageSettings.model_validate(data["storage"])
     if "ui" in data:
         config.ui = UISettings.model_validate(data["ui"])
+    if "web" in data:
+        config.web = WebSettings.model_validate(data["web"])
     if "extract" in data:
         config.extract = ExtractSettings.model_validate(data["extract"])
     if "ghidra" in data:

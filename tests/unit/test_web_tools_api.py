@@ -5,12 +5,15 @@ from unittest.mock import MagicMock, patch
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
     """Create test client with mocked dependencies."""
+    monkeypatch.setenv("R2B_WEB_EXECUTION_TOKEN", "test-execution-token")
     with patch('r2b.web.app.build_state') as mock_build:
         mock_state = MagicMock()
         mock_state.chat_dao = MagicMock()
         mock_state.config.ghidra.use_bridge = False
+        mock_state.config.web.enable_script_execution = True
+        mock_state.config.web.execution_token_env = "R2B_WEB_EXECUTION_TOKEN"
         mock_state.env.ghidra.bridge_connected = False
         mock_state.env.ghidra.is_ready = False
         mock_state.dao = None
@@ -21,6 +24,7 @@ def client():
         app = create_app()
         app.config['TESTING'] = True
         with app.test_client() as client:
+            client.environ_base["HTTP_AUTHORIZATION"] = "Bearer test-execution-token"
             yield client
 
 
@@ -114,6 +118,8 @@ class TestToolsExecuteEndpoint:
             mock_state = MagicMock()
             mock_state.chat_dao = MagicMock()
             mock_state.config.ghidra.use_bridge = True
+            mock_state.config.web.enable_script_execution = True
+            mock_state.config.web.execution_token_env = "R2B_WEB_EXECUTION_TOKEN"
             mock_state.env.ghidra.bridge_connected = True
             mock_state.ghidra_client = MagicMock()
             mock_state.ghidra_client.is_connected.return_value = True
@@ -130,6 +136,7 @@ class TestToolsExecuteEndpoint:
             app.config['TESTING'] = True
 
             with app.test_client() as test_client:
+                test_client.environ_base["HTTP_AUTHORIZATION"] = "Bearer test-execution-token"
                 response = test_client.post('/api/tools/execute', json={
                     'tool': 'ghidra',
                     'script': 'print("hello")',
@@ -142,6 +149,29 @@ class TestToolsExecuteEndpoint:
                 assert data['validation']['valid'] is True
                 assert data['execution']['status'] == 'success'
                 assert 'Hello from Ghidra' in data['execution']['stdout']
+
+    def test_execute_is_disabled_without_explicit_gate(self, monkeypatch):
+        with patch('r2b.web.app.build_state') as mock_build:
+            mock_state = MagicMock()
+            mock_state.chat_dao = MagicMock()
+            mock_state.config.web.enable_script_execution = False
+            mock_state.dao = None
+            mock_state.db = None
+            mock_build.return_value = mock_state
+
+            from r2b.web.app import create_app
+
+            app = create_app()
+            app.config['TESTING'] = True
+            with app.test_client() as test_client:
+                response = test_client.post('/api/tools/execute', json={
+                    'tool': 'ghidra',
+                    'script': 'print("hello")',
+                    'language': 'python',
+                })
+
+        assert response.status_code == 403
+        assert 'disabled' in response.get_json()['error']
 
     def test_execute_empty_script_returns_error(self, client):
         """Returns 400 for empty script."""

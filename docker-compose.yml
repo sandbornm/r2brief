@@ -6,7 +6,7 @@ services:
     image: r2b-backend:latest
     restart: unless-stopped
     ports:
-      - "${R2B_WEB_PORT:-5050}:5050"
+      - "127.0.0.1:${R2B_WEB_PORT:-5050}:5050"
     environment:
       R2B_WEB_HOST: "0.0.0.0"
       R2B_WEB_PORT: "${R2B_WEB_PORT:-5050}"
@@ -19,6 +19,10 @@ services:
       - compile-volume:/compile
     depends_on:
       - compiler
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   frontend:
     build:
@@ -29,7 +33,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "${R2B_FRONTEND_PORT:-5173}:5173"
+      - "127.0.0.1:${R2B_FRONTEND_PORT:-5173}:5173"
     environment:
       VITE_R2B_API_BASE: "http://backend:5050"
 
@@ -44,6 +48,10 @@ services:
     # Keep container running for exec-based compilation
     command: ["tail", "-f", "/dev/null"]
     user: compiler
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 volumes:
   compile-volume:

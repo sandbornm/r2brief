@@ -33,6 +33,7 @@ def build_state(config_path: Optional[Path], *, persist: bool = True) -> AppStat
     config = load_config(config_path)
     if not persist:
         config.analysis.enable_trajectory_recording = False
+        config.output.save_artifacts = False
     configure_logging(config.verbosity)  # type: ignore[arg-type]
 
     env = detect_environment(config)

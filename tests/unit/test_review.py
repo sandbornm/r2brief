@@ -186,6 +186,13 @@ def test_rules_mode_is_pure_and_makes_no_model_call() -> None:
     ]
     assert result["model_order"] is None
     assert result["model"] is None
+    noise = {item["region_id"]: item for item in result["noise_assessment"]["regions"]}
+    assert noise["imports:plt"]["disposition"] == "needs_confirmation"
+    assert noise["imports:plt"]["claim_strength"] == "lead"
+    assert noise["entry:main"]["disposition"] == "actionable"
+    assert noise["entry:main"]["claim_strength"] == "corroborated"
+    assert noise["issue:missing-ghidra"]["claim_strength"] == "inventory"
+    assert result["noise_assessment"]["supported_behavior_region_ids"] == []
 
 
 def test_both_mode_keeps_base_order_and_computes_disagreements() -> None:
@@ -224,6 +231,7 @@ def test_both_mode_keeps_base_order_and_computes_disagreements() -> None:
         ["imports:plt", "entry:main", "issue:missing-ghidra"]
     )
     assert all("score" not in item for item in prompt["candidates"])
+    assert "Absence of supporting evidence is not proof" in messages[0].content
 
 
 def test_llm_mode_does_not_compute_rule_disagreements() -> None:
@@ -235,6 +243,130 @@ def test_llm_mode_does_not_compute_rule_disagreements() -> None:
 
     assert result["model_order"]
     assert result["disagreements"] == []
+
+
+def test_noise_assessment_uses_verifier_results_as_negative_evidence() -> None:
+    source = _briefing()
+    source["regions"][0]["snippet"]["text"] = "execl\npopen"
+    source["verified_imports"] = [
+        {"import": "execl", "status": "no-callers", "call_sites": []},
+        {
+            "import": "popen",
+            "status": "all-constant",
+            "call_sites": [
+                {
+                    "function": "status",
+                    "address": "0x1000",
+                    "argument": "uptime",
+                    "constant": True,
+                }
+            ],
+        },
+    ]
+
+    result = review_briefing(source, mode="rules")
+
+    row = result["noise_assessment"]["regions"][0]
+    assert row["disposition"] == "low_signal"
+    assert row["claim_strength"] == "corroborated"
+    assert row["verification_evidence"] == ["execl:no-callers", "popen:all-constant"]
+    assert "imports:plt" not in result["noise_assessment"]["focus_region_ids"]
+    assert "does not prove safety" in row["reason"]
+
+
+def test_noise_assessment_does_not_downgrade_partial_verifier_coverage() -> None:
+    source = _briefing()
+    source["verified_imports"] = [
+        {"import": "execl", "status": "no-callers", "call_sites": []},
+    ]
+
+    result = review_briefing(source, mode="rules")
+
+    row = result["noise_assessment"]["regions"][0]
+    assert row["disposition"] == "needs_confirmation"
+    assert row["verification_evidence"] == []
+
+
+def test_noise_assessment_rejects_inconsistent_verifier_status() -> None:
+    source = _briefing()
+    source["regions"][0]["snippet"]["text"] = "popen"
+    source["verified_imports"] = [
+        {"import": "popen", "status": "all-constant", "call_sites": []},
+    ]
+
+    result = review_briefing(source, mode="rules")
+
+    row = result["noise_assessment"]["regions"][0]
+    assert row["disposition"] == "needs_confirmation"
+    assert row["verification_evidence"] == []
+
+
+def test_noise_assessment_promotes_dynamic_verified_caller() -> None:
+    source = _briefing()
+    source["regions"][0]["snippet"]["text"] = "popen"
+    source["verified_imports"] = [
+        {
+            "import": "popen",
+            "status": "dynamic",
+            "call_sites": [
+                {
+                    "function": "handler",
+                    "address": "0x1000",
+                    "argument": "<dynamic>",
+                    "constant": False,
+                }
+            ],
+        },
+    ]
+
+    result = review_briefing(source, mode="rules")
+
+    row = result["noise_assessment"]["regions"][0]
+    assert row["disposition"] == "actionable"
+    assert row["claim_strength"] == "corroborated"
+    assert row["verification_evidence"] == ["popen:dynamic"]
+    assert result["noise_assessment"]["supported_behavior_region_ids"] == []
+
+
+def test_noise_assessment_requires_call_and_dataflow_for_static_behavior() -> None:
+    source = _briefing()
+    source["regions"][1]["tags"].extend(["caller", "dataflow"])
+
+    result = review_briefing(source, mode="rules")
+
+    assert result["noise_assessment"]["supported_behavior_region_ids"] == [
+        "entry:main"
+    ]
+
+
+def test_noise_assessment_deprioritizes_unreferenced_string() -> None:
+    source = _briefing()
+    source["regions"].append(
+        {
+            "id": "signal:credential",
+            "title": "Credential strings",
+            "why": "String material in the image.",
+            "score": 70,
+            "tags": ["string", "credential"],
+            "snippet": {
+                "source": "firmware",
+                "kind": "strings",
+                "text": "admin_password=root",
+            },
+        }
+    )
+
+    result = review_briefing(source, mode="rules")
+
+    rows = {
+        item["region_id"]: item for item in result["noise_assessment"]["regions"]
+    }
+    assert rows["signal:credential"]["disposition"] == "low_signal"
+    assert rows["signal:credential"]["missing_evidence"] == [
+        "caller_or_xref",
+        "data_flow",
+    ]
+    assert "signal:credential" not in result["noise_assessment"]["focus_region_ids"]
 
 
 @pytest.mark.parametrize(
@@ -293,6 +425,7 @@ def test_rules_width_adds_distinct_regions_without_counting_duplicate_evidence()
     assert source == before
     assert result["schema_version"] == "r2b.review-set.v1"
     assert result["independence"] == "fan_out"
+    assert result["noise_assessment"]["policy_id"] == "r2b.noise.v1"
     assert [item["new_region_ids"] for item in result["overlay"]["marginal"]] == [
         ["imports:process", "imports:network"],
         ["imports:runtime"],
@@ -380,6 +513,19 @@ def test_cli_rules_review_emits_one_json_object(tmp_path: Path) -> None:
     result = json.loads(output.stdout)
     assert result["schema_version"] == "r2b.review.v1"
     assert result["model_order"] is None
+    assert result["noise_assessment"]["method"] == "deterministic_evidence_maturity"
+
+
+def test_cli_rules_review_renders_evidence_screen(tmp_path: Path) -> None:
+    path = tmp_path / "briefing.json"
+    path.write_text(json.dumps(_briefing()), encoding="utf-8")
+
+    output = CliRunner().invoke(app, ["review", str(path), "--mode", "rules"])
+
+    assert output.exit_code == 0, output.output
+    assert "needs confirmation" in output.stdout
+    assert "supported behavior" in output.stdout
+    assert "Low-signal does not mean safe" in output.stdout
 
 
 def test_cli_width_emits_review_set(tmp_path: Path) -> None:
@@ -402,5 +548,6 @@ def test_review_schema_names_the_public_contract() -> None:
 
     assert schema["properties"]["schema_version"]["const"] == "r2b.review.v1"
     assert schema["properties"]["prompt_id"]["const"] == "r2b.review.prompt.v1"
+    assert schema["properties"]["noise_assessment"]["$ref"] == "#/$defs/noiseAssessment"
     review_set = json.loads(Path("schemas/review-set.schema.json").read_text(encoding="utf-8"))
     assert review_set["properties"]["schema_version"]["const"] == "r2b.review-set.v1"

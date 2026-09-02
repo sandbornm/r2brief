@@ -25,11 +25,16 @@ decompiler, or runtime tool that produced the underlying facts.
 git clone https://github.com/sandbornm/r2brief.git
 cd r2brief
 ./scripts/install.sh
-uv run r2b brief samples/triage/bin/shallow-host --quick --no-save --json
+source .venv/bin/activate
+r2b brief samples/triage/bin/shallow-host --quick --no-save --json
 ```
 
 The installer creates an environment inside the checkout. It does not modify
 the system Python.
+
+Pinned NIST Juliet, DARPA CGC, and OpenWrt firmware controls are documented in
+[`docs/CORPUS.md`](docs/CORPUS.md). The intake tool verifies source identity and
+never unpacks or executes downloaded material.
 
 ## What comes out
 
@@ -238,6 +243,12 @@ model cannot add, remove, or rename evidence.
 Each lens starts from the same candidates. The `r2b.review-set.v1` overlay shows
 which regions first appeared at each width and when another pass added nothing.
 Rules mode is deterministic; `llm` and `both` use the configured provider.
+
+Review artifacts also carry a deterministic evidence screen. It keeps direct
+callers, code, runtime facts, and analysis gaps visible while marking raw
+imports, strings, signatures, and generic inventory as needing confirmation or
+low-signal. An optional model can propose a different order of the same IDs; it
+cannot rewrite that screen or call something benign.
 
 OpenAI, Anthropic, xAI/Grok, Kimi, GLM/Z.ai, Ollama, and exo have explicit
 provider configurations. Hosted keys are read from named environment variables

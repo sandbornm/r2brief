@@ -17,6 +17,9 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 - `review` emits `r2b.review.v1`: `rules` makes no model call, while `llm`
   and `both` may only reorder known region and evidence IDs. The briefing,
   scores, and handoff remain unchanged; review tool calls are disabled in v1.
+- Review artifacts include a deterministic evidence-maturity screen. Raw
+  pivots remain visible but can be marked low-signal; complete negative import
+  verification can lower priority, while partial coverage cannot.
 - `handoff.next_argv` follows subject class: ELF `verify`/`decompile ADDR`,
   firmware child `brief` or `--extract`. Missing file is exit 1.
 - CI smokes `r2b brief /bin/ls --quick --json`. Dependabot is monthly

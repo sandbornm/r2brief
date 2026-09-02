@@ -205,6 +205,17 @@ def detect_environment(config: AppConfig) -> EnvironmentReport:
             else:
                 report.issues.append(f"Missing dependency: {tool.name}")
 
+    have_bwrap = any(tool.name == "bwrap" and tool.available for tool in report.tools)
+    if config.extract.enable and not have_bwrap:
+        if config.extract.allow_unsafe_fallback:
+            report.issues.append(
+                "UNSAFE extraction fallback enabled: external extractors may retain host and network access."
+            )
+        else:
+            report.notes.append(
+                "External extraction will fail closed because bubblewrap is unavailable."
+            )
+
     if not report.uv_available:
         report.issues.append("uv package manager not found on PATH.")
 

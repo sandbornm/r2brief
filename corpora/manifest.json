@@ -1,0 +1,74 @@
+{
+  "schema_version": "r2b.corpus-manifest.v1",
+  "allowed_hosts": [
+    "downloads.openwrt.org",
+    "github.com",
+    "samate.nist.gov"
+  ],
+  "datasets": [
+    {
+      "id": "nist-juliet-c-cpp-1.3",
+      "kind": "https",
+      "filename": "2017-10-01-juliet-test-suite-for-c-cplusplus-v1-3.zip",
+      "url": "https://samate.nist.gov/SARD/downloads/test-suites/2017-10-01-juliet-test-suite-for-c-cplusplus-v1-3.zip",
+      "source_page": "https://samate.nist.gov/SARD/test-suites/112",
+      "sha256": "ada9d7e1c323d283446df3f55bdee0d00bda1fed786785fe98764d58688f38eb",
+      "max_bytes": 200000000,
+      "license": "US public domain; CC0 1.0 for any NIST foreign rights",
+      "role": "synthetic good/bad source-level controls across 118 CWEs",
+      "selection": [
+        "CWE121",
+        "CWE122",
+        "CWE190",
+        "CWE415",
+        "CWE416",
+        "CWE476",
+        "CWE78"
+      ]
+    },
+    {
+      "id": "darpa-cgc-multios",
+      "kind": "git",
+      "url": "https://github.com/trailofbits/cb-multios.git",
+      "commit": "810d7b24b1f62f56ef49b148fe155b0d0629cad2",
+      "source_page": "https://github.com/trailofbits/cb-multios",
+      "max_bytes": 524288000,
+      "license": "MIT; individual challenge notices remain authoritative",
+      "role": "patched/unpatched program-analysis controls with POLL and POV ground truth",
+      "sparse_paths": [
+        "challenges/Palindrome",
+        "challenges/basic_messaging",
+        "cmake",
+        "include",
+        "tools"
+      ]
+    },
+    {
+      "id": "openwrt-bpi-r3-mini-24.10.3",
+      "kind": "https",
+      "filename": "bananapi_bpi-r3-mini-24.10.3-squashfs-sysupgrade.itb",
+      "url": "https://downloads.openwrt.org/releases/24.10.3/targets/mediatek/filogic/openwrt-24.10.3-mediatek-filogic-bananapi_bpi-r3-mini-squashfs-sysupgrade.itb",
+      "source_page": "https://downloads.openwrt.org/releases/24.10.3/targets/mediatek/filogic/",
+      "sha256": "6f7dea199d326ca6efcc3c2a11932070edf79fa6d0984e2a4d77cef8c4cbb8a4",
+      "max_bytes": 16777216,
+      "license": "OpenWrt package notices apply",
+      "role": "firmware release-delta control before the ubusd fix"
+    },
+    {
+      "id": "openwrt-bpi-r3-mini-24.10.4",
+      "kind": "https",
+      "filename": "bananapi_bpi-r3-mini-24.10.4-squashfs-sysupgrade.itb",
+      "url": "https://downloads.openwrt.org/releases/24.10.4/targets/mediatek/filogic/openwrt-24.10.4-mediatek-filogic-bananapi_bpi-r3-mini-squashfs-sysupgrade.itb",
+      "source_page": "https://downloads.openwrt.org/releases/24.10.4/targets/mediatek/filogic/",
+      "sha256": "8d632977278bfe58b53e20218dc72571b20b8da589ad28184642a5c3be37263b",
+      "max_bytes": 16777216,
+      "license": "OpenWrt package notices apply",
+      "role": "firmware release-delta control after the ubusd fix",
+      "ground_truth": {
+        "advisory": "https://github.com/openwrt/openwrt/security/advisories/GHSA-cp32-65v4-cp73",
+        "fix_commit": "https://github.com/openwrt/ubus/commit/d31effb4277bd557f5ccf16d909422718c1e49d0",
+        "case_manifest": "docs/case-studies/openwrt-ubusd-release-delta.json"
+      }
+    }
+  ]
+}

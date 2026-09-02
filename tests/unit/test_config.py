@@ -41,6 +41,9 @@ class TestAppConfig:
         assert isinstance(config.extract, ExtractSettings)
         assert config.extract.enable is False
         assert config.extract.extract_elf is False
+        assert config.extract.allow_unsafe_fallback is False
+        assert config.web.enable_script_execution is False
+        assert config.web.enable_native_execution is False
 
     def test_verbosity_property_returns_output_verbosity(self):
         """Test verbosity property delegates to output.verbosity."""
@@ -373,6 +376,22 @@ class TestDetectEnvironmentHeadless:
 
         assert not any("Missing dependency: ollama" in issue for issue in report.issues)
         assert any("Optional Ollama host missing" in note for note in report.notes)
+
+    def test_enabled_extraction_reports_missing_isolation(self):
+        from r2b.environment import detectors
+
+        config = AppConfig()
+        config.extract.enable = True
+        config.extract.allow_unsafe_fallback = False
+        original = detectors._COMMANDS["bwrap"]
+        with patch.dict(
+            detectors._COMMANDS,
+            {"bwrap": ["r2b-test-definitely-missing-bwrap"]},
+        ):
+            report = detectors.detect_environment(config)
+        detectors._COMMANDS["bwrap"] = original
+
+        assert any("fail closed" in note for note in report.notes)
 
 
 class TestExplicitConfigPath:

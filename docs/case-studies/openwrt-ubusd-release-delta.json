@@ -236,12 +236,267 @@
       "memcpy_new_sites": 5,
       "decompile_queued": false,
       "target_executed": false
+    },
+    "follow_up_recorded_at": "2026-09-02",
+    "changed_siblings": {
+      "busybox": {
+        "path": "bin/busybox",
+        "old_sha256": "9f8f1d0cfc748450d132dcd11fdfd2b1ffe4aea70d6fee5932c2c6dce85836b4",
+        "new_sha256": "2032e4d04e90242dd1f3484d017628a1e82830dfa757ed7963ab90e29e53fa6c",
+        "size_bytes": 458773,
+        "differing_bytes": 8,
+        "first_diff_offset": "0x5bcf0",
+        "banner": {
+          "old": "BusyBox v1.36.1 (2025-09-19 21:19:38 UTC)",
+          "new": "BusyBox v1.36.1 (2025-10-19 16:37:45 UTC)"
+        },
+        "brief_quick": {
+          "old_function_count": 301,
+          "new_function_count": 301,
+          "old_import_count": 299,
+          "new_import_count": 299,
+          "ranked_regions": [
+            "imports:process",
+            "imports:network",
+            "entry:entry",
+            "imports:runtime",
+            "imports:memory",
+            "imports:control"
+          ],
+          "process_imports": [
+            "execl",
+            "execlp",
+            "execv",
+            "execve",
+            "execvp",
+            "fork",
+            "popen",
+            "system"
+          ],
+          "memory_imports": [
+            "memcpy",
+            "memmove",
+            "realpath",
+            "scanf",
+            "sprintf",
+            "sscanf",
+            "strcat",
+            "strcpy"
+          ],
+          "entry": "0x406500"
+        },
+        "verify": {
+          "imports": [
+            "execl",
+            "execlp",
+            "execv",
+            "execve",
+            "execvp",
+            "popen",
+            "system",
+            "strcpy",
+            "memcpy"
+          ],
+          "verdicts_identical_across_releases": true,
+          "execl": {
+            "status": "dynamic",
+            "sites": 1
+          },
+          "execlp": {
+            "status": "dynamic",
+            "sites": 3
+          },
+          "execv": {
+            "status": "dynamic",
+            "sites": 2
+          },
+          "execve": {
+            "status": "dynamic",
+            "sites": 1
+          },
+          "execvp": {
+            "status": "mixed",
+            "sites": 3,
+            "constant_site": {
+              "address": "0x00434ce8",
+              "function": "00434cb8",
+              "argument": "stty"
+            }
+          },
+          "popen": {
+            "status": "dynamic",
+            "sites": 2
+          },
+          "system": {
+            "status": "dynamic",
+            "sites": 2
+          },
+          "strcpy": {
+            "status": "dynamic",
+            "sites": 81
+          },
+          "memcpy": {
+            "status": "dynamic",
+            "sites": 58
+          }
+        },
+        "lead": "rebuild_noise",
+        "followed_to_patched_routine": false,
+        "decompile_queued": false,
+        "target_executed": false,
+        "note": "SHA-256 changed; size, ranked regions, and verify maps did not. The eight differing bytes are the embedded BusyBox build timestamp."
+      },
+      "odhcpd": {
+        "path": "usr/sbin/odhcpd",
+        "old_sha256": "9c5ec590de45569ef3cd75a5f09d8a04103824ee9c8c507f36f4fcf0e3b2e13a",
+        "new_sha256": "b0f7fc5f63bccd661f9f500f163b466f89e255890bbebd423876198d83271a25",
+        "old_size_bytes": 132025,
+        "new_size_bytes": 132113,
+        "brief_quick": {
+          "old_function_count": 157,
+          "new_function_count": 179,
+          "old_import_count": 159,
+          "new_import_count": 182,
+          "ranked_regions": [
+            "imports:process",
+            "imports:network",
+            "entry:entry",
+            "imports:memory",
+            "imports:control"
+          ],
+          "old_memory_imports": [
+            "memcpy",
+            "memmove",
+            "sscanf",
+            "strcpy"
+          ],
+          "new_memory_imports": [
+            "memcpy",
+            "realpath",
+            "sscanf",
+            "strcpy"
+          ],
+          "old_entry": "0x40ac",
+          "new_entry": "0x4ac4"
+        },
+        "verify": {
+          "imports": [
+            "execv",
+            "strcpy",
+            "memcpy"
+          ],
+          "old": {
+            "execv": {
+              "status": "dynamic",
+              "sites": 1,
+              "call_sites": [
+                {
+                  "function": "0000d8bc",
+                  "address": "0x0000db7c",
+                  "argument": "<dynamic>"
+                }
+              ]
+            },
+            "strcpy": {
+              "status": "dynamic",
+              "sites": 3,
+              "call_sites": [
+                {
+                  "function": "00005b1c",
+                  "address": "0x00005bf8",
+                  "argument": "<unresolved>"
+                },
+                {
+                  "function": "00005b1c",
+                  "address": "0x00006b14",
+                  "argument": "<unresolved>"
+                },
+                {
+                  "function": "00005b1c",
+                  "address": "0x00006c1c",
+                  "argument": "<unresolved>"
+                }
+              ]
+            },
+            "memcpy": {
+              "status": "dynamic",
+              "sites": 18
+            }
+          },
+          "new": {
+            "execv": {
+              "status": "dynamic",
+              "sites": 1,
+              "call_sites": [
+                {
+                  "function": "0000d730",
+                  "address": "0x0000d9f0",
+                  "argument": "<dynamic>"
+                }
+              ]
+            },
+            "strcpy": {
+              "status": "dynamic",
+              "sites": 1,
+              "call_sites": [
+                {
+                  "function": "0000726c",
+                  "address": "0x0000734c",
+                  "argument": "<unresolved>"
+                }
+              ]
+            },
+            "memcpy": {
+              "status": "dynamic",
+              "sites": 19
+            }
+          }
+        },
+        "lead": "import_map_changed",
+        "followed_to_patched_routine": false,
+        "decompile_queued": false,
+        "target_executed": false,
+        "note": "Not rebuild noise at the brief/verify layer: size, function count, memory imports, and strcpy site count all moved. execv stayed one dynamic caller. No decompile was queued, so this was not followed to a patched routine."
+      }
+    },
+    "insights": {
+      "schema_version": "r2b.insights.v1",
+      "tag": "ubusd",
+      "ready": true,
+      "skill_ready": false,
+      "sibling_count": 2,
+      "family": {
+        "subject_class": "linux_elf",
+        "id": "linux_elf"
+      },
+      "record_ids": [
+        "8fd16a06d3b529ee4899bf73c6ac283e8b030972205a8356da4fc2fc98dae5f3",
+        "d279564b22768de6e9d8efe083784c4547c3aeadf6ffd1905356a0e0df1f2765"
+      ],
+      "exact_sha_collapse": false,
+      "identity_pattern": false,
+      "recurring_imports": [
+        "avl_find",
+        "avl_strcmp",
+        "blob_buf_init",
+        "blob_nest_end",
+        "blob_parse_untrusted",
+        "blobmsg_add_field",
+        "blobmsg_add_json_from_file",
+        "blobmsg_open_nested"
+      ],
+      "pattern_kinds": {
+        "import": 8
+      },
+      "note": "Two tagged records, two SHA-256 values. Insights did not collapse them. Recurring patterns are libubox/libblobmsg symbols at 2/2, not strcpy/memcpy (those are dropped as ubiquitous libc)."
     }
   },
   "limits": [
     "r2b did not discover or prove CVE-2025-62526 by itself.",
     "Exact hashing supplied the release delta; r2b supplied the saved binary triage, caller leads, targeted decompilation, tool status, and handoff.",
     "The v1 .r2br is a single-subject bundle. This case manifest links the two release images and the selected subject.",
-    "Device-node creation fails without superuser on Linux as well as macOS; regular files still inventory."
+    "Device-node creation fails without superuser on Linux as well as macOS; regular files still inventory.",
+    "The other two changed ELFs were briefed and verified on the Kali replay. busybox is rebuild noise (eight-byte banner timestamp). odhcpd import maps changed; that lead was not followed to a patched routine.",
+    "Tagged insights on ubusd 24.10.3 vs 24.10.4 did not collapse exact SHA-256; the hashes differ."
   ]
 }

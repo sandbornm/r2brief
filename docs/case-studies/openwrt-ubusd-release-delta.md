@@ -193,6 +193,52 @@ dynamic (6 sites in 24.10.3, 5 in 24.10.4) and was not used as the lead.
 
 No decompile was queued. The firmware was not executed.
 
+### The other two changed ELFs
+
+`r2b brief --quick --no-save` and targeted `verify` on `bin/busybox` and
+`usr/sbin/odhcpd`, both releases. No decompile. No CVE claim. The firmware
+was not executed.
+
+| Path | Release | Regions | Verify | Lead |
+|---|---|---|---|---|
+| `bin/busybox` | 24.10.3 `9f8f1d0c…85836b4` | `imports:process`, `imports:network`, `entry:entry`, `imports:runtime`, `imports:memory`, `imports:control` | process-launch + `strcpy`/`memcpy`; maps identical to 24.10.4 | rebuild noise |
+| `bin/busybox` | 24.10.4 `2032e4d0…953fa6c` | same | same addresses and statuses | rebuild noise |
+| `usr/sbin/odhcpd` | 24.10.3 `9c5ec590…e3b2e13a` | `imports:process`, `imports:network`, `entry:entry`, `imports:memory`, `imports:control` | `execv` dynamic 1; `strcpy` dynamic 3; `memcpy` dynamic 18 | import map changed |
+| `usr/sbin/odhcpd` | 24.10.4 `b0f7fc5f…83271a25` | same region ids | `execv` dynamic 1; `strcpy` dynamic 1; `memcpy` dynamic 19 | not followed to a patched routine |
+
+`busybox` is 458773 bytes on both sides, 301 functions, 299 imports. Ranked
+regions and verify maps match. `execl` 1 dynamic, `execlp` 3, `execv` 2,
+`execve` 1, `execvp` mixed (3 sites, one constant `stty` at `0x00434ce8`),
+`popen` 2, `system` 2, `strcpy` 81, `memcpy` 58. Eight bytes differ, all in
+the banner at `0x5bcf0`: `BusyBox v1.36.1 (2025-09-19 21:19:38 UTC)` versus
+`(2025-10-19 16:37:45 UTC)`. That is rebuild noise. The process-launch region
+is real busybox surface, not a 24.10.3/24.10.4 patch lead.
+
+`odhcpd` is not that. Size 132025 → 132113, functions 157 → 179, imports
+159 → 182. Memory capsule drops `memmove` and picks up `realpath`. `strcpy`
+callers in `00005b1c` go from three (`0x00005bf8`, `0x00006b14`, `0x00006c1c`)
+to one (`0x0000734c` in `0000726c`). `execv` stays one dynamic site
+(`0x0000db7c` / `0x0000d9f0`). That is a useful caller-list delta, not a
+rebuild stamp. It was **not followed to a patched routine**: no decompile,
+no named function, no advisory.
+
+### Tagged insights (`ubusd`)
+
+Saved records (no `--no-save`) with `--tag ubusd`, then
+`r2b insights --tag ubusd --json`.
+
+| Record | SHA-256 |
+|---|---|
+| 24.10.3 | `8fd16a06d3b529ee4899bf73c6ac283e8b030972205a8356da4fc2fc98dae5f3` |
+| 24.10.4 | `d279564b22768de6e9d8efe083784c4547c3aeadf6ffd1905356a0e0df1f2765` |
+
+`r2b.insights.v1` was ready on two `linux_elf` siblings. Exact-SHA collapse
+did **not** fire (`identity` pattern absent); the hashes differ. Eight
+recurring import patterns, all 2/2: `avl_find`, `avl_strcmp`, `blob_buf_init`,
+`blob_nest_end`, `blob_parse_untrusted`, `blobmsg_add_field`,
+`blobmsg_add_json_from_file`, `blobmsg_open_nested`. `strcpy` / `memcpy` are
+not listed (ubiquitous libc is dropped). `skill_ready` is false.
+
 ## Portable result
 
 The generated `.r2br` contains the pre-fix `ubusd` analysis, briefing,

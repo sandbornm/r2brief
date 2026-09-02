@@ -68,7 +68,10 @@ Hash every extracted child, match paths across releases, and analyze changed
 ELFs rather than treating the wrapper as code. The existing
 [`openwrt-ubusd-release-delta.json`](case-studies/openwrt-ubusd-release-delta.json)
 links the image pair, selected child, call sites, decompilation, advisory, and
-fix commit.
+fix commit. The Kali replay also briefed the other two changed ELFs: `busybox`
+is rebuild noise (eight-byte banner timestamp); `odhcpd` strcpy site counts
+moved and were not followed to a patched routine. Tagged `insights --tag ubusd`
+did not collapse the two `ubusd` hashes.
 
 Report at least these measures:
 

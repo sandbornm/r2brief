@@ -66,6 +66,39 @@ count = count + 1;
 
 The patched function is 504 bytes; the unpatched function is 506.
 
+## Compared with labeled sources
+
+Both challenges already have author labels and later expert writeups.
+The pilot is checked against those, not against a silent binary.
+
+**Palindrome is CADET_00001**, DARPA's sample palindrome detector. The
+official README states CWE-121: 64 bytes of stack, reads up to 128.
+angr's published example treats it as a teaching crash: unconstrained
+EIP after symbolic `receive`, plus the `^` easter egg at a DECREE
+address (`0x804833E`) that does not match this Linux port. KLEE on
+cb-multios Palindrome reports the same overflow at `service.c:65`
+almost immediately. The authors call it an intentionally simple first
+C program.
+
+The r2b path matches the label (same buffer, same 128/64 bound, same
+`cgc_check` name) and does not reproduce angr/KLEE crash generation.
+The Linux-port addresses also differ from the DECREE sample angr
+ships.
+
+**basic_messaging is CQE qualifier CROMU_00001** (Cromulence, John
+Berry). The MIT LL / Lunge archive lists CWE-190, CWE-131, and
+CWE-120, names `list_unread_messages()`, and says the count is 8 bits
+and wraps above 255. The crash is supposed to land in `strlen` after
+locals are overwritten. The author challenge is that self-messages are
+not enough. CQE scores were low: CodeJitsu 1.85 / 4, CSDS 0.9,
+ForAllSecure 0.58; Shellphish, Trail of Bits, and several others
+scored 0. Trail of Bits still proved a reference POV. Three teams
+defended 100% against that POV.
+
+The r2b path matches the labeled function and the 8-bit versus 32-bit
+count. It does not recover the CQE POV (send-to-other-user, wrap, crash
+in `strlen`) and did not score like a CRS.
+
 ## Runtime
 
 POLLs completed against both variants inside a `linux/amd64` container

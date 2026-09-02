@@ -202,6 +202,44 @@
     "Palindrome": "CWE-121: 64-byte stack buffer; unpatched receives 128 bytes, patched receives 64.",
     "basic_messaging": "CWE-190: unread-message counter is unsigned char unpatched and unsigned int patched."
   },
+  "labeled_sources": {
+    "Palindrome": {
+      "cgc_id": "CADET_00001",
+      "role": "official CGC sample, not a high-scoring CQE qualifier in the LL archive index used here",
+      "author_label": "CWE-121 stack overflow: 64-byte buffer, read up to 128",
+      "sources": [
+        "https://github.com/CyberGrandChallenge/samples/tree/master/examples/CADET_00001",
+        "https://github.com/angr/angr-doc/blob/master/examples/CADET_00001/solve.py",
+        "https://gist.github.com/moyix/71357ca3b4d65c13e8394517e7093e21"
+      ],
+      "expert_notes": [
+        "angr example finds unconstrained EIP from symbolic stdin and the ^ easter egg; DECREE easter-egg address 0x804833E does not match this Linux port.",
+        "KLEE on cb-multios Palindrome reports memory error at service.c:65 almost immediately."
+      ],
+      "r2b_alignment": "reaches cgc_check and the 0x80 vs 0x40 receive bound; does not emit a crashing input"
+    },
+    "basic_messaging": {
+      "cgc_id": "CROMU_00001",
+      "role": "CQE qualifier",
+      "author_label": "CWE-190 then CWE-131 then CWE-120 in list_unread_messages(); 8-bit unread count wraps above 255; crash in strlen",
+      "sources": [
+        "https://archive.ll.mit.edu/cgc/cgc-corpus/challenges/CROMU_00001/"
+      ],
+      "cqe_scores_max_4": {
+        "CodeJitsu": 1.85,
+        "CSDS": 0.9,
+        "ForAllSecure": 0.58,
+        "Shellphish": 0.0,
+        "TrailofBits": 0.0
+      },
+      "cqe_notes": [
+        "Trail of Bits proved a reference POV despite a 0 score.",
+        "ForAllSecure, CodeJitsu, and CSDS defended 100% against the reference POV.",
+        "Author: sending messages to self is not enough to trigger."
+      ],
+      "r2b_alignment": "reaches cgc_list_unread_messages and the uchar vs uint count; does not recover the CQE POV or CRS score"
+    }
+  },
   "replay": [
     "python3 scripts/corpus_intake.py fetch darpa-cgc-multios",
     "python3 scripts/corpus_intake.py verify darpa-cgc-multios",

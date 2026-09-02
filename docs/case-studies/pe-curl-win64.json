@@ -1,0 +1,147 @@
+{
+  "schema_version": "r2b.case-study.v1",
+  "case_id": "pe-curl-win64",
+  "generated_at": "2026-09-02T20:27:53Z",
+  "status": "thin-stop recorded",
+  "claim": "This is not a CWE or malware claim. Official curl.exe for Windows amd64 is a PE. --quick ranked network and memory import inventories plus entry. dangerous_imports had no system/popen/exec*, so verify was not run and next_argv stayed empty.",
+  "dataset": {
+    "id": "curl-win64-mingw-8.22.0_1",
+    "vendor": "curl",
+    "version": "8.22.0_1",
+    "source_page": "https://curl.se/windows/",
+    "github_release": "https://github.com/curl/curl/releases/tag/curl-8_22_0",
+    "github_win64_mingw_url": "https://github.com/curl/curl/releases/download/curl-8_22_0/curl-8.22.0-win64-mingw.zip",
+    "github_win64_mingw_http": 404,
+    "url": "https://curl.se/windows/dl-8.22.0_1/curl-8.22.0_1-win64-mingw.zip",
+    "filename": "curl-8.22.0_1-win64-mingw.zip",
+    "sha256": "7f23b039f6ea4197362d4468e1a0e71428201222e1bef3b680d5ef7b2aefb714",
+    "zip_bytes": 8691604,
+    "publisher_sha256_url": "https://curl.se/windows/dl-8.22.0_1/curl-8.22.0_1-win64-mingw.zip.txt",
+    "license": "curl License (ISC-style); redistributable. Binary not committed.",
+    "note": "curl/curl GitHub release 8.22.0 attaches source archives only. The frozen win64-mingw zip is the official curl-for-win package from curl.se, SHA-256 matching the publisher .txt."
+  },
+  "subject": {
+    "path": "curl-8.22.0_1-win64-mingw/bin/curl.exe",
+    "extracted_as": ".r2b-corpus/work/pe-curl-win64/curl.exe",
+    "sha256": "57309336350df718d9d3f76694d86a997bf9dc6708ce2d86b658294707572b3c",
+    "size_bytes": 3882088,
+    "file": "PE32+ executable for MS Windows 6.00 (console), x86-64, 9 sections",
+    "format": "pe",
+    "arch": "x86_64/64",
+    "os": "windows",
+    "subject_class": "windows_pe",
+    "function_count_radare2": 276,
+    "import_count": 276,
+    "dangerous_imports": [
+      "memcpy",
+      "memmove",
+      "strcat",
+      "strcpy"
+    ],
+    "interesting_imports": [
+      "accept",
+      "bind",
+      "connect",
+      "listen",
+      "recv",
+      "recvfrom",
+      "send",
+      "sendto",
+      "socket"
+    ],
+    "executed": false
+  },
+  "protocol": {
+    "analysis": [
+      "uv run r2b brief BIN --quick --no-save --json",
+      "uv run r2b verify BIN --import <name> --json  # only if dangerous_imports includes system/popen/exec*"
+    ],
+    "verify_gate": "system/popen/exec*",
+    "not_run": [
+      "verify",
+      "decompile",
+      "execution of curl.exe",
+      "model calls"
+    ]
+  },
+  "host": {
+    "uname": "Linux kali-raspberry-pi5 6.1.92-v8+ #1 SMP PREEMPT Tue Jun  4 14:30:43 UTC 2024 aarch64 GNU/Linux",
+    "cpus": 4,
+    "ram_gib": 8,
+    "r2b_version": "0.1.0",
+    "git": "2bfe56559eac7eaa4a62f194a0ecd292b7d0284d",
+    "python": "3.11.13",
+    "radare2": "6.0.5",
+    "file": "5.47",
+    "ghidra": "12.1.2 PUBLIC present; not used (--quick)",
+    "flavor": "core; Ghidra headless present, angr not enabled; no model call"
+  },
+  "brief": {
+    "mode": "quick",
+    "returncode": 0,
+    "wall_s": 40.91,
+    "schema_version": "r2b.briefing.v1",
+    "summary": "curl.exe looks like pe; x86_64/64; 276 functions; imports memcpy, memmove, strcat, strcpy. First region: Network ingress / egress.",
+    "ranked_region_ids": [
+      "imports:network",
+      "entry:entry",
+      "imports:memory"
+    ],
+    "regions": [
+      {
+        "id": "imports:network",
+        "score": 90,
+        "title": "Network ingress / egress",
+        "function": null,
+        "address": null,
+        "kind": "inventory",
+        "snippet_head": "accept\nbind\nconnect\nlisten\nrecv\nrecvfrom\nsend\nsendto\nsocket"
+      },
+      {
+        "id": "entry:entry",
+        "score": 89,
+        "title": "Entry / entry",
+        "function": "entry",
+        "address": "0x1400013a0",
+        "kind": "disasm",
+        "snippet_head": "0x1400013a0  mov rax, qword [0x1402ca020]\n0x1400013a7  mov dword [rax], 0\n0x1400013ad  jmp 0x140001020"
+      },
+      {
+        "id": "imports:memory",
+        "score": 84,
+        "title": "Memory and path handling",
+        "function": null,
+        "address": null,
+        "kind": "inventory",
+        "snippet_head": "memcpy\nmemmove\nstrcat\nstrcpy"
+      }
+    ],
+    "next_argv": [],
+    "next_argv_contains_decompile": false
+  },
+  "verify": {
+    "ran": false,
+    "reason": "no-process-launch-import",
+    "gate": "dangerous_imports did not include system, popen, or exec*"
+  },
+  "timing": {
+    "brief_wall_s": 40.91,
+    "verify_wall_s": null,
+    "notes": "Sequential on Kali Pi 5. GNU time absent; wall is perf_counter around `r2b brief --quick --no-save --json`."
+  },
+  "replay": [
+    "curl -L -o curl-8.22.0_1-win64-mingw.zip https://curl.se/windows/dl-8.22.0_1/curl-8.22.0_1-win64-mingw.zip",
+    "sha256sum curl-8.22.0_1-win64-mingw.zip  # 7f23b039f6ea4197362d4468e1a0e71428201222e1bef3b680d5ef7b2aefb714",
+    "python3 -c \"import zipfile; z=zipfile.ZipFile('curl-8.22.0_1-win64-mingw.zip'); z.extract('curl-8.22.0_1-win64-mingw/bin/curl.exe', '.')\"",
+    "file curl-8.22.0_1-win64-mingw/bin/curl.exe",
+    "uv run r2b brief curl-8.22.0_1-win64-mingw/bin/curl.exe --quick --no-save --json"
+  ],
+  "limits": [
+    "GitHub curl/curl 8.22.0 has no win64-mingw zip (HTTP 404). The recorded zip is the official curl.se Windows amd64 package.",
+    "memcpy/strcpy presence is a PLT pivot, not a memory-corruption finding.",
+    "Network import ranking is expected for curl; it is not a vulnerability.",
+    "verify was correctly skipped: no system/popen/exec* in dangerous_imports.",
+    "handoff.next_argv is empty and does not contain decompile.",
+    "curl.exe was not executed. Target bytes stay out of git."
+  ]
+}

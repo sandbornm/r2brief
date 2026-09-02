@@ -1,0 +1,122 @@
+{
+  "schema_version": "r2b.case-study.v1",
+  "case_id": "macho-jq",
+  "generated_at": "2026-09-02T20:27:53Z",
+  "status": "thin-stop recorded",
+  "claim": "This is not a CWE or malware claim. Official jq 1.8.2 macOS arm64 is a Mach-O. --quick ranked entry plus a memory-import inventory. dangerous_imports had no system/popen/exec*, so verify was not run and next_argv stayed empty. The binary was not executed; file(1) and r2b brief on Linux are the test.",
+  "dataset": {
+    "id": "jq-macos-arm64-1.8.2",
+    "vendor": "jqlang",
+    "version": "1.8.2",
+    "source_page": "https://github.com/jqlang/jq/releases/tag/jq-1.8.2",
+    "url": "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-macos-arm64",
+    "filename": "jq-macos-arm64",
+    "sha256": "2d75340ba57a4b4b4c8708a21c2dc8e958a48aaa8bba13b27f77f6e4c0eca07e",
+    "size_bytes": 841504,
+    "publisher_sha256_url": "https://github.com/jqlang/jq/releases/download/jq-1.8.2/sha256sum.txt",
+    "license": "MIT (jq); redistributable. Binary not committed."
+  },
+  "subject": {
+    "path": "jq-macos-arm64",
+    "stored_as": ".r2b-corpus/work/macho-jq/jq-macos-arm64",
+    "sha256": "2d75340ba57a4b4b4c8708a21c2dc8e958a48aaa8bba13b27f77f6e4c0eca07e",
+    "size_bytes": 841504,
+    "file": "Mach-O 64-bit arm64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|PIE|HAS_TLV_DESCRIPTORS>",
+    "format": "macho",
+    "arch": "arm64/64",
+    "os": "macos",
+    "subject_class": "macho",
+    "function_count_radare2": 400,
+    "import_count": 135,
+    "dangerous_imports": [
+      "__memcpy_chk",
+      "memcpy",
+      "memmove",
+      "strcpy"
+    ],
+    "interesting_imports": [],
+    "executed": false
+  },
+  "protocol": {
+    "analysis": [
+      "file BIN",
+      "uv run r2b brief BIN --quick --no-save --json",
+      "uv run r2b verify BIN --import <name> --json  # only if dangerous_imports includes system/popen/exec*"
+    ],
+    "verify_gate": "system/popen/exec*",
+    "not_run": [
+      "verify",
+      "decompile",
+      "execution of jq-macos-arm64",
+      "model calls"
+    ]
+  },
+  "host": {
+    "uname": "Linux kali-raspberry-pi5 6.1.92-v8+ #1 SMP PREEMPT Tue Jun  4 14:30:43 UTC 2024 aarch64 GNU/Linux",
+    "cpus": 4,
+    "ram_gib": 8,
+    "r2b_version": "0.1.0",
+    "git": "2bfe56559eac7eaa4a62f194a0ecd292b7d0284d",
+    "python": "3.11.13",
+    "radare2": "6.0.5",
+    "file": "5.47",
+    "ghidra": "12.1.2 PUBLIC present; not used (--quick)",
+    "flavor": "core; Ghidra headless present, angr not enabled; no model call"
+  },
+  "brief": {
+    "mode": "quick",
+    "returncode": 0,
+    "wall_s": 39.778,
+    "schema_version": "r2b.briefing.v1",
+    "summary": "jq-macos-arm64 looks like macho; arm64/64; 400 functions; imports __memcpy_chk, memcpy, memmove, strcpy. First region: Entry / entry.",
+    "ranked_region_ids": [
+      "entry:entry",
+      "imports:memory"
+    ],
+    "regions": [
+      {
+        "id": "entry:entry",
+        "score": 89,
+        "title": "Entry / entry",
+        "function": "entry",
+        "address": "0x1000008a8",
+        "kind": "disasm",
+        "snippet_head": "int main (int argc, char **argv);\n0x1000008a8  sub sp, sp, 0x120\n0x1000008ac  stp x28, x27, [sp, 0xc0]"
+      },
+      {
+        "id": "imports:memory",
+        "score": 84,
+        "title": "Memory and path handling",
+        "function": null,
+        "address": null,
+        "kind": "inventory",
+        "snippet_head": "__memcpy_chk\nmemmove\nstrcpy"
+      }
+    ],
+    "next_argv": [],
+    "next_argv_contains_decompile": false
+  },
+  "verify": {
+    "ran": false,
+    "reason": "no-process-launch-import",
+    "gate": "dangerous_imports did not include system, popen, or exec*"
+  },
+  "timing": {
+    "brief_wall_s": 39.778,
+    "verify_wall_s": null,
+    "notes": "Sequential on Kali Pi 5 after the curl PE brief. GNU time absent; wall is perf_counter around `r2b brief --quick --no-save --json`."
+  },
+  "replay": [
+    "curl -L -o jq-macos-arm64 https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-macos-arm64",
+    "sha256sum jq-macos-arm64  # 2d75340ba57a4b4b4c8708a21c2dc8e958a48aaa8bba13b27f77f6e4c0eca07e",
+    "file jq-macos-arm64",
+    "uv run r2b brief jq-macos-arm64 --quick --no-save --json"
+  ],
+  "limits": [
+    "The Mach-O was not executed. Linux file(1) plus r2b brief are the recorded test.",
+    "verify was correctly skipped: no system/popen/exec* in dangerous_imports.",
+    "handoff.next_argv is empty and does not contain decompile.",
+    "__memcpy_chk/strcpy inventory is a fortified libc pivot, not a memory-corruption finding.",
+    "Target bytes stay out of git."
+  ]
+}

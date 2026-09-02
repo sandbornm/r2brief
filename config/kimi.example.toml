@@ -1,6 +1,9 @@
 # r2b --ask overlay (Kimi / Moonshot). Keep the key in gitignored `.env`:
 #   echo 'MOONSHOT_API_KEY=...' >> .env
 #   cp config/kimi.example.toml config/local.toml
+#
+# kimi-k3 always thinks and pins temperature to 1.0 (any other value is HTTP 400).
+# The client omits temperature; max_tokens must cover reasoning + the JSON answer.
 
 [llm]
 provider = "kimi"
@@ -8,6 +11,6 @@ transport = "chat_completions"
 model = "kimi-k3"
 api_key_env = "MOONSHOT_API_KEY"
 enable_fallback = false
-temperature = 0.2
-max_tokens = 4096
+temperature = 1
+max_tokens = 16384
 compact_context = true

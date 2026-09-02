@@ -193,6 +193,49 @@ def test_chat_truncates_chat_template_token_leak(monkeypatch):
     assert client.chat([{"role": "user", "content": "hi"}]) == "real answer"
 
 
+def test_kimi_omits_temperature(monkeypatch):
+    monkeypatch.setenv("MOONSHOT_API_KEY", "moonshot-secret")
+    config = AppConfig(
+        llm=LLMSettings(
+            provider="kimi",
+            model="kimi-k3",
+            api_key_env="MOONSHOT_API_KEY",
+            temperature=0.2,
+        )
+    )
+    client = OpenAIClient(config)
+    stub = _StubCompletions('{"ok":true}')
+    client._client = type("Client", (), {"chat": type("Chat", (), {"completions": stub})()})()
+    client.chat([{"role": "user", "content": "hi"}])
+    assert "temperature" not in stub.calls[0]
+
+
+def test_kimi_empty_content_after_reasoning_is_an_error(monkeypatch):
+    monkeypatch.setenv("MOONSHOT_API_KEY", "moonshot-secret")
+    config = AppConfig(
+        llm=LLMSettings(
+            provider="kimi",
+            model="kimi-k3",
+            api_key_env="MOONSHOT_API_KEY",
+        )
+    )
+    client = OpenAIClient(config)
+
+    class _EmptyReasoning:
+        def create(self, **params):
+            message = type(
+                "M",
+                (),
+                {"content": "", "reasoning_content": "thinking...", "tool_calls": None},
+            )()
+            choice = type("C", (), {"message": message, "finish_reason": "length"})()
+            return type("R", (), {"choices": [choice], "id": "cmpl-1", "model": "kimi-k3", "usage": None})()
+
+    client._client = type("Client", (), {"chat": type("Chat", (), {"completions": _EmptyReasoning()})()})()
+    with pytest.raises(OpenAIError, match="16384"):
+        client.chat([{"role": "user", "content": "hi"}])
+
+
 def test_coding_plan_host_disables_thinking_by_default(monkeypatch):
     monkeypatch.setenv("ZAI_API_KEY", "id.secret")
     config = AppConfig(

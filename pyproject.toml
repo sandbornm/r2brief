@@ -91,6 +91,7 @@ packages = ["src/r2b"]
 "config/openai.example.toml" = "r2b/share/openai.example.toml"
 "config/glm.example.toml" = "r2b/share/glm.example.toml"
 "config/z.ai.example.toml" = "r2b/share/z.ai.example.toml"
+"config/z.ai-coding.example.toml" = "r2b/share/z.ai-coding.example.toml"
 "config/x.ai.example.toml" = "r2b/share/x.ai.example.toml"
 "config/kimi.example.toml" = "r2b/share/kimi.example.toml"
 "config/exo.example.toml" = "r2b/share/exo.example.toml"

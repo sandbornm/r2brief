@@ -1,0 +1,20 @@
+# r2b --ask overlay (Z.ai GLM coding plan). Copy to config/local.toml or:
+#   export R2B_CONFIG=/path/to/this/file
+#
+# Put the key in gitignored `.env` — never here:
+#   echo 'GLM_API_KEY=...' >> .env
+#   echo 'ZAI_API_KEY=...' >> .env   # also accepted; set api_key_env below
+#
+# Use this overlay when /api/paas/v4 or open.bigmodel.cn returns 1113
+# (no package for this key). Coding-plan hosts are /api/coding/paas/v4.
+
+[llm]
+provider = "glm"
+transport = "chat_completions"
+model = "glm-5.1"
+api_key_env = "GLM_API_KEY"
+base_url = "https://api.z.ai/api/coding/paas/v4/"
+enable_fallback = false
+temperature = 0.2
+max_tokens = 2048
+compact_context = true

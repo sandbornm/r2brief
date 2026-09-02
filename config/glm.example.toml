@@ -7,7 +7,9 @@
 #   export R2B_LLM_PROVIDER=glm             # enough if you skip this overlay
 #
 # Official China (open.bigmodel.cn) — GLM_API_KEY / ZHIPUAI_API_KEY
-# International Z.ai — ZAI_API_KEY + /api/paas/v4 + glm-5.1
+# International Z.ai chat — ZAI_API_KEY + /api/paas/v4 + glm-5.1
+# Z.ai coding-plan keys (HTTP 1113 on paas / China) — copy config/z.ai-coding.example.toml
+#   or: export R2B_LLM_BASE_URL=https://api.z.ai/api/coding/paas/v4
 
 [llm]
 provider = "glm"

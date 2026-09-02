@@ -194,7 +194,14 @@ class OpenAIClient:
     def _uses_new_api(self) -> bool:
         return self._model.lower().startswith(("o1", "o3", "o4", "gpt-4", "gpt-5"))
 
+    def _is_kimi_model(self) -> bool:
+        return self._provider == "kimi" or self._model.lower().startswith("kimi-")
+
     def _rejects_temperature(self) -> bool:
+        # kimi-k3 pins temperature server-side (only 1.0). Sending the overlay
+        # default 0.1/0.2 is HTTP 400; omit and let the host apply the pin.
+        if self._is_kimi_model():
+            return True
         return self._model.lower().startswith(("o1", "o3", "o4", "gpt-5"))
 
     def generate(
@@ -353,14 +360,24 @@ class OpenAIClient:
                     arguments=_arguments(getattr(function, "arguments", {})),
                 )
             )
+        text = _truncate_template_leak(str(getattr(message, "content", "") or ""))
+        finish = getattr(choice, "finish_reason", None)
+        if not text and self._is_kimi_model():
+            reasoning = getattr(message, "reasoning_content", None) or ""
+            if reasoning or finish == "length":
+                raise OpenAIError(
+                    f"Model {self._model} returned empty content "
+                    f"(finish_reason={finish}). kimi-k3 always thinks; "
+                    "set llm.max_tokens to at least 16384 so the answer is not truncated."
+                )
         return LLMResponse(
-            text=_truncate_template_leak(str(getattr(message, "content", "") or "")),
+            text=text,
             provider=self._provider,
             model=str(getattr(completion, "model", None) or self._model),
             transport=LLMTransport.CHAT_COMPLETIONS,
             response_id=getattr(completion, "id", None),
             usage=_usage(getattr(completion, "usage", None)),
-            finish_reason=getattr(choice, "finish_reason", None),
+            finish_reason=finish,
             tool_calls=tuple(calls),
         )
 

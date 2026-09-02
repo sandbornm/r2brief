@@ -1,8 +1,8 @@
 {
   "schema_version": "r2b.case-study.v1",
   "case_id": "llm-loop-ubusd",
-  "generated_at": "2026-09-02T12:00:00Z",
-  "status": "two of four models ran",
+  "generated_at": "2026-09-02T22:50:00Z",
+  "status": "four of four models ran",
   "subject": {
     "binary": "OpenWrt 24.10.3 sbin/ubusd",
     "brief": ".r2b-corpus/work/openwrt-ubusd/results/ubusd-24.10.3-brief.json",
@@ -14,7 +14,7 @@
   "protocol": {
     "allowed": ["uv run r2b brief|verify|decompile|review|records|env"],
     "forbidden": ["r2", "radare2", "analyzeHeadless", "ghidra", "angr", "gdb", "qemu", "strings"],
-    "note": "empty next_argv is valid; strcpy still in dangerous_imports"
+    "note": "empty next_argv is valid; strcpy still in dangerous_imports. Grok/Codex had a shell. Kimi/GLM had one host-owned run_r2b tool."
   },
   "agents": [
     {
@@ -52,22 +52,36 @@
       "decompile_note": "call site 0x4ba8; containing fn 00004a3c; Ghidra lock/no function"
     },
     {
-      "id": "kimi-k2.5",
-      "how": "r2b review --mode llm --config config/kimi.example.toml",
-      "status": "abstain",
-      "reason": "MOONSHOT_API_KEY unset"
+      "id": "kimi-k3",
+      "how": "allowlisted run_r2b + config/kimi.example.toml",
+      "status": "ran",
+      "in_loop": true,
+      "sidestep": false,
+      "verify_strcpy": true,
+      "callers": ["0x00004b50", "0x00004b6c", "0x00004ba8"],
+      "decompile_addr": "0x33c4",
+      "decompile_success": false,
+      "decompile_note": "verify function field 000033c4, not call site; Ghidra no function at 33c4"
     },
     {
       "id": "glm-5.1",
-      "how": "r2b review --mode llm --config config/glm.example.toml",
-      "status": "abstain",
-      "reason": "GLM_API_KEY unset"
+      "how": "allowlisted run_r2b + config/z.ai-coding.example.toml",
+      "status": "ran",
+      "in_loop": true,
+      "sidestep": false,
+      "verify_strcpy": true,
+      "callers": ["0x00004b50", "0x00004b6c", "0x00004ba8"],
+      "decompile_addr": "0x33c4",
+      "decompile_success": false,
+      "decompile_note": "served as glm-5.3; verify function field 000033c4; Ghidra no function at 33c4",
+      "served_model": "glm-5.3"
     }
   ],
-  "product_gap": "verify reports call-site VAs; r2b decompile wants a function start. Hand the containing function VA in verify JSON.",
+  "product_gap": "verify reports call-site VAs and an r2 function name; r2b decompile wants a Ghidra function start. Neither the call site nor r2 fcn 000033c4 was a Ghidra function. Hand a Ghidra-resolvable function VA in verify JSON.",
   "limits": [
     "Not a four-way quality ranking.",
-    "Kimi and GLM overlays exist; this host had no keys.",
-    "review --mode llm cannot run verify; the grok/codex runs are planner loops that exec r2b."
+    "Kimi and GLM had no native planner CLI; the host exposed only run_r2b.",
+    "review --mode llm cannot run verify; it only permutes known region IDs.",
+    "GLM_API_KEY on this host is a Z.ai coding-plan key; China paas and Z.ai /api/paas/v4 return 1113."
   ]
 }

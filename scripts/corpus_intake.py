@@ -200,12 +200,16 @@ def _tree_size(root: Path) -> int:
 def _fetch_git(dataset: dict[str, Any], output: Path) -> Path:
     destination = output / _safe_id(dataset["id"])
     expected = str(dataset["commit"])
+    paths = [str(item) for item in dataset.get("sparse_paths", [])]
     if destination.exists():
         if not (destination / ".git").is_dir():
             raise IntakeError(f"existing path is not a git checkout: {destination}")
         actual = _git(["rev-parse", "HEAD"], cwd=destination)
         if actual != expected:
             raise IntakeError(f"{destination} is at {actual}, expected {expected}")
+        if paths:
+            _git(["sparse-checkout", "set", *paths], cwd=destination)
+            _git(["checkout", "--quiet", expected], cwd=destination)
         print(f"verified {dataset['id']}: {destination} @ {actual}")
         return destination
 
@@ -219,7 +223,6 @@ def _fetch_git(dataset: dict[str, Any], output: Path) -> Path:
         ["fetch", "--quiet", "--depth", "1", "--filter=blob:none", "origin", expected],
         cwd=staging,
     )
-    paths = [str(item) for item in dataset.get("sparse_paths", [])]
     if paths:
         _git(["sparse-checkout", "init", "--cone"], cwd=staging)
         _git(["sparse-checkout", "set", *paths], cwd=staging)
@@ -264,6 +267,11 @@ def _verify(dataset: dict[str, Any], output: Path) -> None:
     actual = _git(["rev-parse", "HEAD"], cwd=path)
     if actual != dataset["commit"]:
         raise IntakeError(f"{dataset['id']}: commit mismatch: {actual}")
+    missing = [item for item in dataset.get("sparse_paths", []) if not (path / item).exists()]
+    if missing:
+        raise IntakeError(
+            f"{dataset['id']}: missing sparse path(s): {', '.join(missing)}; rerun fetch"
+        )
     print(f"verified {dataset['id']}: {path} @ {actual}")
 
 

@@ -27,6 +27,7 @@ def test_shipped_manifest_is_valid_and_pinned() -> None:
         "ada9d7e1c323d283446df3f55bdee0d00bda1fed786785fe98764d58688f38eb"
     )
     assert len(by_id["darpa-cgc-multios"]["commit"]) == 40
+    assert "exclude" in by_id["darpa-cgc-multios"]["sparse_paths"]
     assert {
         "openwrt-bpi-r3-mini-24.10.3",
         "openwrt-bpi-r3-mini-24.10.4",
@@ -74,3 +75,47 @@ def test_list_never_creates_output(tmp_path: Path, capsys) -> None:
     assert result == 0
     assert not output.exists()
     assert "nist-juliet-c-cpp-1.3" in capsys.readouterr().out
+
+
+def test_existing_git_fetch_refreshes_sparse_paths(tmp_path: Path, monkeypatch) -> None:
+    output = tmp_path / "corpus"
+    checkout = output / "darpa-cgc-multios"
+    (checkout / ".git").mkdir(parents=True)
+    calls: list[list[str]] = []
+
+    def fake_git(args: list[str], *, cwd: Path | None = None) -> str:
+        assert cwd == checkout
+        calls.append(args)
+        return "a" * 40 if args == ["rev-parse", "HEAD"] else ""
+
+    monkeypatch.setattr(corpus_intake, "_git", fake_git)
+    dataset = {
+        "id": "darpa-cgc-multios",
+        "commit": "a" * 40,
+        "sparse_paths": ["challenges/Palindrome", "exclude"],
+    }
+
+    assert corpus_intake._fetch_git(dataset, output) == checkout
+    assert [
+        "sparse-checkout",
+        "set",
+        "challenges/Palindrome",
+        "exclude",
+    ] in calls
+
+
+def test_verify_git_requires_manifest_sparse_paths(tmp_path: Path, monkeypatch) -> None:
+    output = tmp_path / "corpus"
+    checkout = output / "darpa-cgc-multios"
+    (checkout / ".git").mkdir(parents=True)
+    (checkout / "challenges" / "Palindrome").mkdir(parents=True)
+    monkeypatch.setattr(corpus_intake, "_git", lambda *args, **kwargs: "a" * 40)
+    dataset = {
+        "id": "darpa-cgc-multios",
+        "kind": "git",
+        "commit": "a" * 40,
+        "sparse_paths": ["challenges/Palindrome", "exclude"],
+    }
+
+    with pytest.raises(corpus_intake.IntakeError, match="missing sparse path.*exclude"):
+        corpus_intake._verify(dataset, output)

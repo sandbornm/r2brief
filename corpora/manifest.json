@@ -39,6 +39,7 @@
         "challenges/Palindrome",
         "challenges/basic_messaging",
         "cmake",
+        "exclude",
         "include",
         "tools"
       ]

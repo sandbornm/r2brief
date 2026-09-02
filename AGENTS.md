@@ -234,4 +234,8 @@ Do not re-run archived plans. Type `r2b`. `import r2b` is the library.
 - Do not revive `brief --goal`.
 - Later: PyPI `r2brief`, XDG `~/.cache/r2b` / `~/.config/r2b`.
 - Compile is the web panel, not a CLI verb.
+- DARPA CGC pilot: resume from
+  `docs/case-studies/darpa-cgc-pilot.md`. Use the Kali Pi for the isolated
+  `linux/amd64` build, quick briefs, POLLs, and POVs. Do not install the
+  `analyzers` extra on the Pi; run Ghidra/angr depth on a non-Pi host.
 - Archive: `docs/archive/r2b-cli-rename.md` (done). `docs/plans/2026-01-27-unified-tool-execution.md` is superseded (do not absorb a planner).

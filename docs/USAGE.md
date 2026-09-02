@@ -67,7 +67,8 @@ Overlays only configure that optional call. Claude Code / Codex / Grok
 exec the CLI. They are not this process.
 
 `--json` briefing always includes `handoff` (`r2b.handoff.v1`): ranked
-regions with 12-line snippets and `next_argv` (`r2b verify` for
+regions with 12-line snippets (function-aware r2 `pdf` after `af` at the
+entry, not raw `pD`) and `next_argv` (`r2b verify` for
 `system`/`popen`/`exec*`, child `brief`/`--extract` on wrappers,
 `records show`). Function addresses stay on `handoff.regions[].addr`;
 `r2b decompile BIN ADDR` is explicit, not auto-queued. `--ask` is one

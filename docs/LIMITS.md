@@ -70,6 +70,8 @@ For a useful V8 investigation:
 - Ghidra and dynamic adapters have their own subprocess/runtime limits. The
   orchestrator no longer exposes generic quick/deep timeout settings because
   they did not safely terminate adapter processes.
+- `--quick` entry snippets are r2 `pdf` after `af` at the entry VA, not an
+  unanalyzed `pD` of N bytes (that can end on a torn `invalid` opcode).
 
 ## What scores mean
 

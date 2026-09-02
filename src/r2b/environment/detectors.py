@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
+from ..adapters.radare2 import parse_decompiler_backends
 from ..config import AppConfig, apply_lab_tool_path
 from ..extract.binwalk3 import find_binwalk3
 from ..llm.credentials import resolve_llm_api_key, resolve_provider_base_url, unused_glm_key_hint
@@ -150,6 +151,38 @@ def _looks_like_usage(line: str) -> bool:
     return "cannot open file --version" in lowered or "cannot open file -version" in lowered
 
 
+def _r2_decompiler_checks() -> list[ToolCheck]:
+    """Probe loaded r2 decompilers. r2ghidra is available only if `LD` lists it."""
+    r2 = shutil.which("r2") or shutil.which("radare2")
+    if not r2:
+        return []
+    try:
+        output = subprocess.check_output(
+            [r2, "-e", "scr.color=0", "-qc", "LD; ?e R2B_CORE; Lc", "-"],
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+        ).decode(errors="replace")
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        output = ""
+    ld_text, _, core_text = output.partition("R2B_CORE")
+    caps = parse_decompiler_backends(ld_text, core_text)
+    listed = ",".join(caps.backends) if caps.backends else "none"
+    return [
+        ToolCheck(
+            name="r2ghidra",
+            command="pdg",
+            available=caps.r2ghidra,
+            details=f"LD={listed}",
+        ),
+        ToolCheck(
+            name="r2dec",
+            command="pdd",
+            available=caps.r2dec,
+            details=f"LD={listed}",
+        ),
+    ]
+
+
 def _check_python_module(module: str) -> ToolCheck:
     try:
         __import__(module)
@@ -190,6 +223,7 @@ def detect_environment(config: AppConfig) -> EnvironmentReport:
             "Set require_elf=false in config/local.toml for this lab."
         )
     report.tools.append(_check_command("radare2", _COMMANDS["radare2"]))
+    report.tools.extend(_r2_decompiler_checks())
     report.tools.append(_check_command("docker", _COMMANDS["docker"]))
     if config.llm.provider.lower() in {"ollama", "local"} or (
         config.llm.enable_fallback and (config.llm.fallback_provider or "").lower() in {"ollama", "local"}
@@ -238,6 +272,8 @@ def detect_environment(config: AppConfig) -> EnvironmentReport:
         "bwrap",
         "unsquashfs",
         "sasquatch",
+        "r2ghidra",
+        "r2dec",
     }
     for tool in report.tools:
         if not tool.available:

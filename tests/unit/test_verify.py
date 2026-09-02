@@ -8,6 +8,7 @@ from r2b.analysis.verify import (
     extract_comment_string,
     first_arg_registers,
     parse_disassembly_line,
+    parse_function_va,
     resolve_argument,
     verify_imports,
 )
@@ -88,6 +89,30 @@ class TestResolveArgument:
         assert site.argument in ("<dynamic>", "<unresolved>")
         assert not site.is_constant
 
+    def test_callee_on_call_line_is_not_function_addr(self):
+        lines = [
+            "           0x00004b80      42d846f9       ldr x2, [x2, 0xdb0] ; reloc.strcpy",
+            "           0x00004b50      1dfaff97       bl fcn.000033c4",
+        ]
+        site = resolve_argument(lines, len(lines) - 1, ("x0", "w0"))
+        assert site.function == "000033c4"
+        assert site.address == "0x00004b50"
+        assert site.function_addr is None
+
+
+class TestParseFunctionVa:
+    def test_fcn_name_and_hex(self):
+        assert parse_function_va("fcn.00004a3c") == "0x00004a3c"
+        assert parse_function_va("00004a3c") == "0x00004a3c"
+        assert parse_function_va("0x4ba8") == "0x00004ba8"
+        assert parse_function_va(0x4a3c) == "0x00004a3c"
+
+    def test_symbolic_names_are_not_addresses(self):
+        assert parse_function_va("check_phrase") is None
+        assert parse_function_va("unknown") is None
+        assert parse_function_va("popen") is None
+        assert parse_function_va(0) is None
+
 
 class TestVerdictStatus:
     def test_no_callers(self):
@@ -118,6 +143,23 @@ class TestVerdictStatus:
         assert d["status"] == "no-callers"
         assert d["call_sites"] == []
 
+    def test_to_dict_includes_function_addr_alongside_call_site(self):
+        v = ImportVerdict(
+            import_name="strcpy",
+            call_sites=[
+                CallSite(
+                    function="000033c4",
+                    function_addr="0x00004a3c",
+                    address="0x00004b50",
+                    argument="<dynamic>",
+                )
+            ],
+        )
+        site = v.to_dict()["call_sites"][0]
+        assert site["address"] == "0x00004b50"
+        assert site["function"] == "000033c4"
+        assert site["function_addr"] == "0x00004a3c"
+
 
 class TestVerifyImports:
     def test_aarch64_bl_call(self):
@@ -133,6 +175,7 @@ class TestVerifyImports:
         assert verdicts[0].status == "dynamic"
         assert verdicts[0].call_sites[0].address == "0x004007a0"
         assert verdicts[0].call_sites[0].function == "check_phrase"
+        assert verdicts[0].call_sites[0].function_addr is None
 
     def test_aarch64_got_load_followed_by_blr(self):
         xref_lines = {
@@ -150,6 +193,7 @@ class TestVerifyImports:
         assert verdicts[0].status == "dynamic"
         assert verdicts[0].call_sites[0].address == "0x00009384"
         assert verdicts[0].call_sites[0].function == "000092e4"
+        assert verdicts[0].call_sites[0].function_addr == "0x000092e4"
         assert verdicts[0].call_sites[0].argument == "<dynamic>"
 
     def test_overlapping_windows_merge_the_same_call_site(self):
@@ -170,6 +214,23 @@ class TestVerifyImports:
         assert len(verdicts[0].call_sites) == 1
         assert verdicts[0].call_sites[0].address == "0x00009384"
         assert verdicts[0].call_sites[0].function == "000092e4"
+        assert verdicts[0].call_sites[0].function_addr == "0x000092e4"
+
+    def test_callee_name_on_call_line_is_not_function_addr(self):
+        xref_lines = {
+            "strcpy": [
+                "           0x00004b50      1dfaff97       bl fcn.000033c4",
+                "           0x00004b6c      40003fd6       blr x2",
+                "; r2b-caller: fcn.00004a3c",
+                "           0x00004b80      42d846f9       ldr x2, [x2, 0xdb0] ; reloc.strcpy",
+                "           0x00004ba8      40003fd6       blr x2",
+            ]
+        }
+        verdicts = verify_imports(xref_lines, arch="aarch64")
+        site = verdicts[0].call_sites[0]
+        assert site.address == "0x00004ba8"
+        assert site.function == "00004a3c"
+        assert site.function_addr == "0x00004a3c"
 
     def test_end_to_end_mips_popen(self):
         xref_lines = {

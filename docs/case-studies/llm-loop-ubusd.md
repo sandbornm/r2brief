@@ -68,8 +68,10 @@ all three gold sites. None invoked `r2` or `analyzeHeadless`.
 r2b changed the path: they did not `axt @ sym.imp.strcpy`. Grok and
 Codex decompiled a **call site**. Kimi and GLM used the verify
 `function` field (`000033c4` → `0x33c4`). Neither is
-`fcn.00004a3c` (`0x4a3c`). Ghidra still said no function. That is a
-product gap, not a model miss.
+`fcn.00004a3c` (`0x4a3c`). Ghidra still said no function. That was a
+product gap, not a model miss: verify now emits `function_addr` (the
+containing-function VA) and `r2b decompile BIN ADDR` resolves a call
+site to that function.
 
 The GLM key is a Z.ai coding-plan key. `config/glm.example.toml`
 (China `open.bigmodel.cn`) and Z.ai `/api/paas/v4` both return 1113.
@@ -84,5 +86,7 @@ memory capsule still lists `strcpy`, the planner that stays on r2b
 runs `verify --import strcpy` and gets three dynamic callers.** Rules
 review alone does not queue that command.
 
-Do not present this as a four-way quality bake-off. The decompile
-target is still not a Ghidra function start.
+Do not present this as a four-way quality bake-off. The recorded
+decompiles used call sites / r2 names. A later live check of
+`r2b decompile … 0x4ba8` now returns Ghidra `FUN_00104a3c` at
+`0x00104a3c` (`success: true`).

@@ -71,7 +71,8 @@ regions with 12-line snippets (function-aware r2 `pdf` after `af` at the
 entry, not raw `pD`) and `next_argv` (`r2b verify` for
 `system`/`popen`/`exec*`, child `brief`/`--extract` on wrappers,
 `records show`). Function addresses stay on `handoff.regions[].addr`;
-`r2b decompile BIN ADDR` is explicit, not auto-queued. `--ask` is one
+`r2b decompile BIN ADDR` is explicit, not auto-queued. ADDR may be a
+call site; it is resolved to `function_addr`. `--ask` is one
 optional LLM pass on the same briefing; `ask_result` rides on the JSON.
 A planner with its own model skips `--ask` and execs `handoff.next_argv`
 when it is non-empty.

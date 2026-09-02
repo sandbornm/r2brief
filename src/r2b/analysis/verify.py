@@ -48,6 +48,47 @@ _HEX_PAIR_RE = re.compile(
     r"(?P<reg>a[0-3]|v[0-1]|s[0-7]|t[0-9]|r[0-9]|x[0-9]+|w[0-9]+|rdi|edi|di|zero),\s*(?P<val>-?0x[0-9a-f]+)"
 )
 
+# r2 names like fcn.00004a3c / 00004a3c, or a hex VA. Named symbols are not VAs.
+_FUNCTION_VA_RE = re.compile(
+    r"(?:(?:sym|fcn|sub|func)\.)?(?:0x)?([0-9a-f]{3,16})$",
+    re.IGNORECASE,
+)
+
+
+def format_function_va(offset: int) -> str:
+    """Format a decompile-ready hex VA."""
+    if offset < 0x100000000:
+        return f"0x{offset:08x}"
+    return f"0x{offset:x}"
+
+
+def parse_function_va(value: str | int | None) -> str | None:
+    """Parse a decompile-ready hex VA from a name, address, or integer offset.
+
+    ``fcn.00004a3c`` and ``0x4a3c`` become ``0x00004a3c``. Symbolic names such as
+    ``check_phrase`` return None — they are not Ghidra-ready addresses.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        if value <= 0:
+            return None
+        return format_function_va(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    match = _FUNCTION_VA_RE.fullmatch(text)
+    if match is None:
+        embedded = re.search(r"0x([0-9a-f]+)", text, re.IGNORECASE)
+        if embedded is None:
+            return None
+        offset = int(embedded.group(1), 16)
+        return format_function_va(offset) if offset > 0 else None
+    offset = int(match.group(1), 16)
+    if offset <= 0:
+        return None
+    return format_function_va(offset)
+
 
 @dataclass(slots=True)
 class CallSite:
@@ -58,6 +99,7 @@ class CallSite:
     argument: str  # resolved constant string, or "<dynamic>" / "<unresolved>"
     is_constant: bool = False
     evidence: list[str] = field(default_factory=list)
+    function_addr: str | None = None  # containing-function VA, not the call site
 
 
 @dataclass(slots=True)
@@ -84,6 +126,7 @@ class ImportVerdict:
             "call_sites": [
                 {
                     "function": cs.function,
+                    "function_addr": cs.function_addr,
                     "address": cs.address,
                     "argument": cs.argument,
                     "constant": cs.is_constant,
@@ -142,12 +185,26 @@ def resolve_argument(
     """
     window = _window_instructions(lines, call_index)
     call_addr, _, _ = parse_disassembly_line(window[-1]) or ("?", "", "")
-    function = next(
-        (caller for line in reversed(window) if (caller := _caller_marker(line)) is not None),
-        _function_name_for_line(window[-1]),
+    caller = next(
+        (name for line in reversed(window) if (name := _caller_marker(line)) is not None),
+        None,
     )
+    # The call line itself often names the *callee* (``bl fcn.000033c4``). That
+    # is not the containing function and must not become function_addr.
+    if caller is not None:
+        function = caller
+        function_addr = parse_function_va(caller)
+    else:
+        function = _function_name_for_line(window[-1])
+        function_addr = None
     evidence: list[str] = [line.strip() for line in window[-4:]]
-    site = CallSite(function=function, address=call_addr, argument="<unresolved>", evidence=evidence)
+    site = CallSite(
+        function=function,
+        address=call_addr,
+        argument="<unresolved>",
+        evidence=evidence,
+        function_addr=function_addr,
+    )
 
     # Scan backwards for the most recent write to an argument register.
     for line in reversed(window[:-1]):
@@ -235,6 +292,8 @@ def _dedupe_call_sites(call_sites: list[CallSite]) -> list[CallSite]:
             continue
         if existing.function == "unknown" and site.function != "unknown":
             existing.function = site.function
+        if existing.function_addr is None and site.function_addr:
+            existing.function_addr = site.function_addr
         existing_rank = 0 if existing.argument == "<unresolved>" else 1 + int(existing.is_constant)
         site_rank = 0 if site.argument == "<unresolved>" else 1 + int(site.is_constant)
         if site_rank > existing_rank:

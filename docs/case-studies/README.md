@@ -7,6 +7,7 @@ analyzed; it is never executed. Third-party binaries are not committed.
 
 | Investigation | Question answered |
 |---|---|
+| [OpenWrt 24.10.3 → 24.10.4 `ubusd`](openwrt-ubusd-release-delta.md) | Do two signed release images reduce to one changed routine with named-import `verify`, without treating an import name as a finding? |
 | [OpenWrt uHTTPD: following a request to `execl`](uhttpd-aarch64.md) | What path, dispatch, process, and configuration boundaries sit between an HTTP request and CGI launch? |
 | [Review width on three AArch64 programs](review-width-aarch64.md) | When do independent lenses expose a new evidence capsule, and when does another pass add nothing? |
 | [AArch64 first-pass corpus](corpus-aarch64.md) | Which real programs produce a concrete follow-up, and which correctly stop with a thin brief? |

@@ -573,7 +573,10 @@ def verify(
 @app.command()
 def decompile(
     binary: Path = typer.Argument(..., help="Path to an ELF"),
-    function: str = typer.Argument(..., help="Function address (hex, with or without 0x)"),
+    function: str = typer.Argument(
+        ...,
+        help="Function or call-site VA (hex). Resolved to the containing function.",
+    ),
     config_path: Optional[Path] = typer.Option(None, "--config", help="Path to config TOML"),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON"),
 ) -> None:
@@ -596,9 +599,12 @@ def decompile(
     if json_output:
         _emit_json(payload)
         return
-    console.rule(f"Decompile {binary.name} @ {function}")
+    resolved = payload.get("function_addr") or function
+    console.rule(f"Decompile {binary.name} @ {resolved}")
     if not payload.get("success"):
         console.print("[red]Decompile failed[/]")
+        if payload.get("function_addr"):
+            console.print(f"[dim]resolved function[/] {payload['function_addr']}")
         if payload.get("stderr"):
             console.print(payload["stderr"])
     console.print(payload.get("c") or "")

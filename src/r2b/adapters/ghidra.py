@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -27,6 +28,42 @@ if TYPE_CHECKING:
     from .ghidra_bridge_client import GhidraBridgeClient
 
 _LOGGER = logging.getLogger(__name__)
+_DECOMPILE_HEADER_RE = re.compile(
+    r"^// ==== \S+ @ (?:0x)?([0-9a-f]+) ====",
+    re.IGNORECASE,
+)
+
+
+def resolve_decompile_function_va(binary: Path, address: str) -> str | None:
+    """Resolve a call-site or function VA to a decompile-ready function start.
+
+    Prefers radare2's containing function. Falls back to parsing the given
+    address as hex. Missing r2 or a non-file path is not an error.
+    """
+    from ..analysis.verify import parse_function_va
+
+    given = parse_function_va(address)
+    try:
+        from .radare2 import Radare2Adapter
+
+        adapter = Radare2Adapter()
+        if adapter.is_available() and binary.is_file():
+            found = adapter.containing_function_va(binary, address)
+            if found:
+                return found
+    except Exception as exc:
+        _LOGGER.debug("containing-function lookup failed for %s: %s", address, exc)
+    return given
+
+
+def _function_addr_from_decompile_c(text: str) -> str | None:
+    from ..analysis.verify import parse_function_va
+
+    for line in text.splitlines():
+        match = _DECOMPILE_HEADER_RE.match(line.strip())
+        if match:
+            return parse_function_va(match.group(1))
+    return None
 
 
 @dataclass
@@ -102,13 +139,20 @@ class GhidraAdapter:
         raise AdapterUnavailable("Ghidra not available. Set GHIDRA_INSTALL_DIR.")
 
     def decompile_function(self, binary: Path, address: str) -> dict[str, Any]:
-        """Decompile one function by hex address. Reuses a cached project."""
+        """Decompile one function by hex address. Reuses a cached project.
+
+        ``address`` may be a call site. radare2's containing-function VA is
+        preferred so Ghidra is asked for a function start it can create or
+        already has, not only ``getFunctionAt(call site)``.
+        """
         if not self.detection.headless_ready:
             raise AdapterUnavailable("Ghidra headless not available")
 
         script = self._script_path("DecompileTargets.java")
 
-        hex_addr = address.lower().removeprefix("0x")
+        requested_hex = address.lower().removeprefix("0x")
+        function_addr = resolve_decompile_function_va(binary, address)
+        target_hex = function_addr.lower().removeprefix("0x") if function_addr else requested_hex
         project_dir = Path(self.project_dir).expanduser()
         project_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(suffix=".c", delete=False) as tmp:
@@ -126,7 +170,7 @@ class GhidraAdapter:
             "-postScript",
             script.name,
             output_path,
-            hex_addr,
+            target_hex,
         ]
         try:
             completed = subprocess.run(
@@ -137,10 +181,20 @@ class GhidraAdapter:
                 timeout=180,
             )
             text = Path(output_path).read_text(encoding="utf-8") if Path(output_path).is_file() else ""
+            header_va = _function_addr_from_decompile_c(text)
+            resolved = header_va or function_addr
+            success = (
+                "decompile failed" not in text
+                and "no function" not in text
+                and bool(text.strip())
+            )
+            if not success and resolved and resolved.lower().removeprefix("0x") != requested_hex:
+                text = f"// resolved containing function {resolved}\n" + text
             return {
                 "mode": "headless-one-fn",
-                "address": hex_addr,
-                "success": "decompile failed" not in text and "no function" not in text and bool(text.strip()),
+                "address": requested_hex,
+                "function_addr": resolved,
+                "success": success,
                 "c": text,
                 "returncode": completed.returncode,
                 "stderr": (completed.stderr or "")[-800:],

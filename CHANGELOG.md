@@ -5,6 +5,9 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- `r2b verify` JSON includes `call_sites[].function_addr` (containing-function
+  VA). `r2b decompile BIN ADDR` resolves a call site to that function instead
+  of emitting empty C / `no function at <call site>`.
 - `handoff.next_argv` no longer auto-queues `r2b decompile`. It emits
   `verify` for process-launch imports, extract/brief for wrappers, and
   `records show` when a record exists. Empty is valid. Function VAs stay

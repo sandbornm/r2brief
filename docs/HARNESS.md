@@ -36,8 +36,8 @@ Parse **stdout JSON**. Record/session chatter and `--ask` prose go to **stderr**
 | `r2b brief BIN --quick --verify --json` | briefing + `verified_imports` |
 | `r2b review BRIEF.json --mode rules --json` | `r2b.review.v1`, zero model calls |
 | `r2b review BRIEF.json --mode both --thesis T --json` | base order + validated model order + rank differences |
-| `r2b verify BIN --json` | `{binary, verdicts}` |
-| `r2b decompile BIN ADDR --json` | `{success, c, ...}` |
+| `r2b verify BIN --json` | `{binary, verdicts}` with `call_sites[].address` (call site) and `function_addr` (containing-function VA) |
+| `r2b decompile BIN ADDR --json` | `{success, c, function_addr, ...}` — ADDR may be a call site |
 | `r2b records list --json` | record index |
 | `r2b insights --tag T --json` | collapsed SHA findings |
 

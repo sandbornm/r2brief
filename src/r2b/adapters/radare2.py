@@ -405,9 +405,48 @@ class Radare2Adapter:
                 if lines:
                     xref_lines[name] = lines
             verdicts = verify_imports(xref_lines, arch)
-            return [v.to_dict() for v in verdicts]
+            payload = [v.to_dict() for v in verdicts]
+            for item in payload:
+                for site in item.get("call_sites") or []:
+                    if not isinstance(site, dict):
+                        continue
+                    found = self._containing_function_va(session, str(site.get("address") or ""))
+                    if found:
+                        site["function_addr"] = found
+            return payload
         finally:
             session.quit()
+
+    def containing_function_va(self, binary: Path, address: str) -> str | None:
+        """Return the radare2 function start containing ``address``, if any."""
+        if not self.is_available():
+            raise AdapterUnavailable("radare2 is not available on this system")
+        session = self._open(binary)
+        try:
+            session.cmd("aaa")
+            return self._containing_function_va(session, address)
+        finally:
+            session.quit()
+
+    @classmethod
+    def _containing_function_va(cls, session: Any, address: str) -> str | None:
+        from ..analysis.verify import parse_function_va
+
+        if not address or address == "?":
+            return None
+        raw = cls._clean_listing(session.cmd(f"afo @ {address}") or "")
+        first = raw.splitlines()[0].strip() if raw else ""
+        parsed = parse_function_va(first)
+        if parsed:
+            return parsed
+        info = cls._cmdj(session, f"afij @ {address}")
+        if isinstance(info, list) and info:
+            info = info[0]
+        if isinstance(info, dict):
+            offset = info.get("offset", info.get("addr"))
+            if isinstance(offset, (int, str)):
+                return parse_function_va(offset)
+        return None
 
     def deep_scan(self, binary: Path) -> dict[str, object]:
 

@@ -77,7 +77,7 @@
       "served_model": "glm-5.3"
     }
   ],
-  "product_gap": "verify reports call-site VAs and an r2 function name; r2b decompile wants a Ghidra function start. Neither the call site nor r2 fcn 000033c4 was a Ghidra function. Hand a Ghidra-resolvable function VA in verify JSON.",
+  "product_gap": "Closed: verify.call_sites[].function_addr is the containing-function VA; r2b decompile resolves a call-site ADDR to that function. Live check: decompile 0x4ba8 → Ghidra FUN_00104a3c @ 0x00104a3c, success true. Recorded agents still decompiled 0x4b50/0x4ba8/0x33c4 before the field existed.",
   "limits": [
     "Not a four-way quality ranking.",
     "Kimi and GLM had no native planner CLI; the host exposed only run_r2b.",

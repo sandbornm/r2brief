@@ -130,6 +130,7 @@ class TestRadare2Adapter:
                             "0x00009384 80003fd6 blr x4",
                         ]
                     ),
+                    "afo @ 0x00009384": "0x000092e4",
                 }
                 return responses.get(command, "")
 
@@ -152,6 +153,7 @@ class TestRadare2Adapter:
                 "call_sites": [
                     {
                         "function": "000092e4",
+                        "function_addr": "0x000092e4",
                         "address": "0x00009384",
                         "argument": "<dynamic>",
                         "constant": False,
@@ -160,6 +162,50 @@ class TestRadare2Adapter:
             }
         ]
         assert "axt @ reloc.execl" in session.commands
+        assert "afo @ 0x00009384" in session.commands
+        assert session.closed is True
+
+    def test_verify_scan_uses_afo_for_containing_function_va(self):
+        """Call-site VAs get a decompile-ready function start from r2 ``afo``."""
+        from r2b.adapters.radare2 import Radare2Adapter
+
+        class FakeSession:
+            def __init__(self):
+                self.commands: list[str] = []
+                self.closed = False
+
+            def cmd(self, command: str) -> str:
+                self.commands.append(command)
+                responses = {
+                    "ij": '{"bin":{"arch":"arm","bits":64}}',
+                    "axt @ sym.imp.strcpy": "",
+                    "axt @ reloc.strcpy": (
+                        "fcn.00004a3c 0x4ba8 [CALL:--x] blr x2"
+                    ),
+                    "pd -16 @ 0x4ba8": (
+                        "0x00004b80 42d846f9 ldr x2, [x2, 0xdb0] ; reloc.strcpy"
+                    ),
+                    "pd 8 @ 0x4ba8": "0x00004ba8 40003fd6 blr x2",
+                    "afo @ 0x00004ba8": "0x00004a3c",
+                }
+                return responses.get(command, "")
+
+            def quit(self) -> None:
+                self.closed = True
+
+        adapter = Radare2Adapter()
+        session = FakeSession()
+
+        with (
+            patch.object(Radare2Adapter, "is_available", return_value=True),
+            patch.object(Radare2Adapter, "_open", return_value=session),
+        ):
+            result = adapter.verify_scan(Path("/tmp/ubusd"), ["strcpy"])
+
+        site = result[0]["call_sites"][0]
+        assert site["address"] == "0x00004ba8"
+        assert site["function_addr"] == "0x00004a3c"
+        assert "afo @ 0x00004ba8" in session.commands
         assert session.closed is True
 
     def test_quick_entry_uses_function_listing_not_raw_bytes(self):

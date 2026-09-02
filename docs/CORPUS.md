@@ -37,10 +37,12 @@ or POVs only in a throwaway VM or container with no egress, no host mounts, a
 non-root user, resource limits, and core dumps kept inside the scratch volume.
 The ordinary r2b benchmark should remain static.
 
-The checked Kali host and exact continuation commands are recorded in the
-[`DARPA CGC pilot handoff`](case-studies/darpa-cgc-pilot.md). That pilot remains
-pending until four paired service binaries have saved analysis results and the
-runtime controls have run inside the stated isolation boundary.
+The Kali Pi result is recorded in
+[`darpa-cgc-pilot.md`](case-studies/darpa-cgc-pilot.md) and
+[`darpa-cgc-pilot.json`](case-studies/darpa-cgc-pilot.json). Quick briefs of
+all four i386 ELFs ranked only `entry:main`. Targeted decompilation reached
+`cgc_check` and `cgc_list_unread_messages`. POLLs passed both variants.
+Official type 1 POVs did not register a core under qemu-user without gdb.
 
 A local intake smoke on 2026-09-01 compiled Juliet's baseline CWE-121
 `src_char_declare_cpy_01` into separate good-only and bad-only arm64 Mach-O

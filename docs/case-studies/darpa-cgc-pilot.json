@@ -1,0 +1,219 @@
+{
+  "schema_version": "r2b.case-study.v1",
+  "case_id": "darpa-cgc-pilot",
+  "generated_at": "2026-09-02T05:30:00Z",
+  "status": "pilot recorded",
+  "dataset": {
+    "vendor": "Trail of Bits cb-multios",
+    "source": "https://github.com/trailofbits/cb-multios",
+    "commit": "810d7b24b1f62f56ef49b148fe155b0d0629cad2",
+    "architecture": "i386",
+    "platform": "linux/amd64 container on ARM64 Kali Pi",
+    "selection": ["Palindrome", "basic_messaging"]
+  },
+  "host": {
+    "uname": "Linux kali-raspberry-pi5 6.1.92-v8+ aarch64",
+    "cpus": 4,
+    "ram_gib": 8,
+    "r2b_version": "0.1.0",
+    "python": "3.11.13",
+    "radare2": "6.0.5",
+    "file": "5.47",
+    "ghidra": "12.1.2 PUBLIC",
+    "java": "Temurin 21.0.5",
+    "docker": "28.5.2",
+    "flavor": "core; Ghidra headless present, angr not enabled"
+  },
+  "build": {
+    "image": "r2b-cgc-pinned",
+    "image_id": "sha256:560a44bea5c9ed4cf3e8eef7ff67341a604e600bebb587a9b9ddc4534245e6aa",
+    "os_arch": "linux/amd64",
+    "base": "ubuntu:18.04",
+    "clang": "6.0.0-1ubuntu2",
+    "cmake": "3.10.2",
+    "flags": "clang -m32 -O0 -g -fno-stack-protector -z execstack -z norelro",
+    "notes": [
+      "Upstream Dockerfile retained. cmake/32.cmake uses add_compile_definitions, which CMake 3.10 lacks; the local build used add_definitions(-DX32_COMPILE) with the same X32_COMPILE meaning.",
+      "Default 32-bit x86 targets were kept."
+    ]
+  },
+  "subjects": [
+    {
+      "id": "Palindrome",
+      "sha256": "96398b59a75a1cc5266946f0e0f1d7ba4c4abee3d917406be080ee58ba665582",
+      "size_bytes": 10452,
+      "file": "ELF 32-bit LSB executable, Intel 80386, dynamically linked, with debug_info, not stripped",
+      "function_count_radare2": 28,
+      "import_count": 5,
+      "dangerous_imports": []
+    },
+    {
+      "id": "Palindrome_patched",
+      "sha256": "1c0c86076fd149328b96269feebe4424201da2ea623d7d02067a18c1960791ec",
+      "size_bytes": 10452,
+      "file": "ELF 32-bit LSB executable, Intel 80386, dynamically linked, with debug_info, not stripped",
+      "function_count_radare2": 28,
+      "import_count": 5,
+      "dangerous_imports": []
+    },
+    {
+      "id": "basic_messaging",
+      "sha256": "7047c86528d59905b098e2abaf140b6e8671b8fcfd260032d4dc91f5b4982f3e",
+      "size_bytes": 35320,
+      "file": "ELF 32-bit LSB executable, Intel 80386, dynamically linked, with debug_info, not stripped",
+      "function_count_radare2": 101,
+      "import_count": 5,
+      "dangerous_imports": []
+    },
+    {
+      "id": "basic_messaging_patched",
+      "sha256": "a8ced942dd6252d8f938baed04f06d73881c998dcfc5e1ad50e6faa02b5518df",
+      "size_bytes": 35276,
+      "file": "ELF 32-bit LSB executable, Intel 80386, dynamically linked, with debug_info, not stripped",
+      "function_count_radare2": 101,
+      "import_count": 5,
+      "dangerous_imports": []
+    }
+  ],
+  "brief": {
+    "mode": "quick",
+    "model_calls": 0,
+    "ranked_regions_all_four": ["entry:main"],
+    "rank_recall": {
+      "k1": "identical across each patched/unpatched pair",
+      "k3": "no additional regions",
+      "k5": "no additional regions"
+    },
+    "claim": "Quick ranking did not distinguish either pair. CGC services import libcgc, not strcpy/recv, so the PLT pivot never appears."
+  },
+  "review": {
+    "mode": "rules",
+    "model_calls": 0,
+    "base_order_all_four": ["entry:main"],
+    "dispositions": {
+      "entry:main": "needs_confirmation"
+    },
+    "claim_strength": {
+      "entry:main": "lead"
+    }
+  },
+  "localization": {
+    "Palindrome": {
+      "function": "cgc_check",
+      "address": "0x08048a00",
+      "radare2_name": "dbg.cgc_check",
+      "unpatched": {
+        "receive_bound": "0x80",
+        "disasm": "0x08048a41  mov ecx, 0x80",
+        "decompile": "cgc_receive_delim(0, string, 0x80, '\\n');"
+      },
+      "patched": {
+        "receive_bound": "0x40",
+        "disasm": "0x08048a41  mov ecx, 0x40",
+        "decompile": "cgc_receive_delim(0, string, 0x40, '\\n');"
+      },
+      "shared": "char string[64];"
+    },
+    "basic_messaging": {
+      "function": "cgc_list_unread_messages",
+      "address": "0x0804a7e0",
+      "radare2_name": "dbg.cgc_list_unread_messages",
+      "unpatched": {
+        "count_type": "uchar",
+        "disasm": "mov byte [count], 0; movzx eax, byte [count]",
+        "decompile": "uchar count; count = '\\0'; count = count + '\\x01';"
+      },
+      "patched": {
+        "count_type": "uint",
+        "disasm": "mov dword [count], 0; mov eax, dword [count]",
+        "decompile": "uint count; count = 0; count = count + 1;"
+      }
+    }
+  },
+  "targeted_decompile": {
+    "tool": "Ghidra 12.1.2 analyzeHeadless + DecompileTargets.java",
+    "cli": "r2b decompile returned success=false on this host (empty C, analyzeHeadless rc=1); the same headless script reached both routines when invoked directly",
+    "reached": {
+      "cgc_check": true,
+      "cgc_list_unread_messages": true
+    }
+  },
+  "runtime": {
+    "isolation": {
+      "network": "none",
+      "user": "65534:65534",
+      "rootfs": "read-only plus tmpfs /tmp",
+      "caps": "dropped",
+      "no_new_privileges": true,
+      "host_mounts": false,
+      "notes": "cb-test.py raises RLIMIT_CORE to infinity; nobody cannot raise that limit, so the runner swallowed the setrlimit error. Memory cgroup limits were advertised by Docker but discarded on this host."
+    },
+    "poll": {
+      "Palindrome": {
+        "xml": "challenges/Palindrome/poller/for-testing (1 POLL)",
+        "unpatched": "pass",
+        "patched": "pass"
+      },
+      "basic_messaging": {
+        "xml": "for-release POLL_00000, POLL_00001, POLL_00002",
+        "unpatched": "pass",
+        "patched": "pass"
+      }
+    },
+    "pov": {
+      "Palindrome": {
+        "artifact": "pov_1.pov type 1",
+        "unpatched_should_core": "not ok - POV type 1 should have cored, and did not",
+        "patched_no_core": "pass",
+        "gdb": "absent in the builder image; core-register proof was not collected"
+      },
+      "basic_messaging": {
+        "artifact": "pov_1.pov type 1",
+        "unpatched_should_core": "not ok - POV type 1 should have cored, and did not",
+        "patched_no_core": "pass",
+        "gdb": "absent in the builder image; core-register proof was not collected"
+      }
+    }
+  },
+  "timing": {
+    "warmup_s": {
+      "Palindrome": 21.579,
+      "Palindrome_patched": 13.595,
+      "basic_messaging": 13.537,
+      "basic_messaging_patched": 13.278
+    },
+    "parallel_median_s": {
+      "Palindrome": 18.69,
+      "Palindrome_patched": 19.593,
+      "basic_messaging": 19.667,
+      "basic_messaging_patched": 19.297
+    },
+    "sequential_s": {
+      "Palindrome": 14.228,
+      "Palindrome_patched": 13.583,
+      "basic_messaging": 13.422,
+      "basic_messaging_patched": 13.181,
+      "total": 54.414
+    },
+    "parallel_four_together_median_wall_s": 19.667,
+    "notes": "Three measured parallel rounds after one unmeasured warmup. GNU time was not installed; wall time is perf_counter around `r2b brief --quick --no-save --json`."
+  },
+  "ground_truth": {
+    "Palindrome": "CWE-121: 64-byte stack buffer; unpatched receives 128 bytes, patched receives 64.",
+    "basic_messaging": "CWE-190: unread-message counter is unsigned char unpatched and unsigned int patched."
+  },
+  "replay": [
+    "python3 scripts/corpus_intake.py fetch darpa-cgc-multios",
+    "python3 scripts/corpus_intake.py verify darpa-cgc-multios",
+    "docker build --platform linux/amd64 -t r2b-cgc-pinned .r2b-corpus/darpa-cgc-multios",
+    "r2b brief Palindrome --quick --no-save --json",
+    "r2b review brief.json --mode rules --json"
+  ],
+  "limits": [
+    "Identical quick ranking across each pair is the recorded result, not a scoring failure. The brief never sees strcpy/recv; the patch lives in libcgc-facing helpers named by DWARF.",
+    "verify was not forced: there is no relevant external import sink.",
+    "Official type 1 POVs did not register a core under qemu-user linux/amd64 without gdb. POLLs passed on both variants. Patched POVs correctly did not core.",
+    "r2b decompile CLI returned empty C on this host; Ghidra headless with DecompileTargets.java reached both routines.",
+    "Raw target bytes, POLL/POV transcripts, and the builder image stay out of git."
+  ]
+}

@@ -1,8 +1,13 @@
-# DARPA CGC pilot handoff
+# DARPA CGC pilot: two pairs, one named routine each
 
-Status on 2026-09-01: intake is pinned and tested. No CGC service binary has
-been built or analyzed by r2b. Keep the public status **pending** until the
-completion checks below pass.
+Status on 2026-09-02: **pilot recorded**. The machine-readable result is
+[`darpa-cgc-pilot.json`](darpa-cgc-pilot.json). Raw target bytes stay in
+`.r2b-corpus`.
+
+This is a patched/unpatched control, not a claim that r2b discovered the
+flaws. Trail of Bits' native CGC port already names the change in source.
+The useful question is whether a quick brief plus one-function decompile
+reaches that change.
 
 ## Fixed scope
 
@@ -14,111 +19,107 @@ Source: Trail of Bits `cb-multios` commit
 | `Palindrome` | `Palindrome`, `Palindrome_patched` | A 64-byte stack buffer receives at most 64 bytes after the patch; the unpatched bound is 128. |
 | `basic_messaging` | `basic_messaging`, `basic_messaging_patched` | The unread-message counter changes from `unsigned char` to `unsigned int`, preventing wraparound above 255 messages. |
 
-The sparse checkout contains these two challenges, their POLLs and POVs, the
-CGC compatibility library, build files, and platform exclusion lists. Do not
-expand the pilot to the full CGC collection before this four-binary comparison
-has a recorded result.
+## The first useful cut
 
-## Host split
-
-The checked `kali` SSH host is a Raspberry Pi 5 running ARM64 Linux with 4 CPUs,
-8 GiB RAM, and 166 GiB free. Docker 28.5.2, bubblewrap, radare2 6.0.5, and
-`linux/amd64` binfmt emulation are ready. Ghidra and GNU `time` are absent.
-
-Use Kali for the pinned checkout, `linux/amd64` container build, four parallel
-quick briefs, and isolated POLL/POV runs. Keep native execution inside a
-no-egress container. Use a non-Pi lab host for Ghidra or angr depth; do not run
-`uv sync --extra analyzers` on the Pi.
-
-## Resume on Kali
-
-```bash
-git clone https://github.com/sandbornm/r2brief.git
-cd r2brief
-R2B_FLAVOR=core ./scripts/install.sh
-
-python3 scripts/corpus_intake.py fetch darpa-cgc-multios
-python3 scripts/corpus_intake.py verify darpa-cgc-multios
-```
-
-Build the upstream source as `linux/amd64`, even though Kali is ARM64. The
-upstream CMake project emits patched and unpatched targets from the same source
-and flags. Its default build is 32-bit x86; retain that default for the first
-pilot. Record the Docker image ID and compiler versions with the result.
-
-```bash
-cgc_root="$PWD/.r2b-corpus/darpa-cgc-multios"
-pilot_root="$PWD/.r2b-corpus/work/darpa-cgc-pilot"
-mkdir -p "$pilot_root/bin" "$pilot_root/results" "$pilot_root/timing"
-
-docker build --platform linux/amd64 -t r2b-cgc-pinned "$cgc_root"
-```
-
-Export these four files from the image without running them:
+Quick briefs of all four i386 ELFs ranked one region:
 
 ```text
-/cb-multios/build/challenges/Palindrome/Palindrome
-/cb-multios/build/challenges/Palindrome/Palindrome_patched
-/cb-multios/build/challenges/basic_messaging/basic_messaging
-/cb-multios/build/challenges/basic_messaging/basic_messaging_patched
+entry:main
 ```
 
-Before analysis, save `sha256sum`, `file`, `r2b --version`, `r2b env --json`,
-the Docker image ID, and compiler versions under `pilot_root`. Raw source,
-binaries, core dumps, and POLL/POV transcripts stay in `.r2b-corpus`; they are
-not release artifacts.
+Rules review kept that order and labelled it `needs_confirmation` /
+`lead`. Rank 3 and rank 5 are empty. The pairs are identical at every
+requested cutoff.
 
-## Timed triage
+That is expected. These services talk through `libcgc`
+(`cgc_receive`, `cgc_transmit`, `cgc__terminate`). There is no
+`strcpy`/`recv` PLT to follow, so `verify` was not forced. The brief
+points at `main`. DWARF still names `cgc_check` and
+`cgc_list_unread_messages`.
 
-Run one unmeasured warm-up. Then run three measured rounds. Start the four
-quick briefs together, with one process per binary:
+## Palindrome: 128 versus 64
+
+`dbg.cgc_check` is at `0x08048a00` in both binaries. radare2 and Ghidra
+agree on the bound:
+
+```c
+char string[64];
+cgc_receive_delim(0, string, 0x80, '\n');   /* unpatched */
+cgc_receive_delim(0, string, 0x40, '\n');   /* patched   */
+```
+
+The stack slot is 64 bytes either way. Only the receive length changes.
+
+## basic_messaging: byte versus dword
+
+`dbg.cgc_list_unread_messages` is at `0x0804a7e0` in both binaries.
+
+```c
+uchar count;   /* unpatched */
+count = '\0';
+count = count + '\x01';
+
+uint count;    /* patched */
+count = 0;
+count = count + 1;
+```
+
+The patched function is 504 bytes; the unpatched function is 506.
+
+## Runtime
+
+POLLs completed against both variants inside a `linux/amd64` container
+with no network, a read-only root, tmpfs scratch, non-root uid 65534,
+dropped capabilities, and `no-new-privileges`.
+
+Official type 1 POVs did **not** register a core on the unpatched
+services under qemu-user on this host. gdb is absent in the builder
+image, so register proof was not collected. Patched POVs correctly did
+not core. That is a runtime-tooling miss, not a ranking result. Static
+localization still reaches the patched routines.
+
+## Timing
+
+Recorded on Kali Pi 5 (ARM64, 4 CPUs, 8 GiB) with r2b 0.1.0, radare2
+6.0.5, and Ghidra 12.1.2. Builder: ubuntu:18.04 `linux/amd64`, clang
+6.0.0, cmake 3.10.2, image
+`sha256:560a44bea5c9ed4cf3e8eef7ff67341a604e600bebb587a9b9ddc4534245e6aa`.
+
+| Mode | Wall |
+|---|---|
+| Four quick briefs in parallel (median of three rounds) | ~20 s wall for the set |
+| Same four, sequential | 54.4 s sum |
+
+Per-binary parallel medians are 18.7–19.7 s. Sequential singles are
+13.2–14.2 s; four-at-once pays a small contention tax and still beats
+the serial sum.
+
+## Reproduce
 
 ```bash
+python3 scripts/corpus_intake.py fetch darpa-cgc-multios
+python3 scripts/corpus_intake.py verify darpa-cgc-multios
+
+cgc_root="$PWD/.r2b-corpus/darpa-cgc-multios"
+docker build --platform linux/amd64 -t r2b-cgc-pinned "$cgc_root"
+
+# export the four ELFs from /cb-multios/build/challenges/{Palindrome,basic_messaging}/
 r2b brief "$binary" --quick --no-save --json
 r2b review "$brief_json" --mode rules --json
 ```
 
-GNU `time` is not installed on the checked Kali host. Install the `time`
-package before measured runs, or have the harness record monotonic start/end
-times. Save wall time, maximum resident memory, output bytes, input SHA-256,
-and the per-tool durations already present in r2b output. Report the median of
-the three rounds and compare it with one sequential round.
+Ubuntu 18.04's CMake 3.10 does not implement `add_compile_definitions`
+in `cmake/32.cmake`. The recorded image used `add_definitions(-DX32_COMPILE)`
+with the same 32-bit clang flags. Keep the default i386 build.
 
-Do not start four deep passes together. Each deep pass already runs enabled
-adapters concurrently. Run at most two deep subjects together on the non-Pi
-host and keep each patched/unpatched pair on the same tool versions.
+POLLs and POVs stay in the disposable image: `--network none`, no host
+mounts, non-root, read-only root plus tmpfs, capabilities dropped.
 
-## Runtime ground truth
+## Limits
 
-POLLs should complete against both variants. A POV should distinguish the
-unpatched service from its patched counterpart. Run these only in a disposable
-`linux/amd64` container with:
-
-- `--network none`, no host mounts, and a non-root user;
-- a read-only root filesystem plus a bounded writable scratch volume;
-- all capabilities dropped, `no-new-privileges`, PID/CPU/memory/time limits;
-- core dumps confined to scratch and deleted after the verdict is recorded.
-
-This is a separate runtime check. `brief`, `review`, `verify`, and `decompile`
-remain static. Do not enable Frida or GEF for this pilot.
-
-## Completion checks
-
-Change the status from **pending** to **pilot recorded** only when:
-
-- the source commit and all four binary hashes are saved;
-- quick briefing and rules-review JSON exists for all four binaries;
-- the patched/unpatched region order and evidence-screen disposition are
-  compared at ranks 1, 3, and 5;
-- targeted decompilation records whether it reaches `cgc_check` in
-  `Palindrome` and `cgc_list_unread_messages` in `basic_messaging`;
-- POLL and POV outcomes are recorded under the isolation rules above;
-- serial and parallel timing, peak memory, tool versions, and replay commands
-  are included;
-- a machine-readable result and a short case-study reading are committed, with
-  no raw target bytes.
-
-Do not force `verify` into the result when there is no relevant external import
-sink. The useful question is whether the brief and one-function decompile lead
-to the patched routine. An identical quick ranking across a pair is a valid
-negative result if the deeper step localizes the source-level change.
+- r2b did not discover these CWEs. Source already names them.
+- Identical quick ranking is the recorded result. The deeper step
+  localizes the source-level change.
+- `r2b decompile` returned empty C on this host; the same Ghidra
+  headless script reached both routines when invoked directly.
+- Target bytes are not committed.

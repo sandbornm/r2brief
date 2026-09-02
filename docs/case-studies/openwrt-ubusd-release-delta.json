@@ -147,9 +147,101 @@
       "tools.json"
     ]
   },
+  "kali_pi_replay": {
+    "recorded_at": "2026-09-02",
+    "host": {
+      "uname": "Linux kali-raspberry-pi5 6.1.92-v8+ aarch64",
+      "os": "Kali GNU/Linux Rolling 2026.3",
+      "cpus": 4,
+      "ram_gib": 8,
+      "r2b_version": "0.1.0",
+      "python": "3.11.13"
+    },
+    "tools": {
+      "radare2": "radare2 6.0.5 0 @ linux-arm-64",
+      "binwalk3": "binwalk 3.1.0",
+      "unblob": "26.6.4",
+      "bwrap": "bubblewrap 0.11.2",
+      "unsquashfs": "unsquashfs version 4.7.5 (2026/03/01)",
+      "sasquatch": "unsquashfs version 4.5.1 (2022/03/17)",
+      "file": "file-5.47"
+    },
+    "extract": {
+      "allow_unsafe_fallback": false,
+      "sandbox": "bwrap",
+      "squashfs_offset": "0x56c000",
+      "unsquashfs_returncode": 2,
+      "device_nodes": "unsquashfs could not create /dev/console without superuser; regular files recovered",
+      "product_brief_extract": "r2b brief --extract --quick skipped radare2 on the ITB wrapper and ranked SquashFS at 0x56c000",
+      "default_max_files": 200,
+      "inventory_source": "unsquashfs under r2b.extract.sandbox with max_files=20000"
+    },
+    "inventory": {
+      "regular_elfs_per_release": 176,
+      "regular_files_per_release": 1201,
+      "common_paths": 109,
+      "unchanged_common_paths": 106,
+      "changed_common_paths": [
+        {
+          "path": "bin/busybox",
+          "old_sha256": "9f8f1d0cfc748450d132dcd11fdfd2b1ffe4aea70d6fee5932c2c6dce85836b4",
+          "new_sha256": "2032e4d04e90242dd1f3484d017628a1e82830dfa757ed7963ab90e29e53fa6c"
+        },
+        {
+          "path": "sbin/ubusd",
+          "old_sha256": "8fd16a06d3b529ee4899bf73c6ac283e8b030972205a8356da4fc2fc98dae5f3",
+          "new_sha256": "d279564b22768de6e9d8efe083784c4547c3aeadf6ffd1905356a0e0df1f2765"
+        },
+        {
+          "path": "usr/sbin/odhcpd",
+          "old_sha256": "9c5ec590de45569ef3cd75a5f09d8a04103824ee9c8c507f36f4fcf0e3b2e13a",
+          "new_sha256": "b0f7fc5f63bccd661f9f500f163b466f89e255890bbebd423876198d83271a25"
+        }
+      ],
+      "versioned_paths_added": 67,
+      "versioned_paths_removed": 67,
+      "ubusd_hashes_match_original": true,
+      "uhttpd_unchanged": true
+    },
+    "brief_quick": {
+      "old_function_count": 70,
+      "new_function_count": 77,
+      "old_import_count": 71,
+      "new_import_count": 79,
+      "ranked_regions": [
+        "imports:network",
+        "entry:entry",
+        "imports:memory"
+      ],
+      "note": "Quick-scan function counts are not the original deep radare2 counts (63 / 64)."
+    },
+    "verify": {
+      "import": "strcpy",
+      "old_status": "dynamic",
+      "old_call_sites": [
+        "0x00004b50",
+        "0x00004b6c",
+        "0x00004ba8"
+      ],
+      "old_callers_match_original": true,
+      "new_status": "dynamic",
+      "new_call_sites": [
+        "0x00004ab0",
+        "0x00004ad0",
+        "0x00004b0c"
+      ],
+      "selected_old_function": "0x00104a3c",
+      "selected_new_function": "0x001049a0",
+      "memcpy_old_sites": 6,
+      "memcpy_new_sites": 5,
+      "decompile_queued": false,
+      "target_executed": false
+    }
+  },
   "limits": [
     "r2b did not discover or prove CVE-2025-62526 by itself.",
     "Exact hashing supplied the release delta; r2b supplied the saved binary triage, caller leads, targeted decompilation, tool status, and handoff.",
-    "The v1 .r2br is a single-subject bundle. This case manifest links the two release images and the selected subject."
+    "The v1 .r2br is a single-subject bundle. This case manifest links the two release images and the selected subject.",
+    "Device-node creation fails without superuser on Linux as well as macOS; regular files still inventory."
   ]
 }

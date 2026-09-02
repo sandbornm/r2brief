@@ -30,7 +30,8 @@ The complete, machine-readable result is
 
 Both images were hash-checked before analysis. Binwalk found the SquashFS at
 `0x56c000`; `unsquashfs` recovered the root filesystems. Device-node creation
-failed on the macOS host, but regular files were recovered and indexed.
+failed on the original macOS host and again on the Kali replay without
+superuser; regular files were recovered and indexed on both.
 
 ## The first useful cut
 
@@ -122,6 +123,75 @@ the names and ground truth.
 
 That division is intentional. The point is to get from a firmware pair to the
 few addresses worth opening without losing how the path was chosen.
+
+## Kali Pi replay (2026-09-02)
+
+Re-run on Kali GNU/Linux Rolling 2026.3, Raspberry Pi 5
+(`Linux kali-raspberry-pi5 6.1.92-v8+ aarch64`, 4 CPUs, 8 GiB), r2b 0.1.0,
+Python 3.11.13. Images were fetched with `scripts/corpus_intake.py` and
+hash-checked before extract. `allow_unsafe_fallback` stayed false.
+
+| Tool | `r2b env` |
+|---|---|
+| radare2 | `radare2 6.0.5 0 @ linux-arm-64` |
+| binwalk3 | `binwalk 3.1.0` |
+| unblob | `26.6.4` |
+| bubblewrap | `bubblewrap 0.11.2` |
+| unsquashfs | `unsquashfs version 4.7.5 (2026/03/01)` |
+| sasquatch | `unsquashfs version 4.5.1 (2022/03/17)` |
+| file | `file-5.47` |
+
+Extract isolation used bubblewrap `--unshare-net`. Without `bwrap`,
+`run_sandboxed` returns 126 and does not run the extractor.
+
+### Inventory
+
+Both images still have SquashFS at `0x56c000`. The ITB wrapper was not treated
+as code: `r2b brief --extract --quick` skipped radare2 on the container and
+ranked the SquashFS child. Default extract caps (`max_files=200`) do not keep
+every rootfs ELF. The table below is from `unsquashfs` under the same sandbox
+with a higher file cap. `unsquashfs` exit 2 is the device-node miss
+(`/dev/console` needs superuser). That is not macOS-specific.
+
+| Release | Regular files | Regular ELFs |
+|---|---|---|
+| 24.10.3 | 1201 | 176 |
+| 24.10.4 | 1201 | 176 |
+
+Path and SHA-256 comparison matched the original cut: 109 common paths, 106
+unchanged, 3 changed. 67 paths exist only on each side (64 kernel modules
+under `6.6.104` vs `6.6.110`, plus mbedTLS `3.6.4` vs `3.6.5`).
+
+| Path | 24.10.3 SHA-256 | 24.10.4 SHA-256 |
+|---|---|---|
+| `bin/busybox` | `9f8f1d0c…85836b4` | `2032e4d0…953fa6c` |
+| `sbin/ubusd` | `8fd16a06…98dae5f3` | `d279564b…df1f2765` |
+| `usr/sbin/odhcpd` | `9c5ec590…e3b2e13a` | `b0f7fc5f…83271a25` |
+| `usr/sbin/uhttpd` (control) | `4c2dd929…d480e2` (unchanged) | same |
+
+`ubusd` hashes match the original case.
+
+### `brief` / `verify`
+
+`r2b brief --quick` on both `ubusd` binaries ranked `imports:network`,
+`entry:entry`, then `imports:memory` (`memcpy`, `sprintf`, `strcpy`). Quick
+scan function counts were 70 (24.10.3) and 77 (24.10.4); those are not the
+original deep radare2 counts (63 / 64).
+
+`r2b verify --import strcpy` on 24.10.3 still reports three dynamic callers:
+
+```text
+0x00004b50  000033c4
+0x00004b6c  unknown
+0x00004ba8  00004a3c
+```
+
+Those are the same addresses as the original writeup. The third site is still
+the event-registration routine at `0x00104a3c`. 24.10.4 still has three
+`strcpy` sites; the third is in `000049a0` (`0x001049a0`). `memcpy` is also
+dynamic (6 sites in 24.10.3, 5 in 24.10.4) and was not used as the lead.
+
+No decompile was queued. The firmware was not executed.
 
 ## Portable result
 

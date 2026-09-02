@@ -98,11 +98,56 @@ def _check_binwalk3() -> ToolCheck:
 
 
 def _probe_version(command: str) -> str | None:
+    """Return a one-line version, skipping usage banners.
+
+    radare2 6.x treats ``--version`` as an unknown flag and prints the
+    usage banner with exit 0. Prefer ``-v`` / ``-V`` when ``--version``
+    is not a version string. Capture stdout even on a non-zero exit.
+    """
+    for flag in ("--version", "-version", "-v", "-V"):
+        text = _command_output(command, flag)
+        if not text:
+            continue
+        line = _version_line(text)
+        if line:
+            return line
+    return None
+
+
+def _command_output(command: str, flag: str) -> str | None:
     try:
-        output = subprocess.check_output([command, "--version"], stderr=subprocess.STDOUT, timeout=4)
-    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        completed = subprocess.run(
+            [command, flag],
+            capture_output=True,
+            timeout=4,
+            text=True,
+            errors="replace",
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return None
-    return output.decode().splitlines()[0].strip()
+    stdout = (completed.stdout or "").strip()
+    if stdout:
+        return stdout
+    stderr = (completed.stderr or "").strip()
+    return stderr or None
+
+
+def _version_line(text: str) -> str | None:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if _looks_like_usage(line):
+            return None
+        return line
+    return None
+
+
+def _looks_like_usage(line: str) -> bool:
+    lowered = line.lower()
+    if lowered.startswith(("usage:", "syntax:", "try ", "options:", "general error:")):
+        return True
+    return "cannot open file --version" in lowered or "cannot open file -version" in lowered
 
 
 def _check_python_module(module: str) -> ToolCheck:

@@ -14,6 +14,7 @@ analyzed; it is never executed. Third-party binaries are not committed.
 | [NIST Juliet C/C++ 1.3 retrieval slice](nist-juliet-pilot.md) | On matched good/bad aarch64 ELFs, does `--quick` ranking point at the labelled sink function, or only at `entry:main` / an import name? |
 | [curl.exe Windows amd64](pe-curl-win64.md) | Does a public PE `--quick` stay thin when there is no process-launch import? |
 | [jq macOS arm64](macho-jq.md) | Does a public Mach-O `--quick` on Linux stay thin, with empty `next_argv`? |
+| [LLM loop on ubusd](llm-loop-ubusd.md) | Given an empty `next_argv`, do planners still run `r2b verify --import strcpy`, or sidestep to raw r2? |
 
 GNU Hello is kept separately as a [calibration sample](../calibration/hello-aarch64.md),
 not presented as an investigation. It catches noisy risk language on a known

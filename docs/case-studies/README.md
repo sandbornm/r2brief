@@ -11,6 +11,7 @@ analyzed; it is never executed. Third-party binaries are not committed.
 | [Review width on three AArch64 programs](review-width-aarch64.md) | When do independent lenses expose a new evidence capsule, and when does another pass add nothing? |
 | [AArch64 first-pass corpus](corpus-aarch64.md) | Which real programs produce a concrete follow-up, and which correctly stop with a thin brief? |
 | [DARPA CGC Palindrome and basic_messaging](darpa-cgc-pilot.md) | Does following `handoff.next_argv` reach a planted CGC change without reading the README, or only on a cherry-picked sample? |
+| [NIST Juliet C/C++ 1.3 retrieval slice](nist-juliet-pilot.md) | On matched good/bad aarch64 ELFs, does `--quick` ranking point at the labelled sink function, or only at `entry:main` / an import name? |
 
 GNU Hello is kept separately as a [calibration sample](../calibration/hello-aarch64.md),
 not presented as an investigation. It catches noisy risk language on a known

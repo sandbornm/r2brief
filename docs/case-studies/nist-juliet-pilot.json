@@ -1,0 +1,1163 @@
+{
+  "schema_version": "r2b.case-study.v1",
+  "case_id": "nist-juliet-pilot",
+  "generated_at": "2026-09-02T16:50:00Z",
+  "status": "retrieval calibration recorded",
+  "claim": "This is not a claim that r2b detects vulnerabilities. Quick ranking did not isolate labelled Juliet sink functions. verify found a non-constant libc-sink caller when one existed, on both good and bad binaries.",
+  "dataset": {
+    "id": "nist-juliet-c-cpp-1.3",
+    "vendor": "NIST SARD / Juliet Test Suite for C/C++",
+    "version": "1.3",
+    "source_page": "https://samate.nist.gov/SARD/test-suites/112",
+    "url": "https://samate.nist.gov/SARD/downloads/test-suites/2017-10-01-juliet-test-suite-for-c-cplusplus-v1-3.zip",
+    "filename": "2017-10-01-juliet-test-suite-for-c-cplusplus-v1-3.zip",
+    "sha256": "ada9d7e1c323d283446df3f55bdee0d00bda1fed786785fe98764d58688f38eb",
+    "zip_bytes": 152957342,
+    "license": "US public domain; CC0 1.0 for any NIST foreign rights",
+    "selection_rule": "One baseline flow variant per pinned CWE. Prefer *_01 / src_char_declare_cpy_01 style. Linux char/system cases; no w32, no sockets.",
+    "selection": [
+      "CWE121/src_char_declare_cpy_01",
+      "CWE122/c_src_char_cpy_01",
+      "CWE190/int_max_add_01",
+      "CWE415/malloc_free_char_01",
+      "CWE416/malloc_free_char_01",
+      "CWE476/char_01",
+      "CWE78/char_console_system_01"
+    ]
+  },
+  "protocol": {
+    "frozen_before_scoring": true,
+    "compile": {
+      "cc": "gcc",
+      "dumpmachine": "aarch64-linux-gnu",
+      "flags_common": [
+        "-O0",
+        "-g",
+        "-DINCLUDEMAIN"
+      ],
+      "bad": "-DOMITGOOD",
+      "good": "-DOMITBAD",
+      "support": "C/testcasesupport/io.c",
+      "target": "aarch64 Linux ELF PIE with DWARF, not Mach-O"
+    },
+    "analysis": [
+      "uv run r2b brief BIN --quick --no-save --json",
+      "uv run r2b verify BIN --import <labelled sink import> --json  # only if a libc sink exists"
+    ],
+    "scoring": {
+      "region_hit": "Ranked region subject is the labelled Juliet function containing the sink (*_bad, goodG2B, goodB2G) by id/title/function. imports:* inventory is not a hit. entry:main is not a hit (INCLUDEMAIN prologue is srand/printLine, not the sink).",
+      "verify_hit": "verify reports a non-constant call site whose function is that labelled sink function.",
+      "identical": "If ranking and verify status match across good/bad, record as expected negative control. Do not treat strcpy/system presence as detecting the CWE.",
+      "source_names": "Source-named functions were used only to score after briefs existed."
+    },
+    "not_run": [
+      "POLLs",
+      "POVs",
+      "decompile",
+      "execution of Juliet binaries",
+      "model calls"
+    ]
+  },
+  "host": {
+    "uname": "Linux kali-raspberry-pi5 6.1.92-v8+ #1 SMP PREEMPT Tue Jun  4 14:30:43 UTC 2024 aarch64 GNU/Linux",
+    "cpus": 4,
+    "ram_gib": 8,
+    "r2b_version": "0.1.0",
+    "git": "ae6310c4baa496bd85578272f7548269e8332931",
+    "python": "3.11.13",
+    "radare2": "6.0.5",
+    "file": "5.47",
+    "ghidra": "12.1.2 PUBLIC present; not used (--quick)",
+    "compiler": "gcc (Debian 15.3.0-2) 15.3.0",
+    "dumpmachine": "aarch64-linux-gnu",
+    "flavor": "core; Ghidra headless present, angr not enabled; no model call"
+  },
+  "timing": {
+    "brief_n": 14,
+    "brief_wall_sum_s": 495.911,
+    "verify_n": 8,
+    "verify_wall_sum_s": 74.87,
+    "notes": "Sequential on Kali Pi 5. First CWE-121 bad brief 53.6 s; later briefs typically 24-45 s. CWE-78 good brief 59.6 s is the slowest."
+  },
+  "scores": {
+    "binaries": 14,
+    "compile_abstentions": 0,
+    "region_recall": {
+      "k1": "0/14",
+      "k3": "0/14",
+      "k5": "0/14"
+    },
+    "verify_caller_recall": "8/8 of libc-sink binaries; 6 abstain (no labelled libc sink)",
+    "good_bad_region_ids_identical": "7/7 pairs",
+    "interpretation": "Identical ranking is the expected negative control. verify caller-recall hits on both good and bad; that is a pivot to the strcpy/system/free site, not a CWE verdict."
+  },
+  "cases": [
+    {
+      "cwe": "CWE121",
+      "flow_variant": "src_char_declare_cpy_01",
+      "source": "testcases/CWE121_Stack_Based_Buffer_Overflow/s09/CWE121_Stack_Based_Buffer_Overflow__src_char_declare_cpy_01.c",
+      "sink_import": "strcpy",
+      "note": "BadSink is strcpy of a large stack source into dest[50].",
+      "pair": {
+        "region_ids_identical": true,
+        "verify_status_identical": true
+      },
+      "bad": {
+        "binary_name": "CWE121_src_char_declare_cpy_01_bad",
+        "sha256": "f5ced6281ea0075cb2747f8a6d701052d7f79df3e40f27b094ad76e40e0dae07",
+        "size_bytes": 80184,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=ce5bba0139f3a7973d49c879c340522d5479b7c3, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 0.816,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000ae8 T CWE121_Stack_Based_Buffer_Overflow__src_char_declare_cpy_01_bad",
+          "0000000000000b50 T main"
+        ],
+        "function_count_radare2": 63,
+        "import_count": 18,
+        "dangerous_imports": [
+          "strcpy"
+        ],
+        "brief_wall_s": 53.616,
+        "brief_returncode": 0,
+        "summary": "CWE121_src_char_declare_cpy_01_bad looks like elf; arm64/64; 63 functions; imports strcpy. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main",
+          "imports:memory"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xb50",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000b50      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE121_Stack_Based_Buffer_Overflow__src_char_declare_cpy_01.c:76:1{\n            0x00000b54      fd030091       mov x29, sp\n            0x00000b58      e01f00b9       str w0, [sp, 0x1c]"
+          },
+          {
+            "id": "imports:memory",
+            "score": 84,
+            "title": "Memory and path handling",
+            "function": null,
+            "address": null,
+            "kind": "inventory",
+            "snippet_head": "strcpy"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "wall_s": 7.747,
+          "returncode": 0,
+          "argv_imports": [
+            "strcpy"
+          ],
+          "verdicts": [
+            {
+              "import": "strcpy",
+              "status": "dynamic",
+              "call_sites": [
+                {
+                  "function": "dbg.CWE121_Stack_Based_Buffer_Overflow__src_char_declare_cpy_01_bad",
+                  "address": "0x00000b38",
+                  "argument": "<dynamic>",
+                  "constant": false
+                }
+              ]
+            }
+          ],
+          "caller_recall": true,
+          "status": "dynamic"
+        },
+        "pair_label": "identical"
+      },
+      "good": {
+        "binary_name": "CWE121_src_char_declare_cpy_01_good",
+        "sha256": "045941bfbe605bd29ada27c433d5454a795ac6cd0ae8e42a99fa48072cc835cf",
+        "size_bytes": 80288,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=d0f397b8e688f7fa1efcf7d6db66c57c2ae608ef, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 0.877,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000ae8 t goodG2B",
+          "0000000000000b50 T CWE121_Stack_Based_Buffer_Overflow__src_char_declare_cpy_01_good",
+          "0000000000000b68 T main"
+        ],
+        "function_count_radare2": 64,
+        "import_count": 18,
+        "dangerous_imports": [
+          "strcpy"
+        ],
+        "brief_wall_s": 28.973,
+        "brief_returncode": 0,
+        "summary": "CWE121_src_char_declare_cpy_01_good looks like elf; arm64/64; 64 functions; imports strcpy. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main",
+          "imports:memory"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xb68",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000b68      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE121_Stack_Based_Buffer_Overflow__src_char_declare_cpy_01.c:76:1{\n            0x00000b6c      fd030091       mov x29, sp\n            0x00000b70      e01f00b9       str w0, [sp, 0x1c]"
+          },
+          {
+            "id": "imports:memory",
+            "score": 84,
+            "title": "Memory and path handling",
+            "function": null,
+            "address": null,
+            "kind": "inventory",
+            "snippet_head": "strcpy"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "wall_s": 8.587,
+          "returncode": 0,
+          "argv_imports": [
+            "strcpy"
+          ],
+          "verdicts": [
+            {
+              "import": "strcpy",
+              "status": "dynamic",
+              "call_sites": [
+                {
+                  "function": "dbg.goodG2B",
+                  "address": "0x00000b38",
+                  "argument": "<dynamic>",
+                  "constant": false
+                }
+              ]
+            }
+          ],
+          "caller_recall": true,
+          "status": "dynamic"
+        },
+        "pair_label": "identical"
+      }
+    },
+    {
+      "cwe": "CWE122",
+      "flow_variant": "c_src_char_cpy_01",
+      "source": "testcases/CWE122_Heap_Based_Buffer_Overflow/s10/CWE122_Heap_Based_Buffer_Overflow__c_src_char_cpy_01.c",
+      "sink_import": "strcpy",
+      "note": "Analogous heap source; BadSink is still strcpy into dest[50].",
+      "pair": {
+        "region_ids_identical": true,
+        "verify_status_identical": true
+      },
+      "bad": {
+        "binary_name": "CWE122_c_src_char_cpy_01_bad",
+        "sha256": "f26792a3a0ab2041148140dddc38796037fb2a1c5b9f24542fb557a9a59fc2b8",
+        "size_bytes": 80384,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=589107d3cbcce6cbabbd8d2710749b92d7c0bddc, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 1.012,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000ba8 T CWE122_Heap_Based_Buffer_Overflow__c_src_char_cpy_01_bad",
+          "0000000000000c30 T main"
+        ],
+        "function_count_radare2": 66,
+        "import_count": 21,
+        "dangerous_imports": [
+          "strcpy"
+        ],
+        "brief_wall_s": 45.199,
+        "brief_returncode": 0,
+        "summary": "CWE122_c_src_char_cpy_01_bad looks like elf; arm64/64; 66 functions; imports strcpy. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main",
+          "imports:memory"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xc30",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000c30      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE122_Heap_Based_Buffer_Overflow__c_src_char_cpy_01.c:78:1{\n            0x00000c34      fd030091       mov x29, sp\n            0x00000c38      e01f00b9       str w0, [sp, 0x1c]"
+          },
+          {
+            "id": "imports:memory",
+            "score": 84,
+            "title": "Memory and path handling",
+            "function": null,
+            "address": null,
+            "kind": "inventory",
+            "snippet_head": "strcpy"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "wall_s": 10.092,
+          "returncode": 0,
+          "argv_imports": [
+            "strcpy"
+          ],
+          "verdicts": [
+            {
+              "import": "strcpy",
+              "status": "dynamic",
+              "call_sites": [
+                {
+                  "function": "dbg.CWE122_Heap_Based_Buffer_Overflow__c_src_char_cpy_01_bad",
+                  "address": "0x00000c10",
+                  "argument": "<dynamic>",
+                  "constant": false
+                }
+              ]
+            }
+          ],
+          "caller_recall": true,
+          "status": "dynamic"
+        },
+        "pair_label": "identical"
+      },
+      "good": {
+        "binary_name": "CWE122_c_src_char_cpy_01_good",
+        "sha256": "a126e1dd32aaeeff3c4597adb2f22152439f2881f23d2f4d82b75c2d8109ef14",
+        "size_bytes": 80480,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=a6cc833700586cd65296c359a625f2f80fe2dd98, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 0.667,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000ba8 t goodG2B",
+          "0000000000000c30 T CWE122_Heap_Based_Buffer_Overflow__c_src_char_cpy_01_good",
+          "0000000000000c48 T main"
+        ],
+        "function_count_radare2": 67,
+        "import_count": 21,
+        "dangerous_imports": [
+          "strcpy"
+        ],
+        "brief_wall_s": 28.922,
+        "brief_returncode": 0,
+        "summary": "CWE122_c_src_char_cpy_01_good looks like elf; arm64/64; 67 functions; imports strcpy. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main",
+          "imports:memory"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xc48",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000c48      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE122_Heap_Based_Buffer_Overflow__c_src_char_cpy_01.c:78:1{\n            0x00000c4c      fd030091       mov x29, sp\n            0x00000c50      e01f00b9       str w0, [sp, 0x1c]"
+          },
+          {
+            "id": "imports:memory",
+            "score": 84,
+            "title": "Memory and path handling",
+            "function": null,
+            "address": null,
+            "kind": "inventory",
+            "snippet_head": "strcpy"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "wall_s": 7.027,
+          "returncode": 0,
+          "argv_imports": [
+            "strcpy"
+          ],
+          "verdicts": [
+            {
+              "import": "strcpy",
+              "status": "dynamic",
+              "call_sites": [
+                {
+                  "function": "dbg.goodG2B",
+                  "address": "0x00000c10",
+                  "argument": "<dynamic>",
+                  "constant": false
+                }
+              ]
+            }
+          ],
+          "caller_recall": true,
+          "status": "dynamic"
+        },
+        "pair_label": "identical"
+      }
+    },
+    {
+      "cwe": "CWE190",
+      "flow_variant": "int_max_add_01",
+      "source": "testcases/CWE190_Integer_Overflow/s03/CWE190_Integer_Overflow__int_max_add_01.c",
+      "sink_import": null,
+      "note": "Sink is data + 1. No libc import.",
+      "pair": {
+        "region_ids_identical": true,
+        "verify_status_identical": true
+      },
+      "bad": {
+        "binary_name": "CWE190_int_max_add_01_bad",
+        "sha256": "b98d5868324ff00b214b23cedcfce26e6dbe71df12ddffc611671eb88701aad7",
+        "size_bytes": 79808,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=c8654c79c3502c81c626a0b78b6b70be2589d7cf, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 0.591,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000a68 T CWE190_Integer_Overflow__int_max_add_01_bad",
+          "0000000000000a9c T main"
+        ],
+        "function_count_radare2": 61,
+        "import_count": 16,
+        "dangerous_imports": [],
+        "brief_wall_s": 24.376,
+        "brief_returncode": 0,
+        "summary": "CWE190_int_max_add_01_bad looks like elf; arm64/64; 61 functions. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xa9c",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000a9c      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE190_Integer_Overflow__int_max_add_01.c:91:1{\n            0x00000aa0      fd030091       mov x29, sp\n            0x00000aa4      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "ran": false,
+          "reason": "no-libc-sink",
+          "caller_recall": null
+        },
+        "pair_label": "identical"
+      },
+      "good": {
+        "binary_name": "CWE190_int_max_add_01_good",
+        "sha256": "a724736d0e13f69dd06120c5658ecaf4481ba57a22f1aac3ffceabb3e7dda6be",
+        "size_bytes": 80072,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=f1f50c68e860afc1802c0d2f3402b03081635d9e, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 0.853,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000a68 t goodG2B",
+          "0000000000000a9c t goodB2G",
+          "0000000000000af0 T CWE190_Integer_Overflow__int_max_add_01_good",
+          "0000000000000b0c T main"
+        ],
+        "function_count_radare2": 63,
+        "import_count": 16,
+        "dangerous_imports": [],
+        "brief_wall_s": 26.947,
+        "brief_returncode": 0,
+        "summary": "CWE190_int_max_add_01_good looks like elf; arm64/64; 63 functions. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xb0c",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000b0c      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE190_Integer_Overflow__int_max_add_01.c:91:1{\n            0x00000b10      fd030091       mov x29, sp\n            0x00000b14      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "ran": false,
+          "reason": "no-libc-sink",
+          "caller_recall": null
+        },
+        "pair_label": "identical"
+      }
+    },
+    {
+      "cwe": "CWE415",
+      "flow_variant": "malloc_free_char_01",
+      "source": "testcases/CWE415_Double_Free/s01/CWE415_Double_Free__malloc_free_char_01.c",
+      "sink_import": "free",
+      "note": "BadSink is the second free().",
+      "pair": {
+        "region_ids_identical": true,
+        "verify_status_identical": true
+      },
+      "bad": {
+        "binary_name": "CWE415_malloc_free_char_01_bad",
+        "sha256": "5b1093be02974f56998a0fe223ff80c4693a3e42042e3f4e3be06a274fb41738",
+        "size_bytes": 80024,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=5b4913bb6e820020518b8f0b22d17ae62a479baf, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 1.163,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000b28 T CWE415_Double_Free__malloc_free_char_01_bad",
+          "0000000000000b70 T main"
+        ],
+        "function_count_radare2": 64,
+        "import_count": 19,
+        "dangerous_imports": [],
+        "brief_wall_s": 26.642,
+        "brief_returncode": 0,
+        "summary": "CWE415_malloc_free_char_01_bad looks like elf; arm64/64; 64 functions. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xb70",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000b70      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE415_Double_Free__malloc_free_char_01.c:85:1{\n            0x00000b74      fd030091       mov x29, sp\n            0x00000b78      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "wall_s": 6.954,
+          "returncode": 0,
+          "argv_imports": [
+            "free"
+          ],
+          "verdicts": [
+            {
+              "import": "free",
+              "status": "dynamic",
+              "call_sites": [
+                {
+                  "function": "imp.malloc",
+                  "address": "0x00000b38",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "imp.exit",
+                  "address": "0x00000b50",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "dbg.CWE415_Double_Free__malloc_free_char_01_bad",
+                  "address": "0x00000b58",
+                  "argument": "<unresolved>",
+                  "constant": false
+                },
+                {
+                  "function": "imp.free",
+                  "address": "0x00000b60",
+                  "argument": "<dynamic>",
+                  "constant": false
+                }
+              ]
+            }
+          ],
+          "caller_recall": true,
+          "status": "dynamic"
+        },
+        "pair_label": "identical"
+      },
+      "good": {
+        "binary_name": "CWE415_malloc_free_char_01_good",
+        "sha256": "970cf444d86633ae7d73f8029cc102469f8b4abc7949acda683be855f037634a",
+        "size_bytes": 80248,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=1b43a558bfa5ff1bb6382ad0cc3cfac866f8266c, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 1.032,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000b28 t goodG2B",
+          "0000000000000b68 t goodB2G",
+          "0000000000000ba8 T CWE415_Double_Free__malloc_free_char_01_good",
+          "0000000000000bc4 T main"
+        ],
+        "function_count_radare2": 66,
+        "import_count": 19,
+        "dangerous_imports": [],
+        "brief_wall_s": 40.16,
+        "brief_returncode": 0,
+        "summary": "CWE415_malloc_free_char_01_good looks like elf; arm64/64; 66 functions. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xbc4",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000bc4      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE415_Double_Free__malloc_free_char_01.c:85:1{\n            0x00000bc8      fd030091       mov x29, sp\n            0x00000bcc      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "wall_s": 7.214,
+          "returncode": 0,
+          "argv_imports": [
+            "free"
+          ],
+          "verdicts": [
+            {
+              "import": "free",
+              "status": "dynamic",
+              "call_sites": [
+                {
+                  "function": "imp.malloc",
+                  "address": "0x00000b38",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "imp.exit",
+                  "address": "0x00000b50",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "dbg.goodG2B",
+                  "address": "0x00000b58",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "imp.malloc",
+                  "address": "0x00000b78",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "imp.exit",
+                  "address": "0x00000b90",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "dbg.goodB2G",
+                  "address": "0x00000b98",
+                  "argument": "<unresolved>",
+                  "constant": false
+                },
+                {
+                  "function": "unknown",
+                  "address": "0x00000bb0",
+                  "argument": "<unresolved>",
+                  "constant": false
+                },
+                {
+                  "function": "unknown",
+                  "address": "0x00000bb4",
+                  "argument": "<unresolved>",
+                  "constant": false
+                }
+              ]
+            }
+          ],
+          "caller_recall": true,
+          "status": "dynamic"
+        },
+        "pair_label": "identical"
+      }
+    },
+    {
+      "cwe": "CWE416",
+      "flow_variant": "malloc_free_char_01",
+      "source": "testcases/CWE416_Use_After_Free/CWE416_Use_After_Free__malloc_free_char_01.c",
+      "sink_import": null,
+      "note": "BadSink is printLine(data) after free. printLine is support, not a labelled libc sink.",
+      "pair": {
+        "region_ids_identical": true,
+        "verify_status_identical": true
+      },
+      "bad": {
+        "binary_name": "CWE416_malloc_free_char_01_bad",
+        "sha256": "cc0c99edc690fd884f906fb0bab3e0449ba4c649c3e69e6cadc24cf8e6b612c5",
+        "size_bytes": 80144,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=d4d36b97568f114524a93a3219e95dbf0c2a2fcf, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 1.074,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000b68 T CWE416_Use_After_Free__malloc_free_char_01_bad",
+          "0000000000000bcc T main"
+        ],
+        "function_count_radare2": 65,
+        "import_count": 20,
+        "dangerous_imports": [],
+        "brief_wall_s": 25.314,
+        "brief_returncode": 0,
+        "summary": "CWE416_malloc_free_char_01_bad looks like elf; arm64/64; 65 functions. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xbcc",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000bcc      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE416_Use_After_Free__malloc_free_char_01.c:94:1{\n            0x00000bd0      fd030091       mov x29, sp\n            0x00000bd4      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "ran": false,
+          "reason": "no-libc-sink",
+          "caller_recall": null
+        },
+        "pair_label": "identical"
+      },
+      "good": {
+        "binary_name": "CWE416_malloc_free_char_01_good",
+        "sha256": "f7d8b5ad142446836dd26a5a0a9fc73e1c5373cd76d35646997197170f990123",
+        "size_bytes": 80384,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=22cc9ed5d76526841a712655de9b129513165951, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 1.128,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000b68 t goodG2B",
+          "0000000000000bc4 t goodB2G",
+          "0000000000000c20 T CWE416_Use_After_Free__malloc_free_char_01_good",
+          "0000000000000c3c T main"
+        ],
+        "function_count_radare2": 67,
+        "import_count": 20,
+        "dangerous_imports": [],
+        "brief_wall_s": 39.18,
+        "brief_returncode": 0,
+        "summary": "CWE416_malloc_free_char_01_good looks like elf; arm64/64; 67 functions. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xc3c",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000c3c      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE416_Use_After_Free__malloc_free_char_01.c:94:1{\n            0x00000c40      fd030091       mov x29, sp\n            0x00000c44      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "ran": false,
+          "reason": "no-libc-sink",
+          "caller_recall": null
+        },
+        "pair_label": "identical"
+      }
+    },
+    {
+      "cwe": "CWE476",
+      "flow_variant": "char_01",
+      "source": "testcases/CWE476_NULL_Pointer_Dereference/CWE476_NULL_Pointer_Dereference__char_01.c",
+      "sink_import": null,
+      "note": "BadSink is data[0] passed to printHexCharLine. No libc sink.",
+      "pair": {
+        "region_ids_identical": true,
+        "verify_status_identical": true
+      },
+      "bad": {
+        "binary_name": "CWE476_char_01_bad",
+        "sha256": "8799b00f90155408688a2184e2f3b22449bc6aaf63afe580c4236d198a3f8b01",
+        "size_bytes": 79768,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=5626bd6d8cac446b34af7e59798e5b76f2dfb730, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 0.943,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000a68 T CWE476_NULL_Pointer_Dereference__char_01_bad",
+          "0000000000000a8c T main"
+        ],
+        "function_count_radare2": 61,
+        "import_count": 16,
+        "dangerous_imports": [],
+        "brief_wall_s": 27.079,
+        "brief_returncode": 0,
+        "summary": "CWE476_char_01_bad looks like elf; arm64/64; 61 functions. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xa8c",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000a8c      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE476_NULL_Pointer_Dereference__char_01.c:83:1{\n            0x00000a90      fd030091       mov x29, sp\n            0x00000a94      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "ran": false,
+          "reason": "no-libc-sink",
+          "caller_recall": null
+        },
+        "pair_label": "identical"
+      },
+      "good": {
+        "binary_name": "CWE476_char_01_good",
+        "sha256": "8cfa887b60f901dbd972e34feaec8b80643460284c7b2114124d4157786c4f20",
+        "size_bytes": 79992,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=9fe9faec0881c408b6467c6ec2ae8b167944f84a, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 1.031,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000a68 t goodG2B",
+          "0000000000000a94 t goodB2G",
+          "0000000000000ad4 T CWE476_NULL_Pointer_Dereference__char_01_good",
+          "0000000000000af0 T main"
+        ],
+        "function_count_radare2": 63,
+        "import_count": 16,
+        "dangerous_imports": [],
+        "brief_wall_s": 45.148,
+        "brief_returncode": 0,
+        "summary": "CWE476_char_01_good looks like elf; arm64/64; 63 functions. First region: Entry / main.",
+        "ranked_region_ids": [
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xaf0",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000af0      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE476_NULL_Pointer_Dereference__char_01.c:83:1{\n            0x00000af4      fd030091       mov x29, sp\n            0x00000af8      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "ran": false,
+          "reason": "no-libc-sink",
+          "caller_recall": null
+        },
+        "pair_label": "identical"
+      }
+    },
+    {
+      "cwe": "CWE78",
+      "flow_variant": "char_console_system_01",
+      "source": "testcases/CWE78_OS_Command_Injection/s02/CWE78_OS_Command_Injection__char_console_system_01.c",
+      "sink_import": "system",
+      "note": "BadSink is system() on a console-tainted buffer.",
+      "pair": {
+        "region_ids_identical": true,
+        "verify_status_identical": true
+      },
+      "bad": {
+        "binary_name": "CWE78_char_console_system_01_bad",
+        "sha256": "5fd91eb26c7e4bbb7fcdc2c3d6c718f5ed6aeccb8bfa9eabef740c0161b69c3b",
+        "size_bytes": 81552,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=73020f669bb8d3b61048b7697150f91c345adb33, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 0.94,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000ba8 T CWE78_OS_Command_Injection__char_console_system_01_bad",
+          "0000000000000ce0 T main"
+        ],
+        "function_count_radare2": 65,
+        "import_count": 21,
+        "dangerous_imports": [
+          "system"
+        ],
+        "brief_wall_s": 24.717,
+        "brief_returncode": 0,
+        "summary": "CWE78_char_console_system_01_bad looks like elf; arm64/64; 65 functions; imports system. First region: Process launch / child control.",
+        "ranked_region_ids": [
+          "imports:process",
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "imports:process",
+            "score": 93,
+            "title": "Process launch / child control",
+            "function": null,
+            "address": null,
+            "kind": "inventory",
+            "snippet_head": "system"
+          },
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xce0",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000ce0      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE78_OS_Command_Injection__char_console_system_01.c:110:1{\n            0x00000ce4      fd030091       mov x29, sp\n            0x00000ce8      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [
+          "r2b verify /home/kali/work/github/r2brief/.r2b-corpus/work/juliet/bin/CWE78_char_console_system_01_bad --import system --json"
+        ],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "wall_s": 13.856,
+          "returncode": 0,
+          "argv_imports": [
+            "system"
+          ],
+          "verdicts": [
+            {
+              "import": "system",
+              "status": "mixed",
+              "call_sites": [
+                {
+                  "function": "unknown",
+                  "address": "0x00000c9c",
+                  "argument": "fgets() failed",
+                  "constant": true
+                },
+                {
+                  "function": "dbg.CWE78_OS_Command_Injection__char_console_system_01_bad",
+                  "address": "0x00000cb4",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "unknown",
+                  "address": "0x00000cc8",
+                  "argument": "command execution failed!",
+                  "constant": true
+                },
+                {
+                  "function": "imp.exit",
+                  "address": "0x00000cd0",
+                  "argument": "<dynamic>",
+                  "constant": false
+                }
+              ]
+            }
+          ],
+          "caller_recall": true,
+          "status": "mixed"
+        },
+        "pair_label": "identical"
+      },
+      "good": {
+        "binary_name": "CWE78_char_console_system_01_good",
+        "sha256": "767e59eaeb44765829ec65e744fcc97d404d468ab4b0da0af5f60dd2739245c7",
+        "size_bytes": 80216,
+        "file": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=dd41f896efa017323b2dc67dc0fd01db428121a5, for GNU/Linux 3.7.0, with debug_info, not stripped",
+        "compile_s": 0.865,
+        "compile_returncode": 0,
+        "labelled_symbols": [
+          "0000000000000b28 t goodG2B",
+          "0000000000000bbc T CWE78_OS_Command_Injection__char_console_system_01_good",
+          "0000000000000bd4 T main"
+        ],
+        "function_count_radare2": 65,
+        "import_count": 19,
+        "dangerous_imports": [
+          "system"
+        ],
+        "brief_wall_s": 59.638,
+        "brief_returncode": 0,
+        "summary": "CWE78_char_console_system_01_good looks like elf; arm64/64; 65 functions; imports system. First region: Process launch / child control.",
+        "ranked_region_ids": [
+          "imports:process",
+          "entry:main"
+        ],
+        "regions": [
+          {
+            "id": "imports:process",
+            "score": 93,
+            "title": "Process launch / child control",
+            "function": null,
+            "address": null,
+            "kind": "inventory",
+            "snippet_head": "system"
+          },
+          {
+            "id": "entry:main",
+            "score": 89,
+            "title": "Entry / main",
+            "function": "main",
+            "address": "0xbd4",
+            "kind": "disasm",
+            "snippet_head": ";-- main:\n            0x00000bd4      fd7bbea9       stp x29, x30, [sp, -0x20]!  ; CWE78_OS_Command_Injection__char_console_system_01.c:110:1{\n            0x00000bd8      fd030091       mov x29, sp\n            0x00000bdc      e01f00b9       str w0, [sp, 0x1c]"
+          }
+        ],
+        "next_argv": [
+          "r2b verify /home/kali/work/github/r2brief/.r2b-corpus/work/juliet/bin/CWE78_char_console_system_01_good --import system --json"
+        ],
+        "region_recall": {
+          "k1": false,
+          "k3": false,
+          "k5": false
+        },
+        "region_hits": [],
+        "verify": {
+          "wall_s": 13.393,
+          "returncode": 0,
+          "argv_imports": [
+            "system"
+          ],
+          "verdicts": [
+            {
+              "import": "system",
+              "status": "mixed",
+              "call_sites": [
+                {
+                  "function": "imp.strlen",
+                  "address": "0x00000b70",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "dbg.goodG2B",
+                  "address": "0x00000b90",
+                  "argument": "<dynamic>",
+                  "constant": false
+                },
+                {
+                  "function": "unknown",
+                  "address": "0x00000ba4",
+                  "argument": "command execution failed!",
+                  "constant": true
+                },
+                {
+                  "function": "imp.exit",
+                  "address": "0x00000bac",
+                  "argument": "<dynamic>",
+                  "constant": false
+                }
+              ]
+            }
+          ],
+          "caller_recall": true,
+          "status": "mixed"
+        },
+        "pair_label": "identical"
+      }
+    }
+  ],
+  "abstentions": [
+    {
+      "cwe": "CWE190",
+      "what": "verify",
+      "reason": "no-libc-sink; labelled sink is data+1"
+    },
+    {
+      "cwe": "CWE416",
+      "what": "verify",
+      "reason": "no-libc-sink; labelled BadSink is printLine(data) after free, a support helper wrapping printf"
+    },
+    {
+      "cwe": "CWE476",
+      "what": "verify",
+      "reason": "no-libc-sink; labelled BadSink is data[0] passed to printHexCharLine"
+    }
+  ],
+  "limits": [
+    "r2b did not detect these CWEs. Juliet already labels them.",
+    "Import inventory (strcpy, system) is not region recall.",
+    "CWE-78 verify status is mixed because nearby string comments and PLT xrefs are attributed as extra call sites. The real system() site is <dynamic> on both good and bad; verify did not recover the good-source constant ls *.*",
+    "CWE-415 verify finds the labelled free() caller among extra imp.malloc / imp.exit / imp.free xrefs. Noisy, still a caller hit, not a double-free detector.",
+    "handoff.next_argv queued r2b verify --import system on CWE-78 only. Decompile was not auto-queued.",
+    "Target bytes and the unzipped tree stay in .r2b-corpus (gitignored)."
+  ],
+  "replay": [
+    "python3 scripts/corpus_intake.py fetch nist-juliet-c-cpp-1.3",
+    "python3 scripts/corpus_intake.py verify nist-juliet-c-cpp-1.3",
+    "unzip selected *_01.c plus C/testcasesupport into .r2b-corpus/work/juliet/",
+    "gcc -O0 -g -DINCLUDEMAIN -DOMITGOOD|-DOMITBAD -I testcasesupport -o BIN CASE.c testcasesupport/io.c",
+    "uv run r2b brief BIN --quick --no-save --json",
+    "uv run r2b verify BIN --import strcpy|system|free --json"
+  ]
+}

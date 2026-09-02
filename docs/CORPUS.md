@@ -48,14 +48,19 @@ basic_messaging and six other challenges under a two-hop budget. POLLs
 passed both original variants. Official type 1 POVs did not register a core
 under qemu-user without gdb.
 
-A local intake smoke on 2026-09-01 compiled Juliet's baseline CWE-121
-`src_char_declare_cpy_01` into separate good-only and bad-only arm64 Mach-O
-binaries with Apple clang 15 at `-O0`. Both produced the same two region types
-and both had a dynamic `__strcpy_chk` caller. That is the expected negative
-control: imports rank a place to inspect but cannot distinguish the labelled
-good and bad cases. It also caught a command-fidelity defect, so generated r2
-and `verify` commands now preserve fortified import names such as
-`__strcpy_chk`.
+The Kali Pi retrieval slice is recorded in
+[`nist-juliet-pilot.md`](case-studies/nist-juliet-pilot.md) and
+[`nist-juliet-pilot.json`](case-studies/nist-juliet-pilot.json). Seven
+baseline `*_01` flow variants were compiled good-only and bad-only as
+aarch64 Linux ELFs at `-O0 -g`. Quick ranking never isolated the labelled
+sink function (`0/14` at k=1, 3, and 5). `verify` found a
+dynamic/non-constant libc-sink caller when one existed, on both the good
+and bad binary. Identical ranking is the expected negative control: an
+import name is a place to inspect, not a detected CWE. An earlier Darwin
+Mach-O smoke of CWE-121 `src_char_declare_cpy_01` showed the same two
+region types and a dynamic `__strcpy_chk` caller; generated r2 and
+`verify` commands now preserve fortified import names. The ELF run is
+the recorded Linux calibration.
 
 The OpenWrt pair is the firmware tier. Verify both image hashes, inventory them
 without extraction, then use `--extract` only where bubblewrap is available.

@@ -190,9 +190,11 @@ class GhidraAdapter:
             )
             if not success and resolved and resolved.lower().removeprefix("0x") != requested_hex:
                 text = f"// resolved containing function {resolved}\n" + text
+            from ..analysis.verify import parse_function_va
+
             return {
                 "mode": "headless-one-fn",
-                "address": requested_hex,
+                "address": parse_function_va(address) or f"0x{requested_hex}",
                 "function_addr": resolved,
                 "success": success,
                 "c": text,

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from collections.abc import Iterable
 from typing import Any
 
 # Dangerous imports worth verifying by default.
@@ -26,6 +27,25 @@ DEFAULT_IMPORTS: tuple[str, ...] = (
     "execl",
     "execvp",
 )
+
+
+def collect_verify_names(*groups: Iterable[str], limit: int = 8) -> list[str]:
+    """Stable, de-duplicated import names for ``r2b verify --import``."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for raw in group:
+            name = str(raw or "").strip()
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            names.append(name)
+            if len(names) >= limit:
+                return names
+    return names
 
 # Argument register by radare2 arch name (first integer argument).
 _ARG_REGS: dict[str, tuple[str, ...]] = {

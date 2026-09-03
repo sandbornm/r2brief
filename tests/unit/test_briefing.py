@@ -127,8 +127,10 @@ def test_import_commands_preserve_fortified_symbol_spelling(tmp_path: Path):
         action for region in briefing["regions"] for action in region["next_actions"]
     )
 
-    assert "sym.imp.__strcpy_chk" in steps
-    assert "sym.imp.__strcpy_chk" in region_steps
+    assert "--import __strcpy_chk" in steps
+    assert "--import __strcpy_chk" in region_steps
+    assert "axt @" not in steps
+    assert "axt @" not in region_steps
 
 
 def test_large_code_target_marks_generic_ranking_unscored(tmp_path: Path):
@@ -427,6 +429,46 @@ def test_handoff_strcpy_only_does_not_loop_brief(tmp_path: Path) -> None:
     assert not any("decompile" in cmd for cmd in argv)
     assert not any("--quick" in cmd and "brief" in cmd for cmd in argv)
     assert "ask" not in briefing["handoff"]
+    assert any("strcpy" in str(name) for name in briefing["handoff"]["named_imports"])
+    assert any("--import strcpy" in step for step in briefing["next_steps"])
+    assert not any("axt @" in step for step in briefing["next_steps"])
+
+
+def test_handoff_verified_sites_list_function_addrs(tmp_path: Path) -> None:
+    binary = tmp_path / "ubusd"
+    analysis = {
+        "binary": str(binary),
+        "quick_scan": {
+            "firmware": {"is_elf": True, "top_level_format": "elf", "container_type": "executable"},
+            "radare2": {
+                "info": {"bin": {"arch": "arm", "bits": 64, "os": "linux"}, "core": {"format": "elf"}},
+                "imports": [{"name": "strcpy"}],
+            },
+        },
+        "deep_scan": {},
+        "issues": [],
+    }
+    briefing = build_briefing(analysis)
+    briefing["verified_imports"] = [
+        {
+            "import": "strcpy",
+            "status": "dynamic",
+            "call_sites": [
+                {
+                    "function": "00004a3c",
+                    "function_addr": "0x00004a3c",
+                    "address": "0x00004ba8",
+                    "argument": "<dynamic>",
+                    "constant": False,
+                }
+            ],
+        }
+    ]
+    handoff = build_handoff(briefing)
+    assert handoff["next_argv"] == []
+    assert handoff["decompile_addrs"] == ["0x00004a3c"]
+    assert handoff["verified_sites"][0]["function_addr"] == "0x00004a3c"
+    assert not any("decompile" in cmd for cmd in handoff["next_argv"])
 
 
 def test_handoff_wrapper_without_child_extracts(tmp_path: Path) -> None:

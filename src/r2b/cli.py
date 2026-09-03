@@ -208,9 +208,11 @@ def brief(
     briefing = build_briefing(result, max_regions=max_regions, record_id=record_id)
     if verify:
         from .adapters.radare2 import Radare2Adapter
-        from .analysis.verify import DEFAULT_IMPORTS
+        from .analysis.verify import DEFAULT_IMPORTS, collect_verify_names
 
-        briefing["verified_imports"] = Radare2Adapter().verify_scan(binary, list(DEFAULT_IMPORTS))
+        dangerous = list((briefing.get("subject") or {}).get("dangerous_imports") or [])
+        names = collect_verify_names(dangerous) or list(DEFAULT_IMPORTS)
+        briefing["verified_imports"] = Radare2Adapter().verify_scan(binary, names)
         briefing["handoff"] = build_handoff(briefing, record_id=record_id)
     meta = err_console if json_output else console
     if record:
@@ -554,20 +556,44 @@ def verify(
     adapter = Radare2Adapter()
     verdicts = adapter.verify_scan(binary, names)
     if json_output:
-        _emit_json({"binary": str(binary), "verdicts": verdicts})
+        _emit_json(
+            {
+                "schema_version": "r2b.verify.v1",
+                "binary": str(binary),
+                "verdicts": verdicts,
+            }
+        )
         return
     console.rule(f"Verify: {binary.name}")
     table = Table()
     table.add_column("Import")
     table.add_column("Status")
-    table.add_column("Sites")
-    table.add_column("Arguments")
+    table.add_column("Site")
+    table.add_column("Function")
+    table.add_column("Argument")
+    decompile_addrs: list[str] = []
+    seen_addrs: set[str] = set()
     for item in verdicts:
-        args = ", ".join(
-            f"{site['address']}={site['argument']!r}" for site in item.get("call_sites") or []
-        ) or "-"
-        table.add_row(item["import"], item["status"], str(len(item.get("call_sites") or [])), args)
+        sites = [site for site in (item.get("call_sites") or []) if isinstance(site, dict)]
+        if not sites:
+            table.add_row(str(item.get("import") or ""), str(item.get("status") or ""), "-", "-", "-")
+            continue
+        for site in sites:
+            function_addr = str(site.get("function_addr") or "")
+            table.add_row(
+                str(item.get("import") or ""),
+                str(item.get("status") or ""),
+                str(site.get("address") or "-"),
+                function_addr or str(site.get("function") or "-"),
+                str(site.get("argument") or "-"),
+            )
+            if function_addr and function_addr not in seen_addrs:
+                seen_addrs.add(function_addr)
+                decompile_addrs.append(function_addr)
     console.print(table)
+    quoted = str(binary)
+    for addr in decompile_addrs[:4]:
+        console.print(f"[dim]decompile[/] r2b decompile {quoted} {addr} --json")
 
 
 @app.command()
@@ -601,10 +627,10 @@ def decompile(
         return
     resolved = payload.get("function_addr") or function
     console.rule(f"Decompile {binary.name} @ {resolved}")
+    if payload.get("function_addr") and str(payload["function_addr"]) != str(function):
+        console.print(f"[dim]requested[/] {function}  [dim]resolved[/] {payload['function_addr']}")
     if not payload.get("success"):
         console.print("[red]Decompile failed[/]")
-        if payload.get("function_addr"):
-            console.print(f"[dim]resolved function[/] {payload['function_addr']}")
         if payload.get("stderr"):
             console.print(payload["stderr"])
     console.print(payload.get("c") or "")

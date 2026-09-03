@@ -5,6 +5,12 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- Briefing `next_steps` / import `next_actions` emit `r2b verify` /
+  `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
+  imports that verify can take without auto-queueing them on `next_argv`.
+  `brief --verify` follows `subject.dangerous_imports`. Verify JSON is
+  `r2b.verify.v1`; the human table prints `function_addr` and a decompile
+  argv line.
 - `r2b verify` JSON includes `call_sites[].function_addr` (containing-function
   VA). `r2b decompile BIN ADDR` resolves a call site to that function instead
   of emitting empty C / `no function at <call site>`.

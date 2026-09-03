@@ -5,6 +5,7 @@ from __future__ import annotations
 from r2b.analysis.verify import (
     CallSite,
     ImportVerdict,
+    collect_verify_names,
     extract_comment_string,
     first_arg_registers,
     parse_disassembly_line,
@@ -106,6 +107,20 @@ class TestParseFunctionVa:
         assert parse_function_va("00004a3c") == "0x00004a3c"
         assert parse_function_va("0x4ba8") == "0x00004ba8"
         assert parse_function_va(0x4a3c) == "0x00004a3c"
+
+
+class TestCollectVerifyNames:
+    def test_prefers_subject_imports_and_dedupes(self):
+        assert collect_verify_names(["strcpy", "memcpy"], ["strcpy", "sprintf"]) == [
+            "strcpy",
+            "memcpy",
+            "sprintf",
+        ]
+        assert collect_verify_names([]) == []
+        assert collect_verify_names(["system"], ["SYSTEM", "popen"], limit=2) == [
+            "system",
+            "popen",
+        ]
 
     def test_symbolic_names_are_not_addresses(self):
         assert parse_function_va("check_phrase") is None

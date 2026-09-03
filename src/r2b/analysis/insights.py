@@ -203,7 +203,7 @@ def _import_patterns(dossiers: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 support=support,
                 total=total,
                 evidence=owners[name],
-                next_action=f"r2: `ii~{name}` then `axt @ sym.imp.{name}` before reading random functions.",
+                next_action=f"r2b verify BIN --import {name} --json",
             )
         )
     patterns.sort(

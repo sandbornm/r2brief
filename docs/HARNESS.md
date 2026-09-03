@@ -36,8 +36,8 @@ Parse **stdout JSON**. Record/session chatter and `--ask` prose go to **stderr**
 | `r2b brief BIN --quick --verify --json` | briefing + `verified_imports` |
 | `r2b review BRIEF.json --mode rules --json` | `r2b.review.v1`, zero model calls |
 | `r2b review BRIEF.json --mode both --thesis T --json` | base order + validated model order + rank differences |
-| `r2b verify BIN --json` | `{binary, verdicts}` with `call_sites[].address` (call site) and `function_addr` (containing-function VA) |
-| `r2b decompile BIN ADDR --json` | `{success, c, function_addr, ...}` — ADDR may be a call site |
+| `r2b verify BIN --json` | `r2b.verify.v1` `{binary, verdicts}` with `call_sites[].address` (call site) and `function_addr` (containing-function VA) |
+| `r2b decompile BIN ADDR --json` | `{success, c, address, function_addr, ...}` — ADDR may be a call site; hop on `function_addr` |
 | `r2b records list --json` | record index |
 | `r2b insights --tag T --json` | collapsed SHA findings |
 
@@ -51,15 +51,16 @@ turn `brief` into an LLM plan that then runs `analyze`.
 
 `handoff` is the agent-facing slice: `next_argv` plus compact regions
 (no ask templates). Prefer it over re-parsing `overall_ask`. ELF:
-`verify` only for `system`/`popen`/`exec*`. Function VAs stay on
-`handoff.regions[].addr`; do not auto-queue `decompile` (Ghidra is
-optional, and decompiling rank-1 `main` is not a reliable next
-command). Wrapper: `brief` a carved child or `--extract`. Never
-`decompile 0x0` on the blob. `next_argv` may be empty (no process-launch
-import, no carved child, or a broad runtime/monolith that needs scope
-first). When `handoff.requires_scope=true`, choose one of
-`scope_options`—dependency, crash address, export, subsystem, or
-version diff—before executing a generic follow-up.
+`next_argv` queues `verify` only for `system`/`popen`/`exec*`. Named
+buffer imports (`strcpy` / `memcpy` / `sprintf`) live on
+`handoff.named_imports` and in `next_steps` as
+`r2b verify BIN --import NAME --json` — they are **not** auto-queued.
+After verify, hop with `call_sites[].function_addr` (also
+`handoff.decompile_addrs` when `--verify` already ran). Do not
+auto-queue `decompile`. Wrapper: `brief` a carved child or `--extract`.
+Never `decompile 0x0` on the blob. Empty `next_argv` is valid. When
+`handoff.requires_scope=true`, choose one of `scope_options` before a
+generic follow-up. Do not `axt @ sym.imp.*`; that is a sidestep.
 
 ```bash
 r2b brief BIN --quick --json | jq -r '.handoff.next_argv[]'
@@ -92,8 +93,10 @@ Checkout: `uv sync`. Wheel: `r2b[std]` or skinny `r2b[r2]`.
 
 ## do / don't
 
-- Do: `brief --quick` first. `verify` on `system`/`popen`/`exec*`. One
-  `decompile ADDR`. Tag records. `insights --tag` to collapse duplicate SHA.
+- Do: `brief --quick` first. `verify` on `system`/`popen`/`exec*` when
+  `next_argv` says so; `verify --import` a `named_imports` name when
+  `next_argv` is empty. One `decompile function_addr`. Tag records.
+  `insights --tag` to collapse duplicate SHA.
   Use `review --mode both` only when a thesis-specific second order is useful.
   Read `noise_assessment.focus_region_ids` for the deterministic evidence
   screen. `low_signal` means the current capsule lacks support; it is not a
@@ -109,6 +112,8 @@ r2b brief /bin/ls --quick --json
 r2b brief samples/bin/arm64/hello --quick --json
 r2b brief samples/bin/arm64/vendor/busybox --quick --verify --tag linux --json
 r2b verify samples/bin/arm64/vendor/busybox --import popen --json
+r2b verify ./ubusd --import strcpy --json
+r2b decompile ./ubusd 0x4a3c --json
 r2b brief firmware.bin --quick --extract --json
 r2b decompile ./httpd 0x12a40 --json
 r2b insights --tag linux --json

@@ -12,7 +12,8 @@ import re
 import shlex
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from ..llm.citations import evidence_block
 from ..llm.prompts import PROMPT_ID, overall_ask_header, overall_ask_tail, region_ask_tail
@@ -341,7 +342,7 @@ def build_briefing(
         if not region.next_actions:
             region.next_actions = _default_next_actions(region)
 
-    next_steps = _overall_next_steps(subject, regions, firmware, children)
+    next_steps = _overall_next_steps(subject, regions, firmware, children, binary=binary)
     summary = _summary_line(subject, regions)
     overall_ask = _overall_ask(subject, regions, next_steps)
     payload = AnalysisBriefing(
@@ -435,6 +436,11 @@ def build_handoff(
                     )
     if record_id:
         next_argv.append(f"r2b records show {record_id[:16]} --json")
+    dangerous = list(subject.get("dangerous_imports") or [])[:8]
+    named_imports = [
+        name for name in dangerous if _basename(str(name)) not in _VERIFY_IMPORTS
+    ]
+    verified_sites, decompile_addrs = _verified_handoff_sites(briefing)
     return {
         "schema_version": HANDOFF_SCHEMA_VERSION,
         "binary": binary,
@@ -445,7 +451,7 @@ def build_handoff(
             "format": subject.get("format"),
             "arch": subject.get("arch"),
             "stripped": subject.get("stripped"),
-            "dangerous_imports": list(subject.get("dangerous_imports") or [])[:8],
+            "dangerous_imports": dangerous,
             "risk_level": subject.get("risk_level"),
             "subject_class": subject.get("subject_class"),
             "size_bytes": subject.get("size_bytes"),
@@ -454,6 +460,9 @@ def build_handoff(
         },
         "regions": regions_out,
         "next_argv": next_argv[:8],
+        "named_imports": named_imports,
+        "verified_sites": verified_sites,
+        "decompile_addrs": decompile_addrs,
         "requires_scope": requires_scope,
         "scope_options": (
             ["dependency", "crash_address", "export", "subsystem", "version_diff"]
@@ -461,6 +470,37 @@ def build_handoff(
             else []
         ),
     }
+
+
+def _verified_handoff_sites(
+    briefing: Mapping[str, Any] | dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    sites: list[dict[str, Any]] = []
+    addrs: list[str] = []
+    seen: set[str] = set()
+    for item in briefing.get("verified_imports") or []:
+        if not isinstance(item, dict):
+            continue
+        import_name = str(item.get("import") or "")
+        for raw in item.get("call_sites") or []:
+            if not isinstance(raw, dict):
+                continue
+            function_addr = raw.get("function_addr")
+            sites.append(
+                {
+                    "import": import_name,
+                    "address": raw.get("address"),
+                    "function_addr": function_addr,
+                    "argument": raw.get("argument"),
+                    "constant": raw.get("constant"),
+                }
+            )
+            if isinstance(function_addr, str) and function_addr and function_addr not in seen:
+                seen.add(function_addr)
+                addrs.append(function_addr)
+            if len(sites) >= 12:
+                return sites, addrs[:4]
+    return sites, addrs[:4]
 
 
 def _child_brief_cmd(action: str) -> str | None:
@@ -512,7 +552,11 @@ def render_briefing_markdown(
                 continue
             sites = item.get("call_sites") or []
             args = ", ".join(
-                f"{site.get('address')}={site.get('argument')!r}" for site in sites if isinstance(site, dict)
+                (
+                    f"{site.get('function_addr') or site.get('address')}={site.get('argument')!r}"
+                    for site in sites
+                    if isinstance(site, dict)
+                )
             ) or "no callers"
             lines.append(f"- {item.get('import')}: {item.get('status')} ({args})")
     if data.get("next_steps"):
@@ -1006,7 +1050,7 @@ def _import_regions(r2_quick: dict[str, Any]) -> list[RegionAsk]:
                     artifact_id=artifact_id,
                 ),
                 next_actions=[
-                    f"r2: `ii` then `axt @ sym.imp.{first_import}` to find the first caller.",
+                    f"r2b verify BIN --import {first_import} --json",
                     "Treat the import as a pivot; confirm the caller and arguments before making a behavior claim.",
                 ],
             )
@@ -1106,7 +1150,7 @@ def _function_regions(r2_deep: dict[str, Any], r2_quick: dict[str, Any] | None =
                     function=name,
                 ),
                 next_actions=[
-                    f"r2: `pdf @ {offset or name}` and `axt @ {offset or name}`.",
+                    f"r2b decompile BIN {offset or name} --json",
                     "If this takes a buffer, track the source with one xref hop only.",
                 ],
             )
@@ -1316,9 +1360,12 @@ def _overall_next_steps(
     regions: list[RegionAsk],
     firmware: dict[str, Any],
     children: dict[str, Any],
+    *,
+    binary: str = "BIN",
 ) -> list[str]:
     steps: list[str] = []
     subject_class = str(subject.get("subject_class") or "")
+    quoted = shlex.quote(binary) if binary and binary != "unknown" else "BIN"
     if subject.get("triage_scope") == "broad":
         return [
             "Narrow this target by dependency, crash address, export, subsystem, or version diff first.",
@@ -1333,8 +1380,8 @@ def _overall_next_steps(
     elif subject_class in _CODE_SUBJECT_CLASSES:
         steps.append("This is already an executable. Rank named symbols / entry; do not unpack it as firmware.")
     if subject.get("dangerous_imports"):
-        first = subject["dangerous_imports"][0]
-        steps.append(f"r2: `axt @ sym.imp.{_r2_import_name(first)}` and brief that caller.")
+        first = _r2_import_name(str(subject["dangerous_imports"][0]))
+        steps.append(f"r2b verify {quoted} --import {first} --json")
     if regions:
         top = regions[0]
         addr = top.snippet.address if top.snippet else None
@@ -1352,8 +1399,8 @@ def _overall_next_steps(
 def _default_next_actions(region: RegionAsk) -> list[str]:
     addr = region.snippet.address if region.snippet else None
     if addr:
-        return [f"r2: `pd 32 @ {addr}`", f"r2: `axt @ {addr}`"]
-    return ["Inspect this region in r2/Ghidra before expanding scope."]
+        return [f"r2b decompile BIN {addr} --json"]
+    return ["Rank named symbols / entry; do not expand without a caller."]
 
 
 def _firmware_next_actions(kind: str, artifact: dict[str, Any]) -> list[str]:

@@ -230,3 +230,34 @@ def test_analyze_json_emits_briefing(tmp_path: Path) -> None:
     assert data["schema_version"] == "r2b.briefing.v1"
     assert data["handoff"]["schema_version"] == "r2b.handoff.v1"
     assert "ask" not in data["handoff"]
+
+
+def test_verify_json_includes_schema_and_function_addr(tmp_path: Path) -> None:
+    binary = tmp_path / "ubusd"
+    binary.write_bytes(b"\x7fELF")
+    verdicts = [
+        {
+            "import": "strcpy",
+            "status": "dynamic",
+            "call_sites": [
+                {
+                    "function": "00004a3c",
+                    "function_addr": "0x00004a3c",
+                    "address": "0x00004ba8",
+                    "argument": "<dynamic>",
+                    "constant": False,
+                }
+            ],
+        }
+    ]
+    adapter = MagicMock()
+    adapter.verify_scan.return_value = verdicts
+    with (
+        patch("r2b.cli.load_config"),
+        patch("r2b.adapters.radare2.Radare2Adapter", return_value=adapter),
+    ):
+        out = runner.invoke(app, ["verify", str(binary), "--import", "strcpy", "--json"])
+    assert out.exit_code == 0, out.output
+    data = json.loads(out.stdout)
+    assert data["schema_version"] == "r2b.verify.v1"
+    assert data["verdicts"][0]["call_sites"][0]["function_addr"] == "0x00004a3c"

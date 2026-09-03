@@ -30,6 +30,17 @@
         "subject": { "type": "object" },
         "regions": { "type": "array" },
         "next_argv": { "type": "array", "items": { "type": "string" } },
+        "named_imports": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Dangerous imports that verify --import can take but next_argv does not auto-queue (strcpy/memcpy/sprintf)."
+        },
+        "verified_sites": { "type": "array" },
+        "decompile_addrs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Unique containing-function VAs from verified_imports. Not auto-queued."
+        },
         "requires_scope": { "type": "boolean" },
         "scope_options": { "type": "array", "items": { "type": "string" } }
       }

@@ -151,7 +151,7 @@ def test_decompile_function_passes_containing_function_va(tmp_path: Path):
 
     command = run.call_args.args[0]
     assert command[-1] == "00004a3c"
-    assert payload["address"] == "4ba8"
+    assert payload["address"] == "0x00004ba8"
     assert payload["function_addr"] == "0x00004a3c"
     assert payload["success"] is True
     assert "int fcn" in payload["c"]

@@ -21,6 +21,7 @@ from .artifact_dag import build_artifact_dag, compact_dag, dump_dag
 from .graph import build_analysis_graph
 from ..extract.sandbox import ExtractLimits
 from ..adapters.base import AdapterRegistry, AdapterUnavailable, AnalyzerAdapter
+from ..adapters.triage import CapaAdapter, DetectItEasyAdapter
 from ..adapters import (
     AngrAdapter,
     AutoProfileAdapter,
@@ -91,6 +92,11 @@ class AnalysisOrchestrator:
         adapters.append(cast(AnalyzerAdapter, Radare2Adapter()))
         adapters.append(cast(AnalyzerAdapter, CapstoneAdapter()))
         adapters.append(cast(AnalyzerAdapter, DWARFAdapter()))
+        adapters.append(DetectItEasyAdapter(timeout_s=config.analysis.die_timeout_s))
+        adapters.append(CapaAdapter(
+            timeout_s=config.analysis.capa_timeout_s,
+            rules_path=config.analysis.capa_rules_path,
+        ))
 
         if config.analysis.enable_ghidra and env.ghidra:
             adapters.append(cast(AnalyzerAdapter, GhidraAdapter(
@@ -462,6 +468,29 @@ class AnalysisOrchestrator:
                 {"stage": "quick", "adapter": "radare2", "reason": "unavailable"},
             )
 
+        if not self._config.analysis.enable_die:
+            skip_quick_adapter("die", "disabled; set analysis.enable_die=true")
+        elif not self._has_adapter("die"):
+            skip_quick_adapter("die", "Detect It Easy CLI (diec) is not on PATH")
+        else:
+            start = time.perf_counter()
+            self._emit_progress(progress_callback, "adapter_started", {"stage": "quick", "adapter": "die"})
+            try:
+                payload = self._registry.get("die").quick_scan(binary)
+                result.quick_scan["die"] = payload
+                update_quick_status("die", payload, start)
+                self._record_action(trajectory, "die.quick", payload)
+                self._emit_progress(progress_callback, "adapter_completed",
+                                    {"stage": "quick", "adapter": "die", "payload": payload})
+            except Exception as exc:
+                result.notes.append(f"die failed: {exc}")
+                update_quick_status("die", None, start, error=str(exc))
+                self._record_action(trajectory, "die.failed", {"error": str(exc)})
+                self._emit_progress(progress_callback, "adapter_failed",
+                                    {"stage": "quick", "adapter": "die", "error": str(exc)})
+        if not result.plan.deep:
+            skip_quick_adapter("capa", "requires deep analysis with analysis.enable_capa=true")
+
         self._build_artifact_dag(result, binary, trajectory, progress_callback)
 
         self._emit_progress(progress_callback, "stage_completed", {"stage": "quick"})
@@ -511,9 +540,12 @@ class AnalysisOrchestrator:
                 duration_ms = int((time.perf_counter() - start) * 1000)
                 with lock:
                     result.deep_scan[adapter_name] = payload
-                self._record_action(trajectory, f"{adapter_name}.deep", payload)
+                skipped = payload.get("status") == "skipped"
+                self._record_action(trajectory, f"{adapter_name}.{'skipped' if skipped else 'deep'}", payload)
                 self._emit_progress(
-                    progress_callback, "adapter_completed", {"stage": "deep", "adapter": adapter_name, "payload": payload}
+                    progress_callback, "adapter_skipped" if skipped else "adapter_completed",
+                    {"stage": "deep", "adapter": adapter_name, "payload": payload,
+                     **({"reason": payload.get("reason")} if skipped else {})}
                 )
                 update_tool_status(adapter_name, payload, duration_ms=duration_ms)
             except AdapterUnavailable as exc:
@@ -612,6 +644,16 @@ class AnalysisOrchestrator:
             skip_adapter("radare2", non_code_reason)
 
         tasks: list[tuple[str, AnalyzerAdapter, Callable[[], dict[str, Any]], bool, bool]] = []
+
+        if not self._config.analysis.enable_capa:
+            skip_adapter("capa", "disabled; set analysis.enable_capa=true")
+        elif not subject_is_code:
+            skip_adapter("capa", non_code_reason)
+        elif not self._has_adapter("capa"):
+            skip_adapter("capa", "Mandiant capa CLI is not on PATH")
+        else:
+            capa = self._registry.get("capa")
+            tasks.append(("capa", capa, lambda: capa.deep_scan(binary), False, True))
 
         if ghidra and subject_is_code:
             tasks.append((
@@ -944,6 +986,16 @@ class AnalysisOrchestrator:
             "warnings": [],
         }
         if not payload:
+            return summary
+
+        if adapter_name in {"die", "capa"}:
+            summary["status"] = payload.get("status", "completed")
+            summary["warnings"] = payload.get("warnings", [])
+            if payload.get("reason"):
+                summary["reason"] = payload["reason"]
+            for key in ("detection_count", "capability_count", "evidence_kind"):
+                if key in payload:
+                    summary[key] = payload[key]
             return summary
 
         def extract_symbol_names(entries: list[dict[str, Any]]) -> list[str]:

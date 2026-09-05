@@ -32,10 +32,12 @@ _QUICK_ORDER = (
     "libmagic",
     "runtime",
     "radare2",
+    "die",
     "artifact_dag",
 )
 _DEEP_ORDER = (
     "radare2",
+    "capa",
     "capstone",
     "dwarf",
     "ghidra",
@@ -288,6 +290,11 @@ def _safe_config(config: AppConfig | None) -> dict[str, Any]:
         "analysis": {
             "enable_angr": config.analysis.enable_angr,
             "enable_ghidra": config.analysis.enable_ghidra,
+            "enable_die": config.analysis.enable_die,
+            "enable_capa": config.analysis.enable_capa,
+            "die_timeout_s": config.analysis.die_timeout_s,
+            "capa_timeout_s": config.analysis.capa_timeout_s,
+            "capa_rules_path": str(config.analysis.capa_rules_path) if config.analysis.capa_rules_path else None,
             "enable_frida": config.analysis.enable_frida,
             "enable_gef": config.analysis.enable_gef,
             "gef_timeout": config.analysis.gef_timeout,

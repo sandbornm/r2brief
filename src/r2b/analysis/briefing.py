@@ -358,6 +358,24 @@ def build_briefing(
         payload["provenance"] = provenance
         _link_region_evidence(payload, provenance)
     payload["handoff"] = build_handoff(payload, record_id=record_id)
+    # Supplemental tool evidence does not change the fixed region point table.
+    triage_tools = {}
+    statuses = _dict(analysis.get("tool_status"))
+    for name, stage in (("die", quick), ("capa", deep)):
+        evidence = _dict(stage.get(name))
+        status = _dict(statuses.get(name))
+        if evidence or status:
+            triage_tools[name] = {
+                "status": evidence.get("status") or status.get("status"),
+                "reason": evidence.get("reason") or status.get("reason") or status.get("error"),
+                "evidence_kind": evidence.get("evidence_kind"),
+                "warnings": evidence.get("warnings", []),
+                "results": evidence.get("detections", evidence.get("capabilities", [])),
+                "total": evidence.get("detection_count", evidence.get("capability_count", 0)),
+                "result_ref": f"/{'quick_scan' if name == 'die' else 'deep_scan'}/{name}",
+            }
+    if triage_tools:
+        payload["triage_tools"] = triage_tools
     return payload
 
 
@@ -559,6 +577,17 @@ def render_briefing_markdown(
                 )
             ) or "no callers"
             lines.append(f"- {item.get('import')}: {item.get('status')} ({args})")
+    if data.get("triage_tools"):
+        lines.extend(["", "## Supplemental triage evidence"])
+        for name, tool in data["triage_tools"].items():
+            lines.append(f"- {name}: {tool.get('status')} ({tool.get('total', 0)} results)")
+            if tool.get("reason"):
+                lines.append(f"  {tool['reason']}")
+            for warning in tool.get("warnings", []):
+                lines.append(f"  {warning}")
+            for item in tool.get("results", [])[:12]:
+                lines.append(f"  - {item.get('name')} ({item.get('type') or item.get('namespace') or 'rule match'})")
+        lines.append("Identification and capability matches are tool evidence, not observed behavior or vulnerability verdicts.")
     if data.get("next_steps"):
         lines.extend(["", "## Next steps"])
         for step in data["next_steps"][:6]:

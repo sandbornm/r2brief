@@ -38,6 +38,10 @@ class UnblobExtractor:
             str(extract_dir),
             "--depth",
             str(max(1, limits.max_depth)),
+            "--report",
+            str(report_path),
+            "--process-num",
+            "1",
             str(subject.resolve()),
         ]
         result = run_sandboxed(
@@ -47,13 +51,17 @@ class UnblobExtractor:
             limits=limits,
             extra_ro_binds=[Path(self.binary)],
         )
-        hits = _parse_report(report_path)
-        if not hits:
-            hits = _walk_tree(extract_dir)
+        if result.returncode:
+            result.notes.append(f"unblob exited {result.returncode}: {result.stderr[-1000:].strip()}")
+        hits = _parse_report(report_path, subject=subject)
+        # Chunk reports do not carry extracted paths. Keep the actual files too.
+        known_paths = {hit.get("extracted_path") for hit in hits}
+        hits.extend(hit for hit in _walk_tree(extract_dir)
+                    if hit.get("extracted_path") not in known_paths)
         return result, hits
 
 
-def _parse_report(path: Path) -> list[dict[str, Any]]:
+def _parse_report(path: Path, *, subject: Path | None = None) -> list[dict[str, Any]]:
     if not path.is_file():
         # unblob sometimes writes next to the extract dir.
         sibling = path.parent / "unblob" / "unblob.json"
@@ -65,9 +73,27 @@ def _parse_report(path: Path) -> list[dict[str, Any]]:
     except (OSError, json.JSONDecodeError):
         return []
     rows: list[dict[str, Any]] = []
+    if not isinstance(payload, (dict, list)):
+        return []
     nodes = payload if isinstance(payload, list) else payload.get("reports") or payload.get("files") or []
     if isinstance(payload, dict) and not nodes:
         nodes = [payload]
+    # Modern unblob emits TaskResult[] with nested ChunkReports. Their offsets
+    # are relative to each task's input, so only root chunks belong on this DAG.
+    if isinstance(nodes, list) and any(isinstance(node, dict) and "task" in node for node in nodes):
+        chunks = []
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            task = node.get("task") or {}
+            if subject is not None and task.get("path") != str(subject.resolve()):
+                continue
+            for report in node.get("reports") or []:
+                if isinstance(report, dict) and report.get("__typename__") in {"ChunkReport", "UnknownChunkReport"}:
+                    chunks.append(report)
+            if subject is None:
+                break
+        nodes = chunks
     for item in nodes:
         if not isinstance(item, dict):
             continue
@@ -77,12 +103,16 @@ def _parse_report(path: Path) -> list[dict[str, Any]]:
         except (TypeError, ValueError):
             offset_i = 0
         path_text = str(item.get("path") or item.get("extracted_path") or "")
-        name = str(item.get("handler") or item.get("name") or Path(path_text).name or "unblob")
+        name = str(item.get("handler_name") or item.get("handler") or item.get("name") or Path(path_text).name or "unblob")
+        try:
+            size = max(0, int(item.get("size") or int(item.get("end_offset") or 0) - offset_i))
+        except (TypeError, ValueError):
+            size = 0
         rows.append(
             {
                 "tool": "unblob",
                 "offset": offset_i,
-                "size": int(item.get("size") or item.get("end_offset", 0) - offset_i or 0),
+                "size": size,
                 "name": name,
                 "kind": _kind_from_unblob(item, name),
                 "confidence": 0.85,

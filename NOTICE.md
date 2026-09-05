@@ -21,6 +21,8 @@ licenses are upstream’s.
 | [ghidra_bridge](https://github.com/justfoxing/ghidra_bridge) | justfoxing | MIT | extra `ghidra` |
 | [binwalk](https://github.com/ReFirmLabs/binwalk) | ReFirmLabs / binwalk3 | MIT | `--extract` |
 | [unblob](https://unblob.org) | ONEKEY | MIT | `--extract` |
+| [Detect It Easy](https://github.com/horsicq/Detect-It-Easy) | horsicq and contributors | MIT | optional `diec` host CLI; identification |
+| [capa](https://github.com/mandiant/capa) | Mandiant FLARE / Google and contributors | Apache-2.0 | optional host CLI; capability rules |
 | squashfs-tools | squashfs-tools authors | GPL | `--extract` |
 | bubblewrap | containers/bubblewrap | LGPL-2.0 | extract sandbox |
 | [angr](https://angr.io) | angr team | BSD-2 | extra `symbolic` |

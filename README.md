@@ -198,6 +198,11 @@ Mach-O, firmware-image, and version-pair coverage.
 
 ## Install and use
 
+Optional [specialist triage tools](docs/TRIAGE-TOOLS.md): Detect It Easy adds
+file/compiler/packer identification, capa adds static capability-rule evidence,
+and unblob supplies bounded extraction. Their results retain tool provenance;
+identification and capability matches do not become vulnerability verdicts.
+
 ```bash
 ./scripts/install.sh                  # choose core, lab, or full for this host
 uv run r2b setup --json               # chosen flavor and setup timing

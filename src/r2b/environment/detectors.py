@@ -62,6 +62,8 @@ _COMMANDS: dict[str, list[str]] = {
     "binwalk": ["binwalk"],
     "binwalk3": ["binwalk3"],
     "unblob": ["unblob"],
+    "die": ["diec"],
+    "capa": ["capa"],
     "bwrap": ["bwrap"],
     "unsquashfs": ["unsquashfs"],
     "sasquatch": ["sasquatch"],
@@ -243,6 +245,8 @@ def detect_environment(config: AppConfig) -> EnvironmentReport:
     report.tools.append(_check_command("binwalk", _COMMANDS["binwalk"]))
     report.tools.append(_check_binwalk3())
     report.tools.append(_check_command("unblob", _COMMANDS["unblob"]))
+    report.tools.append(_check_command("die", _COMMANDS["die"]))
+    report.tools.append(_check_command("capa", _COMMANDS["capa"]))
     report.tools.append(_check_command("bwrap", _COMMANDS["bwrap"]))
     report.tools.append(_check_command("unsquashfs", _COMMANDS["unsquashfs"]))
     report.tools.append(_check_command("sasquatch", _COMMANDS["sasquatch"]))
@@ -269,6 +273,8 @@ def detect_environment(config: AppConfig) -> EnvironmentReport:
         "binwalk",
         "binwalk3",
         "unblob",
+        "die",
+        "capa",
         "bwrap",
         "unsquashfs",
         "sasquatch",

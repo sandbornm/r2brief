@@ -98,6 +98,11 @@ class AnalysisSettings(BaseModel):
     enable_ghidra: bool = False
     enable_frida: bool = False
     enable_gef: bool = False
+    enable_die: bool = False
+    enable_capa: bool = False
+    die_timeout_s: int = Field(default=30, ge=1, le=600)
+    capa_timeout_s: int = Field(default=120, ge=1, le=3600)
+    capa_rules_path: Path | None = None
     gef_timeout: int = 60
     gef_max_instructions: int = 10000
     require_elf: bool = False

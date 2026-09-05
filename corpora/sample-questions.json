@@ -1,0 +1,171 @@
+{
+  "question_set_id": "r2brief-sample-investigation",
+  "version": 1,
+  "purpose": "Research questionnaire; not a CLI schema, execution policy, or planner instruction.",
+  "default_question_ids": [
+    "Q01",
+    "Q02",
+    "Q03",
+    "Q04",
+    "Q05",
+    "Q06",
+    "Q21",
+    "Q22",
+    "Q23",
+    "Q24"
+  ],
+  "max_selected_behavior_questions": 3,
+  "answer_statuses": [
+    "supported",
+    "contradicted",
+    "unresolved",
+    "not_assessed",
+    "not_applicable"
+  ],
+  "questions": [
+    {
+      "id": "Q01",
+      "group": "identity",
+      "question": "What exact bytes are we examining, and where did they come from?",
+      "evidence_to_retain": "SHA-256, size, acquisition source/time, report reference; distinguish archive and extracted-child hashes"
+    },
+    {
+      "id": "Q02",
+      "group": "identity",
+      "question": "What format, architecture, OS/runtime, and entry points can we establish?",
+      "evidence_to_retain": "Header evidence and tool output; explicitly record unsupported architectures"
+    },
+    {
+      "id": "Q03",
+      "group": "identity",
+      "question": "Is this executable code, a container, an installer, a library, or a data file?",
+      "evidence_to_retain": "Classification evidence and relevant child artifacts"
+    },
+    {
+      "id": "Q04",
+      "group": "identity",
+      "question": "Are packing, compression, encryption, or compiler/runtime conventions limiting analysis?",
+      "evidence_to_retain": "Identification results, tool warnings, sections, entropy as a clue rather than proof"
+    },
+    {
+      "id": "Q05",
+      "group": "identity",
+      "question": "Have we already analyzed these exact bytes?",
+      "evidence_to_retain": "Existing sample/run IDs; identical hashes only, not a similarity inference"
+    },
+    {
+      "id": "Q06",
+      "group": "identity",
+      "question": "Which three places are worth inspecting first, and why?",
+      "evidence_to_retain": "Addresses with address type, source tool, evidence references; record a thin result honestly"
+    },
+    {
+      "id": "Q07",
+      "group": "behavior",
+      "question": "Which external inputs does the program consume?",
+      "evidence_to_retain": "Relevant callers and data flow for arguments, files, messages, or environment values"
+    },
+    {
+      "id": "Q08",
+      "group": "behavior",
+      "question": "Where does configuration come from, and which code consumes it?",
+      "evidence_to_retain": "Configuration location/format, parsing code, consumers; preserve original bytes"
+    },
+    {
+      "id": "Q09",
+      "group": "behavior",
+      "question": "Which files or directories does it read, create, change, or delete?",
+      "evidence_to_retain": "Code references and operation context; distinguish static possibilities from observed operations"
+    },
+    {
+      "id": "Q10",
+      "group": "behavior",
+      "question": "Does it communicate over a network, and what code controls that communication?",
+      "evidence_to_retain": "Callers, protocol evidence, configuration sources; strings alone are insufficient"
+    },
+    {
+      "id": "Q11",
+      "group": "behavior",
+      "question": "Does it launch other programs or load additional modules?",
+      "evidence_to_retain": "Relevant caller and arguments where recoverable; unresolved arguments remain unknown"
+    },
+    {
+      "id": "Q12",
+      "group": "behavior",
+      "question": "Does it arrange to run again after restart or login?",
+      "evidence_to_retain": "Relevant startup-setting changes and supporting code; a registry or path string alone is a lead"
+    },
+    {
+      "id": "Q13",
+      "group": "behavior",
+      "question": "Does it collect sensitive information, and what supports that interpretation?",
+      "evidence_to_retain": "Accessing code, data categories, subsequent use; avoid copying actual secrets into reports"
+    },
+    {
+      "id": "Q14",
+      "group": "behavior",
+      "question": "What transformations does it apply to data?",
+      "evidence_to_retain": "Relevant compression, encoding, cryptographic, or parsing routines with supporting observations"
+    },
+    {
+      "id": "Q15",
+      "group": "behavior",
+      "question": "What conditions select different behavior?",
+      "evidence_to_retain": "Configuration flags, platform checks, error paths, or input-dependent branches"
+    },
+    {
+      "id": "Q16",
+      "group": "behavior",
+      "question": "What externally visible artifacts could a defender check for?",
+      "evidence_to_retain": "Supported paths, configuration characteristics, or other observables, with scope and limitations"
+    },
+    {
+      "id": "Q17",
+      "group": "behavior",
+      "question": "If a runtime observation is available, does it agree with the static interpretation?",
+      "evidence_to_retain": "Trace/run identity and conditions; otherwise mark not assessed\u2014this question authorizes no execution"
+    },
+    {
+      "id": "Q18",
+      "group": "comparison",
+      "question": "Which claims from the source report are supported by our own evidence?",
+      "evidence_to_retain": "Claim IDs, source quotation/reference, independent supporting evidence, contradictions"
+    },
+    {
+      "id": "Q19",
+      "group": "comparison",
+      "question": "If a comparison sample is supplied, what changed that matters to this question?",
+      "evidence_to_retain": "Both hashes, matched scope, changed evidence; distinguish rebuild noise from explained behavior changes"
+    },
+    {
+      "id": "Q20",
+      "group": "comparison",
+      "question": "What plausible ordinary functionality explains an apparently suspicious lead?",
+      "evidence_to_retain": "Alternative interpretation and supporting evidence, including benign controls where appropriate"
+    },
+    {
+      "id": "Q21",
+      "group": "coverage",
+      "question": "What ran, what was skipped or failed, and what remains outside coverage?",
+      "evidence_to_retain": "Adapter statuses, versions, rule revisions, limits, timeouts, unsupported features"
+    },
+    {
+      "id": "Q22",
+      "group": "coverage",
+      "question": "Which conclusions are observations, which are interpretations, and which remain unsupported?",
+      "evidence_to_retain": "Claim-level evidence links and limitations; no probability inferred from ranking points"
+    },
+    {
+      "id": "Q23",
+      "group": "coverage",
+      "question": "What single follow-up inspection would most reduce the remaining uncertainty?",
+      "evidence_to_retain": "A bounded analyst-selected question and required evidence; no automatic command execution"
+    },
+    {
+      "id": "Q24",
+      "group": "coverage",
+      "question": "Can another analyst reproduce the result and resume without repeating the same work?",
+      "evidence_to_retain": "Run manifest, tool outputs, trajectory, project reference, question answers, unresolved items"
+    }
+  ]
+}

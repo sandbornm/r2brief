@@ -1,5 +1,9 @@
 # Benchmark corpus
 
+For new report-linked samples, use the [sample question set](SAMPLE-QUESTIONS.md).
+The [email/feed intake design](EMAIL-INTAKE.md) describes a proposed isolated
+queue and immutable run archive; that service is not deployed.
+
 The shipped manifest pins four inputs: NIST Juliet C/C++ 1.3, a sparse
 checkout of Trail of Bits' native DARPA CGC port, and two OpenWrt firmware
 releases around a known `ubusd` fix. Raw datasets stay outside Git.

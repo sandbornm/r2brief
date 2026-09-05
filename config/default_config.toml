@@ -31,6 +31,12 @@ enable_angr = false
 enable_ghidra = false
 enable_frida = false
 enable_gef = false
+# Optional static host CLIs. DiE runs in quick; capa only in deep analysis.
+enable_die = false
+enable_capa = false
+die_timeout_s = 30
+capa_timeout_s = 120
+# capa_rules_path = "/path/to/capa-rules" # omit with bundled capa rules
 gef_timeout = 60
 gef_max_instructions = 10000
 

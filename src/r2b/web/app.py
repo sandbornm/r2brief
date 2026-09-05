@@ -489,6 +489,16 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "Sandboxed Binwalk v3 extractor feeding the artifact DAG",
         }
         unblob_path = which_any("unblob")
+        for name, command, description in (
+            ("die", "diec", "Detect It Easy file, compiler, and packer identification"),
+            ("capa", "capa", "Mandiant capa static capability rule evidence"),
+        ):
+            tool_path = which_any(command)
+            tools[name] = {
+                "available": tool_path is not None, "path": tool_path,
+                "description": description,
+                "install_hint": f"Install the upstream {command} CLI; enable analysis.enable_{name} in config",
+            }
         tools["unblob"] = {
             "available": unblob_path is not None,
             "path": unblob_path,

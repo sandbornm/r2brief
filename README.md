@@ -315,3 +315,5 @@ Use an isolated environment and obtain authorization before enabling them.
 
 MIT — [LICENSE](LICENSE). Third-party map: [NOTICE.md](NOTICE.md). r2brief is
 not an official radare2 project.
+
+Built by Michael Sandborn · [Momnt](https://momnt.dev/?utm_source=github&utm_medium=referral&utm_content=r2brief)

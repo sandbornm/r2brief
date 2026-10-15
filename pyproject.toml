@@ -71,6 +71,7 @@ releases = "https://github.com/sandbornm/r2brief/releases"
 [project.scripts]
 r2b = "r2b.cli:run"
 r2b-web = "r2b.web.server:run"
+r2b-exec = "r2b.harness.exec_shim:main"
 
 [build-system]
 requires = ["hatchling"]

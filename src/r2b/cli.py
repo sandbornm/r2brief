@@ -103,6 +103,39 @@ def _require_binary(binary: Path) -> None:
         err_console.print(f"[red]Binary path does not exist: {binary}")
         raise typer.Exit(code=1)
 
+
+def _resolve_evidence_tags(
+    tags_file: Path | None,
+    cwe: list[str] | None,
+    emb3d_tid: list[str] | None,
+    emb3d_mid: list[str] | None,
+    cve: list[str] | None,
+):
+    """Build optional EMB3D/CWE tags from file and CLI flags."""
+    if not (tags_file or cwe or emb3d_tid or emb3d_mid or cve):
+        return None
+    from .analysis.tags import TagsError, resolve_tags
+
+    try:
+        return resolve_tags(
+            tags_file=tags_file,
+            cwe=cwe,
+            tid=emb3d_tid,
+            mid=emb3d_mid,
+            cve=cve,
+        )
+    except TagsError as exc:
+        err_console.print(f"[red]Invalid tags:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+def _evidence_tag_options():
+    """Shared Typer options for EMB3D/CWE evidence tags (not record --tag)."""
+    # Defined inline on each command for Typer compatibility.
+    return None
+
+
+
 @app.command(hidden=True)
 def analyze(
     binary: Path = typer.Argument(..., help="Path to ELF or supported binary"),
@@ -183,6 +216,13 @@ def brief(
     ask_regions: int = typer.Option(0, "--ask-regions", help="Send the first N region asks to the LLM"),
     max_regions: int = typer.Option(6, "--max-regions", help="Cap ranked regions"),
     tags: Optional[list[str]] = typer.Option(None, "--tag", help="Extra record tags. Repeatable."),
+    tags_file: Optional[Path] = typer.Option(
+        None, "--tags-file", help="TAGS.md or tags JSON (CWE / EMB3D) to attach"
+    ),
+    cwe: Optional[list[str]] = typer.Option(None, "--cwe", help="CWE id. Repeatable."),
+    emb3d_tid: Optional[list[str]] = typer.Option(None, "--emb3d-tid", help="EMB3D threat id. Repeatable."),
+    emb3d_mid: Optional[list[str]] = typer.Option(None, "--emb3d-mid", help="EMB3D mitigation id. Repeatable."),
+    cve: Optional[list[str]] = typer.Option(None, "--cve", help="CVE id. Repeatable."),
     verify: bool = typer.Option(False, "--verify", help="Resolve dangerous-import arguments before printing"),
     extract: bool = typer.Option(
         False, "--extract", help="Run sandboxed binwalk3/unblob and merge into the artifact DAG"
@@ -213,6 +253,9 @@ def brief(
         names = collect_verify_names(dangerous) or list(DEFAULT_IMPORTS)
         briefing["verified_imports"] = Radare2Adapter().verify_scan(binary, names)
         briefing["handoff"] = build_handoff(briefing, record_id=record_id)
+    evidence_tags = _resolve_evidence_tags(tags_file, cwe, emb3d_tid, emb3d_mid, cve)
+    if evidence_tags is not None:
+        briefing["tags"] = evidence_tags.to_dict()
     meta = err_console if json_output else console
     if record:
         meta.print(f"[cyan]Record[/] {record.get('record_id')}  rev {record.get('revision')}  {record.get('directory')}")
@@ -457,6 +500,13 @@ def bundle_create(
         min=1,
         help="Regions from each pass included in the attached overlay",
     ),
+    tags_file: Optional[Path] = typer.Option(
+        None, "--tags-file", help="TAGS.md or tags JSON (CWE / EMB3D) to embed"
+    ),
+    cwe: Optional[list[str]] = typer.Option(None, "--cwe", help="CWE id. Repeatable."),
+    emb3d_tid: Optional[list[str]] = typer.Option(None, "--emb3d-tid", help="EMB3D threat id. Repeatable."),
+    emb3d_mid: Optional[list[str]] = typer.Option(None, "--emb3d-mid", help="EMB3D mitigation id. Repeatable."),
+    cve: Optional[list[str]] = typer.Option(None, "--cve", help="CVE id. Repeatable."),
     json_output: bool = typer.Option(False, "--json", help="Emit the validated bundle summary as JSON"),
 ) -> None:
     """Analyze a subject and write a portable, validated evidence bundle."""
@@ -470,6 +520,10 @@ def bundle_create(
     result = state.orchestrator.analyze(binary, plan)
     public = analysis_result_to_public_dict(result)
     briefing = build_briefing(result, max_regions=max_regions)
+    evidence_tags = _resolve_evidence_tags(tags_file, cwe, emb3d_tid, emb3d_mid, cve)
+    tags_doc = evidence_tags.to_dict() if evidence_tags is not None else None
+    if tags_doc is not None:
+        briefing["tags"] = tags_doc
     public["briefing"] = briefing
     review_payload = None
     try:
@@ -489,6 +543,7 @@ def bundle_create(
             analysis=public,
             tool_status=result.tool_status,
             review=review_payload,
+            tags=tags_doc,
             target=binary,
             include_target=include_target,
         )
@@ -538,6 +593,23 @@ def verify(
         None, "--import", help="Import to verify. Repeatable. Default: system/popen/exec*"
     ),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON verdicts"),
+    gadgets: bool = typer.Option(
+        False, "--gadgets", help="Optional post-verify static gadget/ROP scan (off by default)"
+    ),
+    gadget_limit: int = typer.Option(
+        32, "--gadget-limit", min=1, max=128, help="Max gadgets to report when --gadgets is set"
+    ),
+    tags_file: Optional[Path] = typer.Option(
+        None, "--tags-file", help="TAGS.md or tags JSON (CWE / EMB3D) to attach"
+    ),
+    cwe: Optional[list[str]] = typer.Option(None, "--cwe", help="CWE id. Repeatable (e.g. CWE-78)."),
+    emb3d_tid: Optional[list[str]] = typer.Option(
+        None, "--emb3d-tid", help="EMB3D threat id. Repeatable (e.g. TID-327)."
+    ),
+    emb3d_mid: Optional[list[str]] = typer.Option(
+        None, "--emb3d-mid", help="EMB3D mitigation id. Repeatable (e.g. MID-004)."
+    ),
+    cve: Optional[list[str]] = typer.Option(None, "--cve", help="CVE id. Repeatable."),
 ) -> None:
     """Classify the first argument at every call site of dangerous imports.
 
@@ -554,14 +626,23 @@ def verify(
     names = [item.strip() for item in (imports or list(DEFAULT_IMPORTS)) if item.strip()]
     adapter = Radare2Adapter()
     verdicts = adapter.verify_scan(binary, names)
+    evidence_tags = _resolve_evidence_tags(tags_file, cwe, emb3d_tid, emb3d_mid, cve)
+    gadget_payload = None
+    if gadgets:
+        from .analysis.gadgets import scan_gadgets
+
+        gadget_payload = scan_gadgets(binary, limit=gadget_limit)
     if json_output:
-        _emit_json(
-            {
-                "schema_version": "r2b.verify.v1",
-                "binary": str(binary),
-                "verdicts": verdicts,
-            }
-        )
+        payload: dict[str, Any] = {
+            "schema_version": "r2b.verify.v1",
+            "binary": str(binary),
+            "verdicts": verdicts,
+        }
+        if evidence_tags is not None:
+            payload["tags"] = evidence_tags.to_dict()
+        if gadget_payload is not None:
+            payload["gadgets"] = gadget_payload
+        _emit_json(payload)
         return
     console.rule(f"Verify: {binary.name}")
     table = Table()
@@ -593,6 +674,16 @@ def verify(
     quoted = str(binary)
     for addr in decompile_addrs[:4]:
         console.print(f"[dim]decompile[/] r2b decompile {quoted} {addr} --json")
+    if evidence_tags is not None:
+        tags_doc = evidence_tags.to_dict()
+        console.print(
+            f"[cyan]Tags[/] cwe={tags_doc['cwe']} tid={tags_doc['emb3d']['tid']} mid={tags_doc['emb3d']['mid']}"
+        )
+    if gadget_payload is not None:
+        console.print(
+            f"[cyan]Gadgets[/] {gadget_payload['status']} "
+            f"engine={gadget_payload.get('engine')} count={gadget_payload.get('count')}"
+        )
 
 
 def _require_directory(path: Path) -> None:

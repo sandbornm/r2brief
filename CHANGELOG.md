@@ -5,6 +5,17 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- Optional EMB3D/CWE evidence tags (`r2b.tags.v1`) via `--tags-file` /
+  `--cwe` / `--emb3d-tid` / `--emb3d-mid` / `--cve` on `verify`, `brief`,
+  and `bundle create`. Tags embed as `tags.json` in `.r2br` bundles.
+- Optional post-verify gadget/ROP scan: `verify --gadgets` (radare2 `/R`
+  or ROPgadget; bounded; off by default) → `r2b.gadgets.v1`.
+- Agent harness: `docs/skills/r2brief.md` loop prompt, allowlisted
+  `r2b-exec` shim (`scripts/r2b-exec` + console script), MCP stub at
+  `docs/plans/mcp-server.md`.
+- `r2b diff ROOT_A ROOT_B [--json] [--paths/--no-paths]` release-delta
+  reduction; Python pinned to 3.12+ (`.python-version`, `requires-python`).
+
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

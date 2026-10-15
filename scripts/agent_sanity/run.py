@@ -59,7 +59,17 @@ def discover_agents() -> dict[str, dict]:
             
             elif name == "grok":
                 auth = Path.home() / ".grok" / "auth.json"
-                found[name]["logged_in"] = auth.is_file() or (Path.home() / ".grok").is_dir()
+                # Directory presence is not enough — probe a no-op headless call.
+                probe = subprocess.run(
+                    [path, "--prompt-file", "/dev/null", "--output-format", "json"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                    stdin=subprocess.DEVNULL,
+                )
+                blob = (probe.stdout or "") + (probe.stderr or "")
+                found[name]["logged_in"] = auth.is_file() and ("Not signed in" not in blob)
             if found[name]["logged_in"] is False:
                 found[name]["status"] = "installed_not_logged_in"
             elif found[name]["logged_in"]:
@@ -125,10 +135,12 @@ Scoring looks for: {json.dumps(score)}
 def run_agent(agent: str, path: str, prompt: str, cwd: Path, timeout: int) -> dict:
     env = os.environ.copy()
     start = time.time()
+    prompt_file = None
     if agent == "codex":
         cmd = [
             path,
             "exec",
+            "--skip-git-repo-check",
             "--sandbox",
             "workspace-write",
             "-C",
@@ -137,6 +149,8 @@ def run_agent(agent: str, path: str, prompt: str, cwd: Path, timeout: int) -> di
             prompt,
         ]
     elif agent == "claude":
+        # Prefer claude.ai login over a stale ANTHROPIC_API_KEY in the environment.
+        env.pop("ANTHROPIC_API_KEY", None)
         cmd = [
             path,
             "-p",
@@ -149,10 +163,12 @@ def run_agent(agent: str, path: str, prompt: str, cwd: Path, timeout: int) -> di
             str(cwd),
         ]
     elif agent == "grok":
+        prompt_file = cwd / ".agent_sanity_prompt.txt"
+        prompt_file.write_text(prompt, encoding="utf-8")
         cmd = [
             path,
-            "--prompt",
-            prompt,
+            "--prompt-file",
+            str(prompt_file),
             "--cwd",
             str(cwd),
             "--output-format",
@@ -170,6 +186,7 @@ def run_agent(agent: str, path: str, prompt: str, cwd: Path, timeout: int) -> di
             timeout=timeout,
             cwd=str(cwd),
             env=env,
+            stdin=subprocess.DEVNULL,
         )
         elapsed = time.time() - start
         return {
@@ -178,7 +195,7 @@ def run_agent(agent: str, path: str, prompt: str, cwd: Path, timeout: int) -> di
             "stdout": proc.stdout,
             "stderr": proc.stderr,
             "elapsed_s": elapsed,
-            "cmd": cmd[:6],
+            "cmd": cmd[:8],
         }
     except subprocess.TimeoutExpired as exc:
         return {
@@ -187,8 +204,15 @@ def run_agent(agent: str, path: str, prompt: str, cwd: Path, timeout: int) -> di
             "stdout": (exc.stdout or "") if isinstance(exc.stdout, str) else "",
             "stderr": f"timeout after {timeout}s",
             "elapsed_s": float(timeout),
-            "cmd": cmd[:6],
+            "cmd": cmd[:8],
         }
+    finally:
+        if prompt_file is not None:
+            try:
+                prompt_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+
 
 
 def extract_final_json(text: str) -> dict | None:

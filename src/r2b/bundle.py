@@ -31,6 +31,7 @@ _ANALYSIS_MEMBER = "analysis.json"
 _TOOLS_MEMBER = "tools.json"
 _PROVENANCE_MEMBER = "provenance.json"
 _REVIEW_MEMBER = "review.json"
+_TAGS_MEMBER = "tags.json"
 _TARGET_MEMBER = "target.bin"
 _ALLOWED_MEMBERS = frozenset(
     {
@@ -41,11 +42,12 @@ _ALLOWED_MEMBERS = frozenset(
         _TOOLS_MEMBER,
         _PROVENANCE_MEMBER,
         _REVIEW_MEMBER,
+        _TAGS_MEMBER,
         _TARGET_MEMBER,
     }
 )
 _FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
-_MAX_MEMBERS = 8
+_MAX_MEMBERS = 9
 _MAX_MANIFEST_BYTES = 1 * 1024 * 1024
 _MAX_JSON_MEMBER_BYTES = 64 * 1024 * 1024
 _MAX_TARGET_MEMBER_BYTES = 512 * 1024 * 1024
@@ -73,6 +75,7 @@ class BundleContents:
     tool_status: dict[str, Any]
     provenance: dict[str, Any] | None
     review: dict[str, Any] | None
+    tags: dict[str, Any] | None = None
 
     def summary(self) -> dict[str, Any]:
         subject = _object(self.manifest.get("subject"), "manifest.subject")
@@ -95,6 +98,7 @@ def create_bundle(
     analysis: Mapping[str, Any],
     tool_status: Mapping[str, Any] | None = None,
     review: Mapping[str, Any] | None = None,
+    tags: Mapping[str, Any] | None = None,
     target: str | Path | None = None,
     include_target: bool = False,
 ) -> BundleContents:
@@ -134,6 +138,15 @@ def create_bundle(
         if review_doc.get("schema_version") not in {"r2b.review.v1", "r2b.review-set.v1"}:
             raise BundleError("review must use schema_version r2b.review.v1 or r2b.review-set.v1")
         documents[_REVIEW_MEMBER] = _canonical_json(review_doc)
+    if tags is not None:
+        tags_doc = _json_object(tags, "tags")
+        try:
+            from .analysis.tags import TagsError, validate_tags
+
+            tags_doc = validate_tags(tags_doc)
+        except TagsError as exc:
+            raise BundleError(f"tags failed r2b.tags.v1 validation: {exc}") from exc
+        documents[_TAGS_MEMBER] = _canonical_json(tags_doc)
     provenance = analysis_doc.get("provenance")
     if provenance is not None:
         documents[_PROVENANCE_MEMBER] = _canonical_json(_json_object(provenance, "provenance"))
@@ -218,6 +231,11 @@ def read_bundle(path: str | Path) -> BundleContents:
                 if _REVIEW_MEMBER in archive.namelist()
                 else None
             )
+            tags_doc = (
+                _read_json_member(archive, _TAGS_MEMBER, _MAX_JSON_MEMBER_BYTES)
+                if _TAGS_MEMBER in archive.namelist()
+                else None
+            )
     except (zipfile.BadZipFile, OSError) as exc:
         raise BundleError(f"invalid r2b bundle: {exc}") from exc
 
@@ -230,6 +248,13 @@ def read_bundle(path: str | Path) -> BundleContents:
         "r2b.review-set.v1",
     }:
         raise BundleError("review.json has an unsupported schema_version")
+    if tags_doc is not None:
+        try:
+            from .analysis.tags import TagsError, validate_tags
+
+            tags_doc = validate_tags(tags_doc)
+        except TagsError as exc:
+            raise BundleError(f"tags.json failed r2b.tags.v1 validation: {exc}") from exc
     return BundleContents(
         path=bundle_path,
         sha256=bundle_sha256,
@@ -239,6 +264,7 @@ def read_bundle(path: str | Path) -> BundleContents:
         tool_status=tools,
         provenance=provenance,
         review=review,
+        tags=tags_doc,
     )
 
 
@@ -313,6 +339,7 @@ def _role_for(name: str) -> str:
         _TOOLS_MEMBER: "tool_status",
         _PROVENANCE_MEMBER: "provenance",
         _REVIEW_MEMBER: "review",
+        _TAGS_MEMBER: "tags",
     }[name]
 
 

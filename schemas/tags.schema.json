@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sandbornm/r2brief/schemas/tags.schema.json",
+  "title": "r2b evidence tags (EMB3D / CWE)",
+  "description": "Optional analyst-supplied CWE and MITRE EMB3D tags. Deterministic; never invented by analysis.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "cwe", "emb3d"],
+  "properties": {
+    "schema_version": { "const": "r2b.tags.v1" },
+    "cwe": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^CWE-[0-9]{1,5}$" }
+    },
+    "emb3d": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tid", "mid"],
+      "properties": {
+        "tid": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^TID-[0-9]{1,5}$" }
+        },
+        "mid": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^MID-[0-9]{1,5}$" }
+        }
+      }
+    },
+    "cve": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^CVE-[0-9]{4}-[0-9]{4,7}$" }
+    },
+    "source": { "type": ["string", "null"] }
+  }
+}

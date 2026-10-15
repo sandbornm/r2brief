@@ -1,0 +1,106 @@
+{
+  "schema_version": "r2b.golden.v1",
+  "id": "hello",
+  "case": "Tiny built-in arm64 hello binary",
+  "binary": "hello",
+  "commands": [
+    {
+      "argv": [
+        "env",
+        "--json"
+      ],
+      "exit_code": 0,
+      "expect_keys": [
+        "llm"
+      ]
+    },
+    {
+      "argv": [
+        "brief",
+        "hello",
+        "--quick",
+        "--json",
+        "--no-save"
+      ],
+      "exit_code": 0,
+      "expect": {
+        "schema_version": "r2b.briefing.v1",
+        "require_handoff": true
+      },
+      "optional_if_no_r2": true
+    },
+    {
+      "argv": [
+        "verify",
+        "hello",
+        "--import",
+        "strcpy",
+        "--json",
+        "--cwe",
+        "CWE-121",
+        "--emb3d-tid",
+        "TID-327",
+        "--emb3d-mid",
+        "MID-004"
+      ],
+      "exit_code": 0,
+      "expect": {
+        "schema_version": "r2b.verify.v1",
+        "tags": {
+          "schema_version": "r2b.tags.v1",
+          "cwe": [
+            "CWE-121"
+          ],
+          "emb3d": {
+            "tid": [
+              "TID-327"
+            ],
+            "mid": [
+              "MID-004"
+            ]
+          }
+        }
+      },
+      "optional_if_no_r2": true
+    },
+    {
+      "argv": [
+        "brief",
+        "hello",
+        "--quick",
+        "--ask",
+        "--json"
+      ],
+      "exit_code": 64,
+      "expect_stderr_contains": "no-model"
+    },
+    {
+      "argv": [
+        "brief",
+        "/no/such/golden-bin",
+        "--quick",
+        "--json"
+      ],
+      "exit_code": 1
+    }
+  ],
+  "bundle_stability": {
+    "argv_template": [
+      "bundle",
+      "create",
+      "hello",
+      "-o",
+      "OUT",
+      "--quick",
+      "--json",
+      "--cwe",
+      "CWE-121",
+      "--emb3d-tid",
+      "TID-327",
+      "--emb3d-mid",
+      "MID-004"
+    ],
+    "compare_sha256": true,
+    "optional_if_no_r2": true
+  }
+}

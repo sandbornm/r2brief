@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sandbornm/r2brief/schemas/gadgets.schema.json",
+  "title": "r2b optional post-verify gadget scan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "binary",
+    "status",
+    "engine",
+    "limit",
+    "count",
+    "gadgets"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "r2b.gadgets.v1"
+    },
+    "binary": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "skipped",
+        "missing",
+        "error",
+        "failed",
+        "unsupported"
+      ]
+    },
+    "engine": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 128
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "gadgets": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "address",
+          "instructions"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "pattern": "^0x[0-9a-f]+$"
+          },
+          "instructions": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "note": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": "r2b.golden.v1",
+  "id": "asus_cve_2024_3079",
+  "case": "ASUS RT-AX88U CVE-2024-3079 sink/guard (tags + named sink)",
+  "sink": {
+    "function": "replace_str",
+    "import": "sprintf",
+    "cve": "CVE-2024-3079"
+  },
+  "commands": [
+    {
+      "argv": [
+        "verify",
+        "../hello/hello",
+        "--import",
+        "sprintf",
+        "--json",
+        "--tags-file",
+        "TAGS.md"
+      ],
+      "exit_code": 0,
+      "expect": {
+        "schema_version": "r2b.verify.v1",
+        "tags": {
+          "schema_version": "r2b.tags.v1",
+          "cwe_contains": [
+            "CWE-121",
+            "CWE-787"
+          ],
+          "tid_contains": [
+            "TID-327"
+          ],
+          "mid_contains": [
+            "MID-004"
+          ],
+          "cve_contains": [
+            "CVE-2024-3079"
+          ]
+        }
+      },
+      "optional_if_no_r2": true
+    },
+    {
+      "argv": [
+        "review",
+        "x.json",
+        "--mode",
+        "llm",
+        "--json"
+      ],
+      "exit_code": 64,
+      "expect_stderr_contains": "no-model"
+    }
+  ],
+  "agent_score": {
+    "must_name_sink": "replace_str",
+    "must_name_import": "sprintf",
+    "must_tags_cwe": [
+      "CWE-121"
+    ],
+    "must_tags_tid": [
+      "TID-327"
+    ],
+    "allowlist_only": true,
+    "no_r2b_model": true,
+    "max_steps": 12,
+    "max_seconds": 180
+  }
+}

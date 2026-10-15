@@ -1,0 +1,70 @@
+{
+  "schema_version": "r2b.golden.v1",
+  "id": "totolink_cwe78",
+  "case": "TOTOLINK X6000R CWE-78 OS command injection (tags + sink class)",
+  "sink": {
+    "import": "system",
+    "cwe": "CWE-78",
+    "trail": [
+      "file_name",
+      "snprintf",
+      "CsteSystem",
+      "sh -c"
+    ]
+  },
+  "commands": [
+    {
+      "argv": [
+        "verify",
+        "../hello/hello",
+        "--import",
+        "system",
+        "--json",
+        "--tags-file",
+        "TAGS.md"
+      ],
+      "exit_code": 0,
+      "expect": {
+        "schema_version": "r2b.verify.v1",
+        "tags": {
+          "schema_version": "r2b.tags.v1",
+          "cwe_contains": [
+            "CWE-78"
+          ],
+          "tid_contains": [
+            "TID-310"
+          ],
+          "mid_contains": [
+            "MID-071"
+          ]
+        }
+      },
+      "optional_if_no_r2": true
+    },
+    {
+      "argv": [
+        "brief",
+        "../hello/hello",
+        "--quick",
+        "--json",
+        "--ask-regions",
+        "1"
+      ],
+      "exit_code": 64,
+      "expect_stderr_contains": "no-model"
+    }
+  ],
+  "agent_score": {
+    "must_name_import": "system",
+    "must_tags_cwe": [
+      "CWE-78"
+    ],
+    "must_tags_tid": [
+      "TID-310"
+    ],
+    "allowlist_only": true,
+    "no_r2b_model": true,
+    "max_steps": 12,
+    "max_seconds": 180
+  }
+}

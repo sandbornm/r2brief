@@ -118,3 +118,26 @@ r2b brief firmware.bin --quick --extract --json
 r2b decompile ./httpd 0x12a40 --json
 r2b insights --tag linux --json
 ```
+
+## r2b-exec + evidence tags + gadgets
+
+Planner front-door: `r2b-exec SUBCOMMAND …` (allowlisted; see
+`docs/skills/r2brief.md`). Same JSON contracts as `r2b`.
+
+Optional analyst tags (never invented by analysis):
+
+```bash
+r2b verify BIN --import sprintf --tags-file labs/asus/TAGS.md --json
+r2b verify BIN --cwe CWE-78 --emb3d-tid TID-310 --json
+r2b brief BIN --quick --tags-file labs/totolink/TAGS.md --json
+r2b bundle create BIN -o out.r2br --cwe CWE-121 --emb3d-tid TID-327
+```
+
+Optional post-verify gadget scan (static, bounded, off by default):
+
+```bash
+r2b verify BIN --import system --gadgets --gadget-limit 32 --json
+```
+
+MCP server: deferred — `docs/plans/mcp-server.md`.
+

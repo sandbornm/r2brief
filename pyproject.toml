@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Binary triage CLI: ranked regions, SHA-256 records, optional LLM asks"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [{ name = "r2brief contributors" }]
 dependencies = [
   "typer>=0.15,<1",
@@ -71,6 +71,7 @@ releases = "https://github.com/sandbornm/r2brief/releases"
 [project.scripts]
 r2b = "r2b.cli:run"
 r2b-web = "r2b.web.server:run"
+r2b-exec = "r2b.harness.exec_shim:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -151,7 +152,7 @@ dev = [
 line-length = 100
 
 [tool.ty.environment]
-python-version = "3.11"
+python-version = "3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,59 @@
+{
+  "schema_version": "r2b.golden.v1",
+  "id": "openwrt_ubusd",
+  "case": "OpenWrt ubusd release delta (24.10.3\u219224.10.4 shaped)",
+  "commands": [
+    {
+      "argv": [
+        "diff",
+        "tree_a",
+        "tree_b",
+        "--json",
+        "--paths"
+      ],
+      "exit_code": 0,
+      "expect": {
+        "schema_version": "r2b.release_delta.v1",
+        "reduction": {
+          "common_files": 109,
+          "changed_common_files": 3,
+          "changed_common_elfs": 3,
+          "unchanged_common_files": 106,
+          "only_in_a": 1,
+          "only_in_b": 1
+        },
+        "changed_elf_relpaths": [
+          "bin/busybox",
+          "sbin/ubusd",
+          "usr/sbin/odhcpd"
+        ]
+      }
+    }
+  ],
+  "no_model_rejects": [
+    {
+      "argv": [
+        "brief",
+        "tree_a/sbin/ubusd",
+        "--ask",
+        "--json"
+      ],
+      "exit_code": 64
+    }
+  ],
+  "agent_score": {
+    "must_changed_relpaths": [
+      "bin/busybox",
+      "sbin/ubusd",
+      "usr/sbin/odhcpd"
+    ],
+    "must_reduction": {
+      "common_files": 109,
+      "changed_common_files": 3
+    },
+    "allowlist_only": true,
+    "no_r2b_model": true,
+    "max_steps": 8,
+    "max_seconds": 120
+  }
+}

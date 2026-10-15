@@ -45,6 +45,10 @@
         "scope_options": { "type": "array", "items": { "type": "string" } }
       }
     },
+    "tags": {
+      "$ref": "tags.schema.json",
+      "description": "Optional analyst-supplied CWE / EMB3D evidence tags (r2b.tags.v1)."
+    },
     "ask_result": {
       "type": "object",
       "description": "Present when --ask ran; structured answers for a harness.",

@@ -5,6 +5,9 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- Eval harness: `tests/goldens/` (openwrt_ubusd 109→3, ASUS/TOTOLINK tags,
+  hello) + `scripts/agent_sanity/` (opt-in; see `docs/EVAL.md`).
+
 - Optional EMB3D/CWE evidence tags (`r2b.tags.v1`) via `--tags-file` /
   `--cwe` / `--emb3d-tid` / `--emb3d-mid` / `--cve` on `verify`, `brief`,
   and `bundle create`. Tags embed as `tags.json` in `.r2br` bundles.

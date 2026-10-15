@@ -1,0 +1,9 @@
+{
+  "schema_version": "r2b.goldens.v1",
+  "goldens": [
+    "hello",
+    "openwrt_ubusd",
+    "asus_cve_2024_3079",
+    "totolink_cwe78"
+  ]
+}

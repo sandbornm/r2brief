@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 SKIP_FRONTEND="${SKIP_FRONTEND:-0}"
 
-VERSION="$(uv run --python 3.11 python - <<'PY'
+VERSION="$(uv run --python 3.12 python - <<'PY'
 import pathlib, tomllib
 print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])
 PY

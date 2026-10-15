@@ -1,15 +1,15 @@
 """Optional EMB3D / CWE (and CVE) tags for JSON output and .r2br bundles.
 
 Tags are deterministic metadata supplied by the analyst or a case TAGS file.
-Analysis never invents or overwrites them; they are schema-validated and
-attached only when the caller asks.
+Analysis never invents or overwrites them; they are schema-validated
+(``r2b.tags.v1``) at ingestion and again when written to or read from a bundle.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -19,6 +19,10 @@ _CWE_RE = re.compile(r"\bCWE-(\d{1,5})\b", re.IGNORECASE)
 _TID_RE = re.compile(r"\bTID-(\d{1,5})\b", re.IGNORECASE)
 _MID_RE = re.compile(r"\bMID-(\d{1,5})\b", re.IGNORECASE)
 _CVE_RE = re.compile(r"\bCVE-(\d{4}-\d{4,7})\b", re.IGNORECASE)
+_CWE_FULL = re.compile(r"^CWE-\d{1,5}$")
+_TID_FULL = re.compile(r"^TID-\d{1,5}$")
+_MID_FULL = re.compile(r"^MID-\d{1,5}$")
+_CVE_FULL = re.compile(r"^CVE-\d{4}-\d{4,7}$")
 _ID_LIMIT = 32
 
 
@@ -53,15 +57,15 @@ class EvidenceTags:
 
 
 def normalize_cwe(values: Iterable[str]) -> tuple[str, ...]:
-    return _normalize_ids(values, prefix="CWE-", pattern=_CWE_RE, bare_digits=True)
+    return _normalize_ids(values, prefix="CWE-", pattern=_CWE_RE, bare_digits=True, label="cwe")
 
 
 def normalize_tid(values: Iterable[str]) -> tuple[str, ...]:
-    return _normalize_ids(values, prefix="TID-", pattern=_TID_RE, bare_digits=True)
+    return _normalize_ids(values, prefix="TID-", pattern=_TID_RE, bare_digits=True, label="emb3d.tid")
 
 
 def normalize_mid(values: Iterable[str]) -> tuple[str, ...]:
-    return _normalize_ids(values, prefix="MID-", pattern=_MID_RE, bare_digits=True)
+    return _normalize_ids(values, prefix="MID-", pattern=_MID_RE, bare_digits=True, label="emb3d.mid")
 
 
 def normalize_cve(values: Iterable[str]) -> tuple[str, ...]:
@@ -71,17 +75,17 @@ def normalize_cve(values: Iterable[str]) -> tuple[str, ...]:
         text = str(raw or "").strip()
         if not text:
             continue
-        match = _CVE_RE.search(text) if not text.upper().startswith("CVE-") else _CVE_RE.fullmatch(text)
-        if match is None:
-            match = _CVE_RE.search(text)
+        match = _CVE_RE.search(text)
         if match is None:
             raise TagsError(f"invalid CVE id: {text!r}")
         item = f"CVE-{match.group(1)}"
         if item not in seen:
             seen.add(item)
             out.append(item)
-        if len(out) >= _ID_LIMIT:
-            break
+        if len(out) > _ID_LIMIT:
+            raise TagsError(f"cve exceeds {_ID_LIMIT}-entry limit")
+    if len(out) > _ID_LIMIT:
+        raise TagsError(f"cve exceeds {_ID_LIMIT}-entry limit")
     return tuple(sorted(out))
 
 
@@ -100,8 +104,9 @@ def load_tags_file(path: str | Path) -> EvidenceTags:
         except json.JSONDecodeError as exc:
             raise TagsError(f"invalid tags JSON: {exc}") from exc
         return tags_from_mapping(payload, source=str(file_path))
-    return parse_tags_markdown(text, source=str(file_path))
-
+    tags = parse_tags_markdown(text, source=str(file_path))
+    validate_tags(tags.to_dict())
+    return tags
 
 
 def _id_sort_key(value: str) -> tuple[str, int]:
@@ -115,33 +120,34 @@ def _id_sort_key(value: str) -> tuple[str, int]:
 def parse_tags_markdown(text: str, *, source: str | None = None) -> EvidenceTags:
     """Extract CWE / TID / MID / CVE ids from lab TAGS.md tables."""
 
-    return EvidenceTags(
-        cwe=tuple(sorted({f"CWE-{m}" for m in _CWE_RE.findall(text)}, key=_id_sort_key)),
-        tid=tuple(sorted({f"TID-{m}" for m in _TID_RE.findall(text)}, key=_id_sort_key)),
-        mid=tuple(sorted({f"MID-{m}" for m in _MID_RE.findall(text)}, key=_id_sort_key)),
-        cve=tuple(sorted({f"CVE-{m}" for m in _CVE_RE.findall(text)})),
-        source=source,
-    )
+    cwe = tuple(sorted({f"CWE-{m}" for m in _CWE_RE.findall(text)}, key=_id_sort_key))
+    tid = tuple(sorted({f"TID-{m}" for m in _TID_RE.findall(text)}, key=_id_sort_key))
+    mid = tuple(sorted({f"MID-{m}" for m in _MID_RE.findall(text)}, key=_id_sort_key))
+    cve = tuple(sorted({f"CVE-{m}" for m in _CVE_RE.findall(text)}))
+    if len(cwe) > _ID_LIMIT:
+        raise TagsError(f"cwe exceeds {_ID_LIMIT}-entry limit")
+    if len(tid) > _ID_LIMIT:
+        raise TagsError(f"emb3d.tid exceeds {_ID_LIMIT}-entry limit")
+    if len(mid) > _ID_LIMIT:
+        raise TagsError(f"emb3d.mid exceeds {_ID_LIMIT}-entry limit")
+    if len(cve) > _ID_LIMIT:
+        raise TagsError(f"cve exceeds {_ID_LIMIT}-entry limit")
+    return EvidenceTags(cwe=cwe, tid=tid, mid=mid, cve=cve, source=source)
 
 
 def tags_from_mapping(payload: Mapping[str, Any], *, source: str | None = None) -> EvidenceTags:
     """Build tags from a dict (CLI JSON or tags.json member)."""
 
-    if payload.get("schema_version") not in {None, TAGS_SCHEMA_VERSION}:
-        raise TagsError(f"unsupported tags schema_version: {payload.get('schema_version')!r}")
-    emb3d = payload.get("emb3d") or {}
-    if emb3d is not None and not isinstance(emb3d, Mapping):
-        raise TagsError("emb3d must be an object")
-    emb3d = emb3d or {}
-    tags = EvidenceTags(
-        cwe=normalize_cwe(_as_str_list(payload.get("cwe"), "cwe")),
-        tid=normalize_tid(_as_str_list(emb3d.get("tid"), "emb3d.tid")),
-        mid=normalize_mid(_as_str_list(emb3d.get("mid"), "emb3d.mid")),
-        cve=normalize_cve(_as_str_list(payload.get("cve"), "cve")),
-        source=source or (str(payload["source"]) if payload.get("source") else None),
+    doc = validate_tags(payload)
+    if source and not doc.get("source"):
+        doc = {**doc, "source": source}
+    return EvidenceTags(
+        cwe=tuple(doc["cwe"]),
+        tid=tuple(doc["emb3d"]["tid"]),
+        mid=tuple(doc["emb3d"]["mid"]),
+        cve=tuple(doc.get("cve") or ()),
+        source=doc.get("source"),
     )
-    validate_tags(tags.to_dict())
-    return tags
 
 
 def merge_tags(*parts: EvidenceTags | None) -> EvidenceTags | None:
@@ -154,26 +160,38 @@ def merge_tags(*parts: EvidenceTags | None) -> EvidenceTags | None:
     source: str | None = None
     any_present = False
     for part in parts:
-        if part is None or part.is_empty():
-            if part is not None and part.source:
-                source = part.source
+        if part is None:
+            continue
+        if part.source:
+            source = part.source
+        if part.is_empty():
             continue
         any_present = True
         cwe.update(part.cwe)
         tid.update(part.tid)
         mid.update(part.mid)
         cve.update(part.cve)
-        if part.source:
-            source = part.source
-    if not any_present:
+    if not any_present and source is None:
         return None
-    return EvidenceTags(
-        cwe=tuple(sorted(cwe)),
-        tid=tuple(sorted(tid)),
-        mid=tuple(sorted(mid)),
+    if not any_present:
+        return EvidenceTags(source=source)
+    if len(cwe) > _ID_LIMIT:
+        raise TagsError(f"cwe exceeds {_ID_LIMIT}-entry limit")
+    if len(tid) > _ID_LIMIT:
+        raise TagsError(f"emb3d.tid exceeds {_ID_LIMIT}-entry limit")
+    if len(mid) > _ID_LIMIT:
+        raise TagsError(f"emb3d.mid exceeds {_ID_LIMIT}-entry limit")
+    if len(cve) > _ID_LIMIT:
+        raise TagsError(f"cve exceeds {_ID_LIMIT}-entry limit")
+    tags = EvidenceTags(
+        cwe=tuple(sorted(cwe, key=_id_sort_key)),
+        tid=tuple(sorted(tid, key=_id_sort_key)),
+        mid=tuple(sorted(mid, key=_id_sort_key)),
         cve=tuple(sorted(cve)),
         source=source,
     )
+    validate_tags(tags.to_dict())
+    return tags
 
 
 def resolve_tags(
@@ -184,7 +202,7 @@ def resolve_tags(
     mid: Iterable[str] | None = None,
     cve: Iterable[str] | None = None,
 ) -> EvidenceTags | None:
-    """Combine an optional TAGS file with CLI id lists."""
+    """Combine an optional TAGS file with CLI id lists; schema-validate."""
 
     file_tags = load_tags_file(tags_file) if tags_file else None
     cli_tags = EvidenceTags(
@@ -193,34 +211,68 @@ def resolve_tags(
         mid=normalize_mid(mid or ()),
         cve=normalize_cve(cve or ()),
     )
-    return merge_tags(file_tags, cli_tags)
+    merged = merge_tags(file_tags, cli_tags)
+    if merged is not None:
+        validate_tags(merged.to_dict())
+    return merged
 
 
 def validate_tags(payload: Mapping[str, Any]) -> dict[str, Any]:
-    """Validate and return a canonical tags document."""
+    """Validate a document against ``r2b.tags.v1`` and return canonical form.
+
+    Enforces required keys, array types, id patterns, and the 32-entry cap
+    from ``schemas/tags.schema.json``. Rejects malformed or oversized input.
+    """
 
     if not isinstance(payload, Mapping):
         raise TagsError("tags must be a JSON object")
+    allowed = {"schema_version", "cwe", "emb3d", "cve", "source"}
+    unknown = set(payload) - allowed
+    if unknown:
+        raise TagsError(f"tags contains unknown fields: {sorted(unknown)}")
     if payload.get("schema_version") != TAGS_SCHEMA_VERSION:
         raise TagsError("tags.schema_version must be r2b.tags.v1")
+    if "cwe" not in payload or not isinstance(payload["cwe"], list):
+        raise TagsError("tags.cwe must be an array")
     emb3d = payload.get("emb3d")
     if not isinstance(emb3d, Mapping):
         raise TagsError("tags.emb3d must be an object")
+    emb3d_allowed = {"tid", "mid"}
+    if set(emb3d) - emb3d_allowed:
+        raise TagsError(f"tags.emb3d contains unknown fields: {sorted(set(emb3d) - emb3d_allowed)}")
     for key in ("tid", "mid"):
-        if key not in emb3d or not isinstance(emb3d[key], list):
+        if key not in emb3d:
+            raise TagsError(f"tags.emb3d.{key} is required")
+        if not isinstance(emb3d[key], list):
             raise TagsError(f"tags.emb3d.{key} must be an array")
-    if "cwe" not in payload or not isinstance(payload["cwe"], list):
-        raise TagsError("tags.cwe must be an array")
     if "cve" in payload and not isinstance(payload["cve"], list):
         raise TagsError("tags.cve must be an array")
     if "source" in payload and payload["source"] is not None and not isinstance(payload["source"], str):
         raise TagsError("tags.source must be a string when present")
-    # Re-normalize through constructors for canonical form.
+
+    cwe = normalize_cwe(_as_str_list(payload["cwe"], "cwe"))
+    tid = normalize_tid(_as_str_list(emb3d["tid"], "emb3d.tid"))
+    mid = normalize_mid(_as_str_list(emb3d["mid"], "emb3d.mid"))
+    cve = normalize_cve(_as_str_list(payload.get("cve") or (), "cve"))
+
+    for item in cwe:
+        if not _CWE_FULL.fullmatch(item):
+            raise TagsError(f"invalid CWE id: {item!r}")
+    for item in tid:
+        if not _TID_FULL.fullmatch(item):
+            raise TagsError(f"invalid TID id: {item!r}")
+    for item in mid:
+        if not _MID_FULL.fullmatch(item):
+            raise TagsError(f"invalid MID id: {item!r}")
+    for item in cve:
+        if not _CVE_FULL.fullmatch(item):
+            raise TagsError(f"invalid CVE id: {item!r}")
+
     tags = EvidenceTags(
-        cwe=normalize_cwe(payload["cwe"]),
-        tid=normalize_tid(emb3d["tid"]),
-        mid=normalize_mid(emb3d["mid"]),
-        cve=normalize_cve(payload.get("cve") or ()),
+        cwe=cwe,
+        tid=tid,
+        mid=mid,
+        cve=cve,
         source=payload.get("source"),
     )
     return tags.to_dict()
@@ -232,6 +284,7 @@ def _normalize_ids(
     prefix: str,
     pattern: re.Pattern[str],
     bare_digits: bool,
+    label: str,
 ) -> tuple[str, ...]:
     out: list[str] = []
     seen_key: set[int] = set()
@@ -253,11 +306,9 @@ def _normalize_ids(
         if key in seen_key:
             continue
         seen_key.add(key)
-        # Preserve zero-padding from the source when present (MID-004, MID-071).
-        item = f"{prefix}{digits}"
-        out.append(item)
-        if len(out) >= _ID_LIMIT:
-            break
+        out.append(f"{prefix}{digits}")
+        if len(out) > _ID_LIMIT:
+            raise TagsError(f"{label} exceeds {_ID_LIMIT}-entry limit")
     return tuple(sorted(out, key=lambda value: int(value.split("-", 1)[1])))
 
 
@@ -266,8 +317,13 @@ def _as_str_list(value: Any, label: str) -> list[str]:
         return []
     if isinstance(value, str):
         return [value]
+    if isinstance(value, tuple):
+        value = list(value)
     if not isinstance(value, list):
         raise TagsError(f"{label} must be an array of strings")
+    # Reject oversize before normalize so the limit is enforced on raw input too.
+    if len(value) > _ID_LIMIT:
+        raise TagsError(f"{label} exceeds {_ID_LIMIT}-entry limit")
     out: list[str] = []
     for item in value:
         if not isinstance(item, (str, int)):

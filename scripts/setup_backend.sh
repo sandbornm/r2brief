@@ -7,7 +7,7 @@ export LC_ALL=C
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-PYTHON_VERSION="3.11"
+PYTHON_VERSION="3.12"
 INCLUDE_DEV=false
 
 if [[ "${1:-}" == "--dev" ]]; then

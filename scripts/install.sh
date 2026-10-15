@@ -69,15 +69,15 @@ fi
 
 echo
 echo "[*] smoke"
-uv run --no-sync --python 3.11 python -c "import r2b"
-uv run --no-sync --python 3.11 r2b --version >/dev/null
-uv run --no-sync --python 3.11 r2b env --json >/dev/null
+uv run --no-sync --python 3.12 python -c "import r2b"
+uv run --no-sync --python 3.12 r2b --version >/dev/null
+uv run --no-sync --python 3.12 r2b env --json >/dev/null
 SETUP_ARGS=(setup --json)
 if [[ -n "$FLAVOR" ]]; then
   SETUP_ARGS+=(--flavor "$FLAVOR")
 fi
-uv run --no-sync --python 3.11 r2b "${SETUP_ARGS[@]}" | \
-  uv run --no-sync --python 3.11 python -c \
+uv run --no-sync --python 3.12 r2b "${SETUP_ARGS[@]}" | \
+  uv run --no-sync --python 3.12 python -c \
     "import json,sys; p=json.load(sys.stdin); print('flavor', p['flavor'], 'extra', p['uv_extra'])"
 
 SMOKE_TARGET="${R2B_SMOKE_TARGET:-/bin/ls}"
@@ -90,12 +90,12 @@ cleanup_smoke() {
   rm -f "$SMOKE_JSON" "$REVIEW_JSON"
 }
 trap cleanup_smoke EXIT
-uv run --no-sync --python 3.11 r2b brief "$SMOKE_TARGET" --quick --no-save --json > "$SMOKE_JSON"
-uv run --no-sync --python 3.11 python -c \
+uv run --no-sync --python 3.12 r2b brief "$SMOKE_TARGET" --quick --no-save --json > "$SMOKE_JSON"
+uv run --no-sync --python 3.12 python -c \
   "import json,sys; p=json.load(open(sys.argv[1], encoding='utf-8')); assert p['schema_version']=='r2b.briefing.v1'; assert 'next_argv' in p['handoff']; print('brief', p['subject']['name'], 'regions', len(p['regions']))" \
   "$SMOKE_JSON"
-uv run --no-sync --python 3.11 r2b review "$SMOKE_JSON" --mode rules --json > "$REVIEW_JSON"
-uv run --no-sync --python 3.11 python -c \
+uv run --no-sync --python 3.12 r2b review "$SMOKE_JSON" --mode rules --json > "$REVIEW_JSON"
+uv run --no-sync --python 3.12 python -c \
   "import json,sys; p=json.load(open(sys.argv[1], encoding='utf-8')); assert p['schema_version']=='r2b.review.v1'; assert p['noise_assessment']['model_role']=='ordering_only'; print('review', p['noise_assessment']['summary'])" \
   "$REVIEW_JSON"
 (

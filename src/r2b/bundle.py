@@ -140,10 +140,12 @@ def create_bundle(
         documents[_REVIEW_MEMBER] = _canonical_json(review_doc)
     if tags is not None:
         tags_doc = _json_object(tags, "tags")
-        if tags_doc.get("schema_version") != "r2b.tags.v1":
-            raise BundleError("tags must use schema_version r2b.tags.v1")
-        if not isinstance(tags_doc.get("cwe"), list) or not isinstance(tags_doc.get("emb3d"), dict):
-            raise BundleError("tags must include cwe[] and emb3d{}")
+        try:
+            from .analysis.tags import TagsError, validate_tags
+
+            tags_doc = validate_tags(tags_doc)
+        except TagsError as exc:
+            raise BundleError(f"tags failed r2b.tags.v1 validation: {exc}") from exc
         documents[_TAGS_MEMBER] = _canonical_json(tags_doc)
     provenance = analysis_doc.get("provenance")
     if provenance is not None:
@@ -246,8 +248,13 @@ def read_bundle(path: str | Path) -> BundleContents:
         "r2b.review-set.v1",
     }:
         raise BundleError("review.json has an unsupported schema_version")
-    if tags_doc is not None and tags_doc.get("schema_version") != "r2b.tags.v1":
-        raise BundleError("tags.json has an unsupported schema_version")
+    if tags_doc is not None:
+        try:
+            from .analysis.tags import TagsError, validate_tags
+
+            tags_doc = validate_tags(tags_doc)
+        except TagsError as exc:
+            raise BundleError(f"tags.json failed r2b.tags.v1 validation: {exc}") from exc
     return BundleContents(
         path=bundle_path,
         sha256=bundle_sha256,

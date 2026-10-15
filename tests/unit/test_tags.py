@@ -14,7 +14,7 @@ from r2b.analysis.tags import (
     resolve_tags,
     validate_tags,
 )
-from r2b.bundle import create_bundle, read_bundle
+from r2b.bundle import BundleError, create_bundle, read_bundle
 
 
 ASUS_SNIPPET = """
@@ -78,6 +78,54 @@ def test_invalid_cwe_raises() -> None:
         resolve_tags(cwe=["not-a-cwe"])
 
 
+def test_validate_rejects_incomplete_emb3d() -> None:
+    """Regression: emb3d without required tid/mid arrays must fail schema validation."""
+    with pytest.raises(TagsError, match="emb3d"):
+        validate_tags({"schema_version": "r2b.tags.v1", "cwe": [], "emb3d": {}})
+
+
+def test_validate_rejects_cwe_over_limit() -> None:
+    """Regression: more than 32 CWE entries must be rejected, not truncated."""
+    cwes = [f"CWE-{i}" for i in range(1, 34)]
+    with pytest.raises(TagsError, match="32"):
+        validate_tags(
+            {
+                "schema_version": "r2b.tags.v1",
+                "cwe": cwes,
+                "emb3d": {"tid": [], "mid": []},
+            }
+        )
+
+
+def test_bundle_rejects_incomplete_tags(tmp_path: Path) -> None:
+    """Regression: incomplete tags must fail at bundle create, not write."""
+    target = tmp_path / "challenge.bin"
+    target.write_bytes(b"\x7fELF\x00tagged")
+    briefing = {
+        "schema_version": "r2b.briefing.v1",
+        "binary": str(target),
+        "summary": "s",
+        "regions": [],
+        "overall_ask": "a",
+        "next_steps": [],
+        "handoff": {"schema_version": "r2b.handoff.v1", "next_argv": []},
+    }
+    analysis = {
+        "type": "analysis_result",
+        "schema_version": "r2b.analysis_result.v1",
+        "binary": str(target),
+        "tool_status": {},
+    }
+    with pytest.raises(BundleError, match="tags"):
+        create_bundle(
+            tmp_path / "bad.r2br",
+            briefing=briefing,
+            analysis=analysis,
+            tags={"schema_version": "r2b.tags.v1", "cwe": [], "emb3d": {}},
+            target=target,
+        )
+
+
 def test_bundle_embeds_tags(tmp_path: Path) -> None:
     target = tmp_path / "challenge.bin"
     target.write_bytes(b"\x7fELF\x00tagged")
@@ -111,3 +159,19 @@ def test_bundle_embeds_tags(tmp_path: Path) -> None:
     assert "tags.json" in bundle.summary()["members"]
     reloaded = read_bundle(out)
     assert reloaded.tags == bundle.tags
+
+
+def test_python_installers_pin_3_12() -> None:
+    """Regression: installer / backend / Docker runtime must track requires-python 3.12."""
+    root = Path(__file__).resolve().parents[2]
+    backend = (root / "Dockerfile.backend").read_text(encoding="utf-8")
+    setup = (root / "scripts" / "setup_backend.sh").read_text(encoding="utf-8")
+    install = (root / "scripts" / "install.sh").read_text(encoding="utf-8")
+    ci = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "python:3.12-slim" in backend
+    assert "python:3.11" not in backend
+    assert 'PYTHON_VERSION="3.12"' in setup
+    assert "--python 3.12" in install
+    assert "--python 3.11" not in install
+    assert '"3.12"' in ci
+    assert '"3.11"' not in ci

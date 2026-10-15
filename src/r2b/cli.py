@@ -103,7 +103,6 @@ def _require_binary(binary: Path) -> None:
         err_console.print(f"[red]Binary path does not exist: {binary}")
         raise typer.Exit(code=1)
 
-
 @app.command(hidden=True)
 def analyze(
     binary: Path = typer.Argument(..., help="Path to ELF or supported binary"),
@@ -594,6 +593,54 @@ def verify(
     quoted = str(binary)
     for addr in decompile_addrs[:4]:
         console.print(f"[dim]decompile[/] r2b decompile {quoted} {addr} --json")
+
+
+def _require_directory(path: Path) -> None:
+    if not path.exists() or not path.is_dir():
+        err_console.print(f"[red]Directory does not exist: {path}")
+        raise typer.Exit(code=1)
+
+
+@app.command("diff")
+def release_diff(
+    root_a: Path = typer.Argument(..., help="Extracted rootfs / tree A (e.g. vulnerable release)"),
+    root_b: Path = typer.Argument(..., help="Extracted rootfs / tree B (e.g. patched release)"),
+    json_output: bool = typer.Option(False, "--json", help="Emit release-delta JSON"),
+    paths: bool = typer.Option(
+        True,
+        "--paths/--no-paths",
+        help="Include full changed/only-in-A/only-in-B path lists in JSON",
+    ),
+) -> None:
+    """Reduce two extracted trees to changed ELFs by SHA-256.
+
+    Matching hashes mean "not this release's question." The changed-ELF list
+    is what ``brief`` / ``verify`` should open next.
+    """
+    from .analysis.release_delta import compare_trees
+
+    _require_directory(root_a)
+    _require_directory(root_b)
+    try:
+        delta = compare_trees(root_a, root_b)
+    except OSError as exc:
+        err_console.print(f"[red]Could not compare trees:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    payload = delta.to_dict(include_paths=paths)
+    if json_output:
+        _emit_json(payload)
+        return
+    reduction = delta.reduction()
+    console.rule(f"Release delta: {root_a.name} → {root_b.name}")
+    console.print(f"[cyan]Common files[/] {reduction['common_files']}")
+    console.print(f"[cyan]Only in A[/] {reduction['only_in_a']}")
+    console.print(f"[cyan]Only in B[/] {reduction['only_in_b']}")
+    console.print(f"[cyan]Changed common files[/] {reduction['changed_common_files']}")
+    console.print(f"[cyan]Changed common ELFs[/] {reduction['changed_common_elfs']}")
+    if delta.changed_elfs:
+        console.print("[cyan]Changed ELFs[/]")
+        for item in delta.changed_elfs:
+            console.print(f"  {item.relpath}")
 
 
 @app.command()

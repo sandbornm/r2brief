@@ -18,6 +18,7 @@ from .review import (
     review_briefing,
 )
 from .insights import extract_insights
+from .release_delta import ReleaseDelta, compare_trees
 from .record import AnalysisRecordStore
 from .result_dto import analysis_result_to_public_dict, ensure_analysis_briefing
 
@@ -35,6 +36,7 @@ __all__ = [
     "AnalysisPlan",
     "AnalysisRecordStore",
     "AnalysisResult",
+    "ReleaseDelta",
     "REVIEW_PROMPT_ID",
     "REVIEW_SCHEMA_VERSION",
     "ReviewError",
@@ -42,6 +44,7 @@ __all__ = [
     "analysis_result_to_public_dict",
     "build_analysis_graph",
     "build_briefing",
+    "compare_trees",
     "build_investigation_graph",
     "ensure_analysis_briefing",
     "extract_code_snippets",

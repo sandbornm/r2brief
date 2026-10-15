@@ -40,3 +40,18 @@ The runner:
    listed as `missing` and do **not** fail the script.
 
 Do not install or log into agent CLIs from this harness.
+
+
+## Host inventory (this evaluation)
+
+| host | codex | claude | grok |
+|---|---|---|---|
+| box | missing | missing | missing |
+| Kali | installed (`~/.local/bin`) | installed | installed |
+| Fibula | ready | ready | installed, not signed in |
+| minimu | ready | ready | ready (auth present) |
+| minimo | ready | ready | ready (auth present) |
+| minima | ready | ready | missing |
+
+Sanity runs executed on Fibula only (agents ready + repo synced). Missing or
+unsigned-in CLIs are reported, never installed or logged in by the harness.

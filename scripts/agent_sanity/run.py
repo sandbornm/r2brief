@@ -81,20 +81,33 @@ def discover_agents() -> dict[str, dict]:
     return found
 
 
-def ensure_r2b_exec_on_path(root: Path, bindir: Path) -> Path:
-    bindir.mkdir(parents=True, exist_ok=True)
-    wrapper = bindir / "r2b-exec"
-    # Prefer installed console script via uv run; fall back to module.
-    wrapper.write_text(
+def _wrapper_body(root: Path) -> str:
+    return (
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
-        f'cd "{root}"\n'
+        f'ROOT="{root}"\n'
+        'cd "$ROOT"\n'
         'if command -v uv >/dev/null 2>&1; then\n'
         '  exec uv run --no-sync r2b-exec "$@"\n'
         'fi\n'
-        f'export PYTHONPATH="{root}/src${{PYTHONPATH:+:$PYTHONPATH}}"\n'
+        'export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"\n'
         'exec python3 -m r2b.harness.exec_shim "$@"\n'
     )
+
+
+def ensure_r2b_exec_on_path(root: Path, bindir: Path) -> Path:
+    bindir.mkdir(parents=True, exist_ok=True)
+    wrapper = bindir / "r2b-exec"
+    wrapper.write_text(_wrapper_body(root))
+    wrapper.chmod(0o755)
+    return wrapper
+
+
+def install_r2b_exec_into(root: Path, target_dir: Path) -> Path:
+    """Drop an absolute-path wrapper inside the golden so sandboxed agents find it."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    wrapper = target_dir / "r2b-exec"
+    wrapper.write_text(_wrapper_body(root))
     wrapper.chmod(0o755)
     return wrapper
 
@@ -105,7 +118,7 @@ def build_prompt(golden_id: str, golden_dir: Path, expected: dict) -> str:
     return f"""You are running an r2brief agent-sanity evaluation.
 
 HARD RULES:
-- You may only invoke analysis tools via the `r2b-exec` command on PATH.
+- You may only invoke analysis tools via `./r2b-exec` (wrapper in this directory) or `r2b-exec` on PATH.
 - Do not call a model through r2b (no --ask, no --mode llm/both, no --review-lens).
 - Do not execute target binaries.
 - Stay inside this golden directory: {golden_dir}
@@ -120,10 +133,10 @@ CASE id={golden_id}
 Working directory: {golden_dir}
 
 What to do:
-1) Use only r2b-exec against the files in this directory (see expected.json for hints).
-2) For openwrt_ubusd: run `r2b-exec diff tree_a tree_b --json --paths` and report the three changed ELF paths.
-3) For asus_cve_2024_3079 / totolink_cwe78: run verify with --tags-file TAGS.md against ../hello/hello and report tags + the named sink/import from the case.
-4) For hello: run brief/verify with tags as needed.
+1) Use only ./r2b-exec against the files in this directory (see expected.json for hints).
+2) For openwrt_ubusd: run `./r2b-exec diff tree_a tree_b --json --paths` and report the three changed ELF paths.
+3) For asus_cve_2024_3079 / totolink_cwe78: run `./r2b-exec verify ../hello/hello --import … --tags-file TAGS.md --json` and report tags + the named sink/import from the case.
+4) For hello: run `./r2b-exec brief/verify` with tags as needed.
 
 Finish with a single JSON object on stdout (and nothing else after it) with keys:
 {{"golden_id","changed_files","sink","import","tags","commands"}}
@@ -322,6 +335,7 @@ def main() -> int:
                         "max_seconds": args.timeout,
                     },
                 }
+            install_r2b_exec_into(root, gdir)
             prompt = build_prompt(golden_id, gdir, expected)
             run = run_agent(agent_name, info["path"], prompt, gdir, args.timeout)
             transcript = (run.get("stdout") or "") + "\n" + (run.get("stderr") or "")

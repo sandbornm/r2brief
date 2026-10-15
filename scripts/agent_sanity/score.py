@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-_R2B_EXEC_RE = re.compile(r"r2b-exec\s+([^\n`]+)")
+_R2B_EXEC_RE = re.compile(r"(?:\./)?r2b-exec\s+([^\n`]+)")
 _DENIED = {"--ask", "--ask-regions", "--review-lens"}
 
 

@@ -243,3 +243,38 @@ Do not re-run archived plans. Type `r2b`. `import r2b` is the library.
   elements (default `~/r2b/ghidra-projects`). Do not install the
   `analyzers` extra on the Pi.
 - Archive: `docs/archive/r2b-cli-rename.md` (done). `docs/plans/2026-01-27-unified-tool-execution.md` is superseded (do not absorb a planner).
+
+## Code Review Rules
+
+Report actionable regressions introduced by the change. For each finding, identify
+the affected code, the triggering scenario, the consequence, and a safe correction.
+Point to an existing test or suggest a focused regression check when useful. State
+assumptions and checks you could not run. Avoid speculative redesigns and style-only
+findings; the rules below supplement ordinary correctness and security review.
+
+### CLI and artifact contracts
+
+Keep `r2b` usable by external planners: `--json` output must remain parseable on
+stdout, with diagnostics on stderr, stable versioned schemas, and valid handoff
+commands. Empty `handoff.next_argv` is a valid result, not a reason to invent work.
+Breaking schema or command changes need an explicit compatibility/migration path.
+Check `tests/unit/test_cli_harness.py` and `tests/unit/test_handoff.py` when these
+interfaces change.
+
+### Evidence and optional model review
+
+Analysis and rules-only review must not call a model. Explicit model review may
+reorder known region/evidence IDs in a separate artifact; it must not invent
+evidence, execute tools, or mutate the briefing's scores or handoff. Keep imports,
+strings, and signatures distinct from confirmed behavior, and preserve subject
+hashes and provenance in records and bundles. See `src/r2b/analysis/review.py` and
+its unit tests.
+
+### Untrusted binaries and bounded analysis
+
+Do not enable native target execution through Frida/GEF implicitly, including in
+exhaustive mode. Preserve extraction time/file/byte/depth limits, output isolation,
+and the fail-closed path when the sandbox is unavailable. The existing explicit
+unsafe fallback is an exception that must remain opt-in and clearly reported.
+Missing optional analyzers must produce tool-gap information rather than a false
+clean result. Check the sandbox and orchestrator tests for affected changes.

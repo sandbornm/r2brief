@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import time
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -293,6 +294,13 @@ class TestChatsEndpoint:
             content_type='application/json',
         )
         session_id = analyze_response.get_json()['session_id']
+        # /api/analyze appends its own analysis_result message from a background
+        # thread. Wait for it so the synthetic attachment below is the latest one;
+        # otherwise the worker can land between bundle requests and replace it.
+        deadline = time.monotonic() + 30
+        while app_client.get(f'/api/chats/{session_id}/bundle?format=manifest').status_code != 200:
+            assert time.monotonic() < deadline, "analysis job never recorded a result"
+            time.sleep(0.05)
         attachment = {
             "type": "analysis_result",
             "binary": str(minimal_elf),

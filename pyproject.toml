@@ -47,7 +47,7 @@ llm = [
 ]
 web = [
   "Flask>=3.0,<4",
-  "flask-cors>=4.0,<5",
+  "flask-cors>=4.0,<7",
 ]
 ghidra = [
   "ghidra-bridge>=1.0.0",
@@ -60,7 +60,7 @@ std = [
   "openai>=1.30,<2",
   "anthropic>=0.29,<1",
   "Flask>=3.0,<4",
-  "flask-cors>=4.0,<5",
+  "flask-cors>=4.0,<7",
 ]
 [project.urls]
 homepage = "https://github.com/sandbornm/r2brief"
@@ -144,7 +144,7 @@ dev = [
   "openai>=1.30,<2",
   "anthropic>=0.29,<1",
   "Flask>=3.0,<4",
-  "flask-cors>=4.0,<5",
+  "flask-cors>=4.0,<7",
 ]
 
 [tool.ruff]

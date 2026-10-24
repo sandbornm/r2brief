@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest';
 Element.prototype.scrollIntoView = vi.fn();
 
 // Node >= 25 defines a partial localStorage global without the Storage API.
-// Replace missing or partial implementations; leave jsdom/Node 20 alone.
+// Replace missing or partial implementations; leave jsdom/Node 24 alone.
 if (
   typeof globalThis.localStorage === 'undefined' ||
   typeof globalThis.localStorage.clear !== 'function' ||

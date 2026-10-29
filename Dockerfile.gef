@@ -1,17 +1,8 @@
-# Dockerfile for isolated GEF/GDB dynamic analysis
-# This container provides a sandboxed environment for running and tracing ARM binaries
-#
-# Usage:
-#   docker build -t r2b-gef -f Dockerfile.gef .
-#   docker run --rm --read-only --network=none --memory=512m --cpus=1 \
-#     -v /path/to/binary:/binary:ro -v /tmp/output:/output r2b-gef /binary
-
 FROM debian:bookworm-slim
 
 LABEL maintainer="r2b"
 LABEL description="GEF/GDB dynamic analysis container for ARM binary tracing"
 
-# Install required packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gdb \
     gdb-multiarch \
@@ -27,23 +18,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install GEF (GDB Enhanced Features)
 RUN curl -fsSL https://gef.blah.cat/sh -o /tmp/gef.sh && \
     bash /tmp/gef.sh && \
     rm /tmp/gef.sh
 
-# Copy GEF configuration
 RUN echo 'set auto-load safe-path /' >> /root/.gdbinit && \
     echo 'set pagination off' >> /root/.gdbinit && \
     echo 'set confirm off' >> /root/.gdbinit && \
     echo 'set logging overwrite on' >> /root/.gdbinit
 
-# Create non-root user for running binaries
 RUN useradd -m -s /bin/bash analyst && \
     mkdir -p /output && \
     chown analyst:analyst /output
 
-# Copy analysis script
 COPY --chmod=755 <<'EOF' /usr/local/bin/analyze_binary.py
 #!/usr/bin/env python3
 """GEF analysis script for ARM binary tracing.
@@ -61,7 +48,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-
 
 def detect_architecture(binary_path: str) -> tuple[str, str]:
     """Detect binary architecture and return (qemu_cmd, gdb_arch)."""
@@ -90,7 +76,6 @@ def detect_architecture(binary_path: str) -> tuple[str, str]:
             return "qemu-aarch64", "aarch64"  # Default to ARM64
     except Exception:
         return "qemu-aarch64", "aarch64"
-
 
 def create_gdb_script(binary: str, output_file: str, max_instructions: int) -> str:
     """Generate GDB script for analysis."""
@@ -236,7 +221,6 @@ end
 quit
 '''
 
-
 def run_analysis(binary: str, output_dir: str, max_instructions: int = 10000) -> dict:
     """Run GDB analysis on the binary."""
     binary_path = Path(binary)
@@ -319,7 +303,6 @@ def run_analysis(binary: str, output_dir: str, max_instructions: int = 10000) ->
         if 'qemu_proc' in dir():
             qemu_proc.terminate()
 
-
 def main():
     parser = argparse.ArgumentParser(description="Analyze ARM binary with GEF/GDB")
     parser.add_argument("binary", help="Path to the binary to analyze")
@@ -338,14 +321,11 @@ def main():
     print(json.dumps(result, indent=2))
     sys.exit(0 if "error" not in result else 1)
 
-
 if __name__ == "__main__":
     main()
 EOF
 
-# Set working directory
 WORKDIR /work
 
-# Default command
 ENTRYPOINT ["/usr/local/bin/analyze_binary.py"]
 CMD ["--help"]

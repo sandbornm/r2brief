@@ -1,5 +1,3 @@
-"""Publish a headless analysis into the same chat session the web UI hydrates."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,11 +15,6 @@ def publish_analysis_session(
     *,
     title: str | None = None,
 ) -> ChatSession:
-    """Attach the public analysis DTO to a session keyed by binary path.
-
-    CLI and Flask both go through this so `GET /api/chats` + Results/Map
-    see the same object as a live SSE `analysis_result` event.
-    """
     path = Path(str(result.binary))
     session = chat_dao.get_or_create_session(
         str(path),

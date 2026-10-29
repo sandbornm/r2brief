@@ -1,11 +1,3 @@
-"""Portable executable-format metadata for ELF, PE, and Mach-O subjects.
-
-The adapter intentionally returns a small, normalized contract.  Native
-parsers provide richer validation when installed, while bounded header
-fallbacks keep intake useful when an optional parser rejects a damaged file.
-Nothing here executes the subject.
-"""
-
 from __future__ import annotations
 
 import struct
@@ -48,7 +40,6 @@ _MACHO_ARCHES = {
 
 @dataclass(slots=True)
 class BinaryFormatAdapter:
-    """Identify and normalize top-level executable metadata."""
 
     name: str = "binary_format"
 
@@ -63,7 +54,6 @@ class BinaryFormatAdapter:
 
 
 def inspect_binary_format(binary: Path) -> dict[str, Any]:
-    """Return JSON-safe metadata without requiring an external executable."""
 
     target = Path(binary)
     try:
@@ -236,7 +226,6 @@ def _inspect_pe(binary: Path) -> dict[str, Any]:
         metadata["warning"] = f"pefile parse failed: {exc}"
         return metadata
     except Exception as exc:
-        # pefile raises PEFormatError, whose import is intentionally optional.
         metadata = _inspect_pe_header(binary)
         metadata["warning"] = f"pefile parse failed: {exc}"
         return metadata

@@ -1,13 +1,3 @@
-"""Type models for tool execution in r2b binary analysis copilot.
-
-This module defines strict Pydantic v2 models for:
-- Tool and script type enumerations
-- Binary subject metadata with validation
-- Script validation errors and results
-- Execution status and results
-- Trajectory entries for analysis history
-"""
-
 from __future__ import annotations
 
 import re
@@ -21,12 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 def _utcnow() -> datetime:
-    """Return current UTC time as timezone-aware datetime."""
     return datetime.now(timezone.utc)
 
 
 class ToolName(str, Enum):
-    """Supported analysis tools."""
 
     GHIDRA = "ghidra"
     RADARE2 = "radare2"
@@ -36,7 +24,6 @@ class ToolName(str, Enum):
 
 
 class ScriptLanguage(str, Enum):
-    """Supported script languages for tool execution."""
 
     PYTHON = "python"
     R2 = "r2"
@@ -44,24 +31,18 @@ class ScriptLanguage(str, Enum):
 
 
 class Architecture(str, Enum):
-    """Supported CPU architectures."""
 
     ARM32 = "arm32"
     AARCH64 = "aarch64"
 
 
 class BinaryFormat(str, Enum):
-    """Supported binary formats."""
 
     ELF = "elf"
     MACHO = "macho"
 
 
 class Subject(BaseModel):
-    """Binary subject for analysis with strict validation.
-
-    Represents a binary file to be analyzed, with validated metadata.
-    """
 
     model_config = ConfigDict(strict=True, frozen=True)
 
@@ -74,7 +55,6 @@ class Subject(BaseModel):
     @field_validator("path")
     @classmethod
     def path_must_exist(cls, v: Path) -> Path:
-        """Validate that the path points to an existing file."""
         v = v.resolve()
         if not v.exists():
             raise ValueError(f"path does not exist: {v}")
@@ -85,7 +65,6 @@ class Subject(BaseModel):
     @field_validator("sha256")
     @classmethod
     def sha256_must_be_valid(cls, v: str) -> str:
-        """Validate SHA256 hash format (64 hexadecimal characters)."""
         if len(v) != 64:
             raise ValueError(f"sha256 must be exactly 64 characters, got {len(v)}")
         if not re.match(r"^[a-fA-F0-9]{64}$", v):
@@ -94,10 +73,6 @@ class Subject(BaseModel):
 
 
 class ValidationError(BaseModel):
-    """A single validation error or warning from script validation.
-
-    Used to report issues found during script validation before execution.
-    """
 
     model_config = ConfigDict(strict=True, frozen=True)
 
@@ -109,18 +84,12 @@ class ValidationError(BaseModel):
     @field_validator("severity")
     @classmethod
     def severity_must_be_valid(cls, v: str) -> str:
-        """Validate severity is either 'error' or 'warning'."""
         if v not in ("error", "warning"):
             raise ValueError(f"severity must be 'error' or 'warning', got '{v}'")
         return v
 
 
 class ValidationResult(BaseModel):
-    """Result of script validation.
-
-    Contains validation status, any errors/warnings, and provides
-    a summary property for error display.
-    """
 
     model_config = ConfigDict(strict=True, frozen=True)
 
@@ -137,11 +106,6 @@ class ValidationResult(BaseModel):
 
     @property
     def error_summary(self) -> str:
-        """Return a formatted summary of all errors.
-
-        Returns:
-            Formatted string with all errors, or empty string if no errors.
-        """
         if not self.errors:
             return ""
         lines = []
@@ -153,7 +117,6 @@ class ValidationResult(BaseModel):
 
 
 class ExecutionStatus(str, Enum):
-    """Status of script execution."""
 
     SUCCESS = "success"
     ERROR = "error"
@@ -163,11 +126,6 @@ class ExecutionStatus(str, Enum):
 
 
 class ExecutionResult(BaseModel):
-    """Result of script execution.
-
-    Contains execution status, timing, output streams, and any exception details.
-    Provides an error_display property for formatted error messages.
-    """
 
     model_config = ConfigDict(strict=True, frozen=True)
 
@@ -180,17 +138,11 @@ class ExecutionResult(BaseModel):
 
     @property
     def error_display(self) -> str:
-        """Return a formatted error message for display.
-
-        Returns:
-            Formatted error string, or empty string if success status.
-        """
         if self.status == ExecutionStatus.SUCCESS:
             return ""
 
         parts = []
 
-        # Special handling for timeout status
         if self.status == ExecutionStatus.TIMEOUT:
             parts.append(f"Timeout exceeded after {self.duration_ms}ms")
 
@@ -204,15 +156,6 @@ class ExecutionResult(BaseModel):
 
 
 class TrajectoryEntry(BaseModel):
-    """A single entry in the analysis trajectory.
-
-    Records tool invocations with intent, script, validation, execution,
-    and results for debugging and replay.
-
-    Cross-field validation ensures:
-    - script requires script_language
-    - execution requires valid validation
-    """
 
     model_config = ConfigDict(strict=True)
 
@@ -241,16 +184,9 @@ class TrajectoryEntry(BaseModel):
 
     @model_validator(mode="after")
     def validate_cross_field_dependencies(self) -> "TrajectoryEntry":
-        """Validate cross-field dependencies.
-
-        - script requires script_language to be set
-        - execution requires validation to be valid (not failed)
-        """
-        # Script requires language
         if self.script is not None and self.script_language is None:
             raise ValueError("script_language is required when script is provided")
 
-        # Execution requires valid validation
         if self.execution is not None:
             if self.validation is None:
                 raise ValueError("validation is required when execution is provided")

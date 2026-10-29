@@ -1,8 +1,3 @@
-/**
- * Trajectory Context - React integration for the trajectory tracking system.
- *
- * Provides hooks and context for tracking user actions throughout the app.
- */
 import { createContext, FC, ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import {
   addNode,
@@ -16,28 +11,20 @@ import {
 } from './TrajectoryStore';
 
 interface TrajectoryContextValue {
-  // Current trajectory
   trajectory: Trajectory | null;
 
-  // Current snapshot for display
   snapshot: TrajectorySnapshot | null;
 
-  // Start a new trajectory for a session
   startTrajectory: (sessionId: string) => void;
 
-  // Record an action
   recordAction: (type: TrajectoryNodeType, data?: TrajectoryNodeData) => void;
 
-  // Get serialized context for LLM
   getLLMContext: () => string;
 
-  // Get current view
   currentView: string;
 
-  // Set current view
   setCurrentView: (view: string) => void;
 
-  // Clear trajectory
   clearTrajectory: () => void;
 }
 
@@ -51,7 +38,6 @@ export const TrajectoryProvider: FC<{ children: ReactNode }> = ({ children }) =>
 
   const startTrajectory = useCallback((sessionId: string) => {
     const newTrajectory = createTrajectory(sessionId);
-    // Add session start node
     const { trajectory: updated } = addNode(newTrajectory, 'session_start', {
       timestamp: Date.now(),
     });
@@ -74,9 +60,7 @@ export const TrajectoryProvider: FC<{ children: ReactNode }> = ({ children }) =>
       const now = Date.now();
       const timeOnPrev = now - viewStartTimeRef.current;
 
-      // Record view change in trajectory
       if (trajectory && lastViewRef.current !== view) {
-        // Map view names to trajectory node types
         const viewTypeMap: Record<string, TrajectoryNodeType | null> = {
           disasm: 'view_disasm',
           cfg: 'view_cfg',
@@ -142,9 +126,6 @@ export const useTrajectory = (): TrajectoryContextValue => {
   return context;
 };
 
-/**
- * Convenience hook for recording specific action types
- */
 export const useTrajectoryActions = () => {
   const { recordAction } = useTrajectory();
 
@@ -185,13 +166,9 @@ export const useTrajectoryActions = () => {
   );
 };
 
-/**
- * Extract a simple topic from a question for summary purposes
- */
 function extractTopic(question: string): string {
   const q = question.toLowerCase();
 
-  // Common patterns
   if (q.includes('vulnerability') || q.includes('exploit') || q.includes('security')) {
     return 'security';
   }
@@ -208,7 +185,6 @@ function extractTopic(question: string): string {
     return 'decompilation';
   }
 
-  // Default: first few words
   const words = question.split(/\s+/).slice(0, 4).join(' ');
   return words.length > 30 ? words.slice(0, 30) + '...' : words;
 }

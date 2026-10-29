@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Regenerate samples/bin/arm64/vendor/ from this host's installed packages.
-# The host is aarch64; binaries are gitignored (see .gitignore).
-# Firmadyne images are mostly armel/mipsel; pull those manually from the
-# firmadyne S3 bucket into samples/firmware/ if needed.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

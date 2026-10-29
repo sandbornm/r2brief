@@ -1,10 +1,3 @@
-"""Read-only Unix sniff of a sample.
-
-file(1), strings(1), readelf(1), and a hex peek. These do not need a
-container: they never execute the guest. A later qemu-user jail is for
-*running* httpd, not for this intake.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -65,7 +58,6 @@ def sniff_binary(path: Path) -> dict[str, Any]:
 
 
 def render_intake(analysis: dict[str, Any]) -> str:
-    """Compact triage card injected into the LLM system prompt."""
     quick = analysis.get("quick_scan") if isinstance(analysis.get("quick_scan"), dict) else {}
     sniff = quick.get("sniff") if isinstance(quick.get("sniff"), dict) else {}
     firmware = quick.get("firmware") if isinstance(quick.get("firmware"), dict) else {}

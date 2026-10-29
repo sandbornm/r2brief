@@ -1,5 +1,3 @@
-"""Tool execution module for r2b binary analysis copilot."""
-
 from r2b.tools.executor import (
     ExecutionContext,
     ExecutionOutput,

@@ -1,5 +1,3 @@
-"""Ollama chat client for local models such as Gemma."""
-
 from __future__ import annotations
 
 from time import perf_counter
@@ -18,11 +16,10 @@ class ChatMessage(BaseModel):
 
 
 class OllamaError(Exception):
-    """Wrapper for local Ollama API errors."""
+    pass
 
 
 class OllamaClient:
-    """Small HTTP client for Ollama's local chat API."""
 
     def __init__(self, config: AppConfig) -> None:
         self._config = config
@@ -40,7 +37,7 @@ class OllamaClient:
         tool_results: Sequence[ToolResult] = (),
         **_: Any,
     ) -> LLMResponse:
-        del previous_response, tool_results  # history is carried in ``messages``
+        del previous_response, tool_results
         payload_messages: list[dict[str, Any]] = []
         for message in messages:
             if isinstance(message, ChatMessage):
@@ -133,7 +130,6 @@ class OllamaClient:
         raise OllamaError("Ollama returned an unexpected response shape.")
 
     def chat(self, messages: Iterable[ChatMessage] | Iterable[dict[str, Any]]) -> str:
-        """Compatibility wrapper returning only response text."""
         return self.generate(messages).text
 
     def summarize_analysis(self, summary: dict[str, Any]) -> str:
@@ -147,7 +143,6 @@ class OllamaClient:
         return self.chat(messages)
 
 def list_ollama_models(base_url: str, *, timeout: float = 1.5) -> list[str]:
-    """Return installed Ollama model names, or an empty list if unavailable."""
     try:
         response = httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=timeout)
         response.raise_for_status()
@@ -170,7 +165,6 @@ def list_ollama_models(base_url: str, *, timeout: float = 1.5) -> list[str]:
 
 
 def select_ollama_model(base_url: str, preferred: str) -> str:
-    """Choose an installed Ollama model, preferring Gemma for local chat."""
     installed = list_ollama_models(base_url)
     if not installed or preferred in installed:
         return preferred

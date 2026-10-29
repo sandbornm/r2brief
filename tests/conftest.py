@@ -1,5 +1,3 @@
-"""Shared pytest fixtures for r2b tests."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,37 +11,29 @@ from r2b.storage import ChatDAO, Database
 from r2b.analysis.resource_tree import BinaryResource, FunctionResource
 
 
-# ============================================================================
-# Path Fixtures
-# ============================================================================
-
 @pytest.fixture
 def tmp_db_path(tmp_path: Path) -> Path:
-    """Return a temporary database path."""
     return tmp_path / "test_r2b.db"
 
 
 @pytest.fixture
 def sample_elf_bytes() -> bytes:
-    """Return minimal ELF header bytes."""
-    # Minimal ELF header (64-bit little-endian)
     return (
-        b'\x7fELF'                      # Magic
-        b'\x02'                          # 64-bit
-        b'\x01'                          # Little endian
-        b'\x01'                          # ELF version
-        b'\x00'                          # OS/ABI
-        + b'\x00' * 8                    # Padding
-        + b'\x02\x00'                    # Type: executable
-        + b'\xb7\x00'                    # Machine: ARM64
-        + b'\x01\x00\x00\x00'           # Version
-        + b'\x00' * 48                   # Rest of header padding
+        b'\x7fELF'
+        b'\x02'
+        b'\x01'
+        b'\x01'
+        b'\x00'
+        + b'\x00' * 8
+        + b'\x02\x00'
+        + b'\xb7\x00'
+        + b'\x01\x00\x00\x00'
+        + b'\x00' * 48
     )
 
 
 @pytest.fixture
 def sample_elf_file(tmp_path: Path, sample_elf_bytes: bytes) -> Path:
-    """Create a minimal ELF file for testing."""
     elf_path = tmp_path / "sample.elf"
     elf_path.write_bytes(sample_elf_bytes)
     return elf_path
@@ -51,19 +41,13 @@ def sample_elf_file(tmp_path: Path, sample_elf_bytes: bytes) -> Path:
 
 @pytest.fixture
 def sample_non_elf_file(tmp_path: Path) -> Path:
-    """Create a non-ELF file for testing validation."""
     bin_path = tmp_path / "not_elf.bin"
     bin_path.write_bytes(b'\x00\x00\x00\x00NOTELF\x00\x00\x00\x00')
     return bin_path
 
 
-# ============================================================================
-# Configuration Fixtures
-# ============================================================================
-
 @pytest.fixture
 def test_config(tmp_path: Path) -> AppConfig:
-    """Return a test configuration with adapters disabled."""
     config = AppConfig()
     config.analysis = AnalysisSettings(
         enable_angr=False,
@@ -86,19 +70,13 @@ def test_config(tmp_path: Path) -> AppConfig:
 
 @pytest.fixture
 def minimal_config() -> AppConfig:
-    """Return minimal configuration for unit tests."""
     config = AppConfig()
     config.extract.enable = False
     return config
 
 
-# ============================================================================
-# Environment Fixtures
-# ============================================================================
-
 @pytest.fixture
 def mock_env_report() -> EnvironmentReport:
-    """Return a mock environment report with tools unavailable."""
     return EnvironmentReport(
         python_version="3.11.0",
         uv_available=True,
@@ -114,7 +92,6 @@ def mock_env_report() -> EnvironmentReport:
 
 @pytest.fixture
 def full_env_report() -> EnvironmentReport:
-    """Return an environment report with all tools available."""
     return EnvironmentReport(
         python_version="3.11.0",
         uv_available=True,
@@ -129,31 +106,19 @@ def full_env_report() -> EnvironmentReport:
     )
 
 
-# ============================================================================
-# Database Fixtures
-# ============================================================================
-
 @pytest.fixture
 def test_database(tmp_db_path: Path) -> Generator[Database, None, None]:
-    """Create and return a test database."""
     db = Database(tmp_db_path)
     yield db
-    # Cleanup happens when tmp_path is removed
 
 
 @pytest.fixture
 def chat_dao(test_database: Database) -> ChatDAO:
-    """Return a ChatDAO instance with test database."""
     return ChatDAO(test_database)
 
 
-# ============================================================================
-# Resource Tree Fixtures
-# ============================================================================
-
 @pytest.fixture
 def sample_resource_tree() -> BinaryResource:
-    """Create a sample resource tree for testing."""
     binary = BinaryResource(
         kind="binary",
         name="test.elf",
@@ -161,7 +126,6 @@ def sample_resource_tree() -> BinaryResource:
         architecture="ARM64",
     )
 
-    # Add some function resources
     main_func = FunctionResource(
         kind="function",
         name="main",
@@ -186,7 +150,6 @@ def sample_resource_tree() -> BinaryResource:
 
 @pytest.fixture
 def empty_resource_tree() -> BinaryResource:
-    """Create an empty resource tree."""
     return BinaryResource(
         kind="binary",
         name="empty.elf",
@@ -195,12 +158,7 @@ def empty_resource_tree() -> BinaryResource:
     )
 
 
-# ============================================================================
-# Mock Adapter Fixtures
-# ============================================================================
-
 class MockAdapter:
-    """Mock adapter for testing."""
 
     def __init__(self, name: str = "mock", available: bool = True):
         self.name = name
@@ -231,23 +189,16 @@ class MockAdapter:
 
 @pytest.fixture
 def mock_adapter() -> MockAdapter:
-    """Return a mock adapter for testing."""
     return MockAdapter()
 
 
 @pytest.fixture
 def unavailable_adapter() -> MockAdapter:
-    """Return an unavailable mock adapter."""
     return MockAdapter(name="unavailable", available=False)
 
 
-# ============================================================================
-# Analysis Result Fixtures
-# ============================================================================
-
 @pytest.fixture
 def mock_radare2_quick_result() -> dict:
-    """Return mock radare2 quick scan result."""
     return {
         "info": {
             "arch": "arm",
@@ -276,7 +227,6 @@ def mock_radare2_quick_result() -> dict:
 
 @pytest.fixture
 def mock_radare2_deep_result() -> dict:
-    """Return mock radare2 deep scan result."""
     return {
         "functions": [
             {"name": "main", "offset": 0x1000, "size": 256, "nargs": 2, "nlocals": 4},
@@ -312,7 +262,6 @@ def mock_radare2_deep_result() -> dict:
 
 @pytest.fixture
 def mock_angr_deep_result() -> dict:
-    """Return mock angr deep scan result."""
     return {
         "active": 1,
         "found": 0,

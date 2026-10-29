@@ -1,5 +1,3 @@
-"""Unit tests for the goal-driven pilot (no LLM, no subprocess execution)."""
-
 import json
 from pathlib import Path
 
@@ -22,8 +20,6 @@ def lab_root(tmp_path):
     (tmp_path / "outside.bin").write_bytes(b"not in lab")
     return tmp_path
 
-
-# ---------------------------------------------------------------- validate_plan
 
 def test_validate_plan_accepts_corpus_targets(lab_root):
     plan = {
@@ -84,8 +80,6 @@ def test_validate_plan_rejects_wrong_shape():
         {"goal": "g", "steps": [{"verb": "records", "target": "list", "why": "x"}] * 9}, tmp_root)
 
 
-# ---------------------------------------------------------------- extract_json
-
 def test_extract_json_plain_fenced_and_prose():
     assert extract_json('{"a": 1}') == {"a": 1}
     assert extract_json('```json\n{"a": 1}\n```') == {"a": 1}
@@ -96,8 +90,6 @@ def test_extract_json_rejects_text_without_object():
     with pytest.raises(ValueError):
         extract_json("no json here at all")
 
-
-# ---------------------------------------------------------------- context
 
 def test_corpus_context_lists_samples_and_carved_binaries(lab_root):
     ctx = corpus_context(lab_root)
@@ -110,8 +102,6 @@ def test_corpus_context_ignores_uninteresting_files(lab_root):
     ctx = corpus_context(lab_root)
     assert "meta.json" not in ctx
 
-
-# ---------------------------------------------------------------- build_cmd
 
 def test_build_cmd_analyze_and_brief(lab_root, monkeypatch):
     monkeypatch.setenv("R2B_PILOT_BIN", "r2b")
@@ -143,8 +133,6 @@ def test_build_cmd_records_insights(monkeypatch):
         "r2b", "insights", "--tag", "httpd"]
 
 
-# ---------------------------------------------------------------- reporting
-
 def test_grounded_and_mechanical_report():
     digests = ["record_id=abc123defghij tag=httpd binary=httpd arch=mips"]
     assert PilotEngine.grounded(
@@ -162,10 +150,8 @@ def test_grounded_and_mechanical_report():
     assert "mechanical fallback" in report
 
 
-# ---------------------------------------------------------------- engine paths
-
 def test_pilot_dir_and_queue_under_root(lab_root):
-    class _NoLLM:  # PilotEngine never touches the LLM for path logic
+    class _NoLLM:
         pass
 
     engine = PilotEngine(llm=_NoLLM(), root=lab_root)

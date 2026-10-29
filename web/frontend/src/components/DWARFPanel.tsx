@@ -82,11 +82,6 @@ export default function DWARFPanel({ data, onAskClaude }: DWARFPanelProps) {
   const activity = useActivity();
   const { trackEvent } = activity;
 
-  // Track when DWARF panel is viewed.
-  // Depend on the stable trackEvent reference, not the whole activity object:
-  // activity changes identity on every provider render, and trackEvent itself
-  // updates provider state, so depending on `activity` here causes an infinite
-  // render loop.
   useEffect(() => {
     if (data?.has_dwarf) {
       trackEvent('dwarf_view', {
@@ -463,7 +458,6 @@ function TypesTab({ types, onAskClaude }: TypesTabProps) {
     );
   }
 
-  // Group types by kind
   const grouped = types.reduce(
     (acc, type) => {
       const kind = getTypeName(type.tag);
@@ -551,7 +545,6 @@ function VariablesTab({ variables }: VariablesTabProps) {
     );
   }
 
-  // Filter to global variables only
   const globals = variables.filter((v) => !v.is_local);
 
   return (

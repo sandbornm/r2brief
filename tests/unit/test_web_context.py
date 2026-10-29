@@ -1,5 +1,3 @@
-"""Tests for web LLM context budgeting helpers."""
-
 from __future__ import annotations
 
 from r2b.config import AppConfig

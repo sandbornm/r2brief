@@ -22,7 +22,6 @@ import CodeIcon from '@mui/icons-material/Code';
 import { FC, memo, useMemo } from 'react';
 import type { ProgressEventEntry } from '../types';
 
-// Pulse animation for active items (defined outside component to avoid recreation)
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
@@ -37,7 +36,6 @@ interface ProgressLogProps {
   entries: ProgressEventEntry[];
 }
 
-// Quirky messages explaining what's happening
 const STAGE_MESSAGES: Record<string, { active: string; done: string }> = {
   quick: {
     active: "🔍 Quick recon — gathering file signatures, headers, and first impressions...",
@@ -107,7 +105,6 @@ const LogEntry: FC<{ entry: ProgressEventEntry; isLatest: boolean }> = memo(({ e
   const isSkipped = event.includes('skipped');
   const isComplete = event.includes('completed');
 
-  // Determine colors
   let accentColor = theme.palette.primary.main;
   if (isError) accentColor = theme.palette.error.main;
   else if (isSkipped) accentColor = theme.palette.warning.main;
@@ -122,7 +119,6 @@ const LogEntry: FC<{ entry: ProgressEventEntry; isLatest: boolean }> = memo(({ e
     return null;
   }, [data.command, data.payload]);
 
-  // Get message and icon
   let message = '';
   let icon = <PlayCircleIcon sx={{ fontSize: 18 }} />;
 
@@ -255,7 +251,6 @@ LogEntry.displayName = 'LogEntry';
 export const ProgressLog: FC<ProgressLogProps> = memo(({ entries }) => {
   const theme = useTheme();
 
-  // Memoize isRunning check
   const isRunning = useMemo(() => {
     const last = entries[entries.length - 1];
     return last ? !['job_completed', 'job_failed'].includes(last.event) : false;

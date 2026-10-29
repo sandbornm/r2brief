@@ -39,7 +39,6 @@ const RegistersView: FC<{ snapshots: RegisterSnapshot[] }> = ({ snapshots }) => 
   const snapshot = snapshots[selectedIndex] || snapshots[snapshots.length - 1];
   const registers = snapshot?.registers || {};
 
-  // Group registers by category
   const generalRegs = Object.entries(registers).filter(([name]) =>
     /^(r\d+|x\d+|w\d+|a\d+|v\d+|t\d+|s\d+|fp|lr|ra|gp|tp)$/i.test(name)
   );
@@ -93,7 +92,6 @@ const RegistersView: FC<{ snapshots: RegisterSnapshot[] }> = ({ snapshots }) => 
 
   return (
     <Box>
-      {/* Timeline slider */}
       <Box sx={{ mb: 2 }}>
         <Typography variant="caption" color="text.secondary">
           Snapshot {selectedIndex + 1} of {snapshots.length}
@@ -113,7 +111,6 @@ const RegistersView: FC<{ snapshots: RegisterSnapshot[] }> = ({ snapshots }) => 
         </Box>
       </Box>
 
-      {/* Program Counter and Stack Pointer */}
       <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
         <Chip label={`PC: ${formatHex(snapshot.pc)}`} color="primary" />
         <Chip label={`SP: ${formatHex(snapshot.sp)}`} color="secondary" />
@@ -139,7 +136,6 @@ const MemoryMapView: FC<{ regions: GEFMemoryRegion[] }> = ({ regions }) => {
     );
   }
 
-  // Permission colors
   const getPermColor = (perm: string) => {
     if (perm.includes('x')) return 'error';
     if (perm.includes('w')) return 'warning';
@@ -203,7 +199,6 @@ const ExecutionSummary: FC<{ data: GEFData }> = ({ data }) => {
   return (
     <Box>
       <Stack spacing={1.5}>
-        {/* Entry point */}
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <Typography variant="caption" color="text.secondary" fontWeight={600}>
             Entry Point
@@ -213,7 +208,6 @@ const ExecutionSummary: FC<{ data: GEFData }> = ({ data }) => {
           </Typography>
         </Paper>
 
-        {/* Stats */}
         <Stack direction="row" spacing={1.5}>
           <Paper variant="outlined" sx={{ p: 1.5, flex: 1 }}>
             <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -243,7 +237,6 @@ const ExecutionSummary: FC<{ data: GEFData }> = ({ data }) => {
           </Paper>
         </Stack>
 
-        {/* Memory regions count */}
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <Typography variant="caption" color="text.secondary" fontWeight={600}>
             Memory Regions
@@ -314,7 +307,6 @@ const GEFPanel: FC<GEFPanelProps> = ({ data }) => {
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
       <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Typography variant="body2" fontWeight={600}>
@@ -336,7 +328,6 @@ const GEFPanel: FC<GEFPanelProps> = ({ data }) => {
         </Stack>
       </Box>
 
-      {/* Tabs */}
       <Tabs
         value={view}
         onChange={(_, v) => setView(v)}
@@ -365,7 +356,6 @@ const GEFPanel: FC<GEFPanelProps> = ({ data }) => {
         />
       </Tabs>
 
-      {/* Content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
         {view === 'overview' && <ExecutionSummary data={data} />}
         {view === 'registers' && <RegistersView snapshots={trace.register_snapshots} />}

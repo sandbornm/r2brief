@@ -7,11 +7,9 @@ import { createAppTheme } from './theme';
 import { ThemeContext } from './themeMode';
 
 const Root = () => {
-  // Check localStorage and system preference
   const getInitialMode = (): PaletteMode => {
     const stored = localStorage.getItem('r2b-theme');
     if (stored === 'light' || stored === 'dark') return stored;
-    // Default to dark
     return 'dark';
   };
 
@@ -19,7 +17,6 @@ const Root = () => {
 
   useEffect(() => {
     localStorage.setItem('r2b-theme', mode);
-    // Update CSS color scheme
     document.documentElement.style.colorScheme = mode;
   }, [mode]);
 

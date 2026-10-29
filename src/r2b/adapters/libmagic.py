@@ -1,5 +1,3 @@
-"""libmagic file identification adapter."""
-
 from __future__ import annotations
 
 import logging
@@ -26,7 +24,7 @@ class LibmagicAdapter:
     def _magic(self) -> types.ModuleType:
         try:
             import magic
-        except (ModuleNotFoundError, ImportError) as exc:  # pragma: no cover - import guard
+        except (ModuleNotFoundError, ImportError) as exc:  # pragma: no cover
             raise AdapterUnavailable(
                 "python-magic is not installed or libmagic native library is missing. "
                 "On macOS: brew install libmagic"

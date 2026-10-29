@@ -44,7 +44,6 @@ describe('ScriptExecutionBlock', () => {
       />
     );
 
-    // When validation is valid and execution succeeds, status shows "Success"
     expect(screen.getByText('Success')).toBeInTheDocument();
   });
 
@@ -116,9 +115,7 @@ describe('ScriptExecutionBlock', () => {
       />
     );
 
-    // Status chip shows "Error" label
     expect(screen.getByText('Error')).toBeInTheDocument();
-    // Error output section shows the error details
     expect(screen.getByText('Error Output')).toBeInTheDocument();
     expect(screen.getByText(/NameError/)).toBeInTheDocument();
   });
@@ -158,7 +155,6 @@ describe('ScriptExecutionBlock', () => {
       />
     );
 
-    // Click to expand
     const expandButton = screen.getByRole('button', { name: /expand|show/i });
     await user.click(expandButton);
 

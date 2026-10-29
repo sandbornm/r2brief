@@ -1,10 +1,3 @@
-/**
- * GhidraScriptingPanel - Interactive Ghidra script generation and execution
- *
- * Allows users to describe analysis tasks in natural language, generates
- * Python/Java scripts for Ghidra, and executes them with full trajectory tracking.
- */
-
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CodeIcon from '@mui/icons-material/Code';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -34,7 +27,6 @@ import {
 import { FC, memo, useCallback, useMemo, useState } from 'react';
 import CodeEditor from './CodeEditor';
 
-// Script language options
 type ScriptLanguage = 'python' | 'java';
 
 interface ScriptTask {
@@ -55,7 +47,6 @@ interface GhidraScriptingPanelProps {
   onScriptExecuted?: (task: ScriptTask) => void;
 }
 
-// Example task templates
 const TASK_TEMPLATES = [
   { label: 'Find all string references', description: 'Find all defined strings and their cross-references in the binary' },
   { label: 'Analyze function calls', description: 'List all function calls and build a call graph for the main function' },
@@ -84,7 +75,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
   const [showHistory, setShowHistory] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
-  // Generate script from task description
   const handleGenerateScript = useCallback(async () => {
     if (!taskDescription.trim() || !sessionId) return;
 
@@ -105,7 +95,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
         }),
       });
 
-      // Check content type before parsing
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Server returned non-JSON response. Is the backend running?');
@@ -119,7 +108,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
 
       setCurrentScript(data.script);
 
-      // Add to history
       const newTask: ScriptTask = {
         id: `task-${Date.now()}`,
         description: taskDescription,
@@ -128,10 +116,9 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
         status: 'ready',
         createdAt: new Date().toISOString(),
       };
-      setTaskHistory(prev => [newTask, ...prev].slice(0, 20)); // Keep last 20
+      setTaskHistory(prev => [newTask, ...prev].slice(0, 20));
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to generate script';
-      // Provide helpful error messages
       if (errorMsg.includes('Unexpected token') || errorMsg.includes('JSON')) {
         setError('Cannot connect to backend. Make sure the Flask server is running.');
       } else {
@@ -142,7 +129,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
     }
   }, [taskDescription, language, sessionId, binaryPath]);
 
-  // Execute the current script
   const handleExecuteScript = useCallback(async () => {
     if (!currentScript || !sessionId) return;
 
@@ -163,7 +149,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
         }),
       });
 
-      // Check content type before parsing
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Server returned non-JSON response. Is the backend running?');
@@ -176,7 +161,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
       }
       setExecutionResult(data.output);
 
-      // Update history with result
       setTaskHistory(prev => {
         const updated = [...prev];
         const idx = updated.findIndex(t => t.script === currentScript);
@@ -191,7 +175,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
         return updated;
       });
 
-      // Notify parent
       if (onScriptExecuted) {
         onScriptExecuted({
           id: `task-${Date.now()}`,
@@ -206,14 +189,12 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
       }
     } catch (err) {
       let errorMessage = err instanceof Error ? err.message : 'Failed to execute script';
-      // Provide helpful error messages
       if (errorMessage.includes('Unexpected token') || errorMessage.includes('JSON')) {
         errorMessage = 'Cannot connect to backend. Make sure the Flask server is running.';
       }
       setError(errorMessage);
       setExecutionResult(null);
 
-      // Update history with error
       setTaskHistory(prev => {
         const updated = [...prev];
         const idx = updated.findIndex(t => t.script === currentScript);
@@ -231,14 +212,12 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
     }
   }, [currentScript, language, sessionId, binaryPath, taskDescription, onScriptExecuted]);
 
-  // Copy script to clipboard
   const handleCopyScript = useCallback(() => {
     if (currentScript) {
       navigator.clipboard.writeText(currentScript);
     }
   }, [currentScript]);
 
-  // Download script
   const handleDownloadScript = useCallback(() => {
     if (!currentScript) return;
 
@@ -284,7 +263,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
     }
   }, [currentScript, sessionId, taskDescription, language]);
 
-  // Load a task from history
   const handleLoadFromHistory = useCallback((task: ScriptTask) => {
     setTaskDescription(task.description);
     setLanguage(task.language);
@@ -293,12 +271,10 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
     setShowHistory(false);
   }, []);
 
-  // Apply a template
   const handleApplyTemplate = useCallback((template: typeof TASK_TEMPLATES[0]) => {
     setTaskDescription(template.description);
   }, []);
 
-  // Syntax highlighting theme
   const codeStyle = useMemo(() => ({
     fontFamily: 'JetBrains Mono, Fira Code, Monaco, Consolas, monospace',
     fontSize: '0.8rem',
@@ -314,7 +290,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Header */}
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Stack direction="row" alignItems="center" spacing={1}>
@@ -343,10 +318,8 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
         </Stack>
       </Box>
 
-      {/* Main Content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
         {showHistory ? (
-          // History View
           <Stack spacing={2}>
             <Typography variant="subtitle2" color="text.secondary">
               Recent Tasks ({taskHistory.length})
@@ -395,9 +368,7 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
             )}
           </Stack>
         ) : (
-          // Main Script Generation View
           <Stack spacing={3}>
-            {/* Task Description Input */}
             <Box>
               <Typography variant="subtitle2" gutterBottom>
                 Describe Your Task
@@ -412,7 +383,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
                 disabled={generating}
               />
 
-              {/* Quick Templates */}
               <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 1 }}>
                 {TASK_TEMPLATES.slice(0, 4).map((template, i) => (
                   <Chip
@@ -427,7 +397,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
               </Stack>
             </Box>
 
-            {/* Language Selection and Generate Button */}
             <Stack direction="row" spacing={2} alignItems="center">
               <FormControl size="small" sx={{ minWidth: 120 }}>
                 <InputLabel>Language</InputLabel>
@@ -457,7 +426,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
               </Alert>
             )}
 
-            {/* Generated Script */}
             {currentScript && (
               <Box>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
@@ -507,7 +475,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
               </Box>
             )}
 
-            {/* Execution Result */}
             {executionResult && (
               <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -529,7 +496,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
               </Box>
             )}
 
-            {/* Help Text */}
             {!currentScript && !generating && (
               <Paper
                 variant="outlined"
@@ -554,7 +520,6 @@ const GhidraScriptingPanel: FC<GhidraScriptingPanelProps> = memo(({
         )}
       </Box>
 
-      {/* Footer Status */}
       {sessionId && binaryPath && (
         <Box sx={{ p: 1, borderTop: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
           <Stack direction="row" alignItems="center" spacing={1}>

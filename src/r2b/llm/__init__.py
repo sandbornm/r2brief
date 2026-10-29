@@ -1,5 +1,3 @@
-"""LLM clients with provider fallback support."""
-
 from .claude_client import ClaudeClient, ClaudeError
 from .manager import LLMBridge, LLMError, ChatMessage
 from .ollama_client import OllamaClient, OllamaError

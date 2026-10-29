@@ -65,7 +65,6 @@ button {
   font-family: inherit;
 }
 
-/* Utility classes */
 .mono {
   font-family: var(--font-mono);
 }
@@ -74,7 +73,6 @@ button {
   font-family: var(--font-sans);
 }
 
-/* Smooth animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -107,7 +105,6 @@ button {
   animation: slideIn 0.2s ease-out;
 }
 
-/* Smooth transitions for interactive elements */
 .MuiButton-root,
 .MuiIconButton-root,
 .MuiTab-root,
@@ -132,7 +129,6 @@ button {
   animation: fadeIn 0.1s ease-out;
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

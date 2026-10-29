@@ -1,5 +1,3 @@
-"""Entry point for `python -m r2b`."""
-
 from .cli import run
 
 

@@ -51,7 +51,7 @@ export interface AnalysisResultPayload {
   issues: string[];
   session_id?: string;
   trajectory_id?: string;
-  tool_availability?: Record<string, boolean>;  // Which tools were available during analysis
+  tool_availability?: Record<string, boolean>;
   tool_status?: Record<string, ToolStatusSummary>;
   tool_scorecard?: Record<string, ToolScorecardEntry>;
   evidence_coverage?: EvidenceCoverage;
@@ -388,14 +388,12 @@ export interface SessionArtifactManifest {
   summary?: Record<string, unknown>;
 }
 
-// Assembly annotation for persisting notes on disassembly lines
 export interface AssemblyAnnotation {
   address: string;
   note: string;
   createdAt: string;
 }
 
-// Function naming types for LLM-suggested or human-overridden names
 export interface FunctionName {
   id: string;
   address: string;
@@ -428,7 +426,6 @@ export interface SuggestNamesResponse {
   error?: string;
 }
 
-// Compiler-related types
 export interface CompileResult {
   success: boolean;
   stdout: string;
@@ -512,7 +509,6 @@ export interface CommandPreview {
   error?: string;
 }
 
-// Activity tracking types for context engineering
 export type ActivityEventType =
   | 'tab_switch'
   | 'function_view'
@@ -523,17 +519,17 @@ export type ActivityEventType =
   | 'cfg_navigate'
   | 'disassembly_scroll'
   | 'ask_claude'
-  | 'dwarf_view'          // Viewing DWARF panel
-  | 'dwarf_function_view' // Viewing a specific DWARF function
-  | 'dwarf_type_view'     // Viewing a specific DWARF type
-  | 'dwarf_ask_claude';   // Asking Claude about DWARF info
+  | 'dwarf_view'
+  | 'dwarf_function_view'
+  | 'dwarf_type_view'
+  | 'dwarf_ask_claude';
 
 export interface ActivityEvent {
   event_id?: string;
   event_type: ActivityEventType;
   event_data: Record<string, unknown>;
   created_at: string;
-  duration_ms?: number;  // Time spent on this activity
+  duration_ms?: number;
 }
 
 export interface ActivityContext {
@@ -545,16 +541,14 @@ export interface ActivityContext {
   event_count: number;
 }
 
-// Code citation for linking LLM responses to disassembly
 export interface CodeCitation {
   address: string;
   function_name?: string;
   instruction?: string;
   bytes?: string;
-  context_lines?: string[];  // Surrounding disassembly lines
+  context_lines?: string[];
 }
 
-// DWARF debug information types
 export interface DWARFFunction {
   name: string;
   offset: number;
@@ -650,7 +644,6 @@ export interface DWARFData {
   error?: string;
 }
 
-// Auto-profiling types for quick binary characterization
 export interface SecurityFeatures {
   relro: 'none' | 'partial' | 'full' | 'unknown';
   stack_canary: boolean | null;
@@ -691,7 +684,6 @@ export interface AutoProfileData {
   error?: string;
 }
 
-// Ghidra decompilation types
 export interface GhidraDecompiledFunction {
   name: string;
   address: string;
@@ -752,7 +744,6 @@ export interface GhidraData {
   error?: string;
 }
 
-// GEF/GDB dynamic analysis types
 export interface RegisterSnapshot {
   pc: number;
   sp: number;
@@ -785,7 +776,6 @@ export interface GEFData {
   error?: string;
 }
 
-// Ghidra Scripting types
 export interface GhidraScriptTask {
   id: string;
   description: string;
@@ -823,7 +813,6 @@ export interface GhidraStatusResponse {
   notes: string[];
 }
 
-// Tool execution status types (from /api/tools/status)
 export interface ToolExecutionStatus {
   available: boolean;
   description: string;
@@ -871,7 +860,6 @@ export interface ToolsStatusResponse {
 }
 
 
-// Script execution types for chat-driven tool use
 export interface ScriptValidationError {
   message: string;
   location?: string;
@@ -895,7 +883,6 @@ export interface ScriptExecutionResult {
   traceback?: string;
 }
 
-// Chat attachment for script execution results
 export interface ScriptExecutionAttachment extends ChatAttachment {
   type: 'script_execution';
   tool: string;

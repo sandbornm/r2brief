@@ -1,5 +1,3 @@
-"""Unit tests for environment detectors."""
-
 from __future__ import annotations
 
 import shutil

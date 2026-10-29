@@ -93,7 +93,7 @@ class _RedirectGuard(urllib.request.HTTPRedirectHandler):
         self.allowed_hosts = allowed_hosts
         super().__init__()
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         _validate_url(newurl, self.allowed_hosts)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 

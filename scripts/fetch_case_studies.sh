@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fetch the exact public AArch64 packages used by docs/case-studies and
-# docs/calibration.
-# This script only downloads and extracts; it never executes target code.
-
 HELLO_URL="https://snapshot.debian.org/file/fecb242a059fec95f6cdc0760e9b44298c04d279/hello_2.10-5_arm64.deb"
 HELLO_SHA256="7a917c7f44fbd3373dff0f35a0b6bdf8ef564ff90579d8b130ff52fbf33fce1f"
 HELLO_BINARY_SHA256="ef8b324e9d8de673554fb5dad0a69ffc9e6c20b93e92fd088745b3243aaad843"

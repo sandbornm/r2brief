@@ -1,5 +1,3 @@
-"""Storage helpers."""
-
 from .chat import ChatDAO
 from .dao import TrajectoryDAO
 from .db import Database

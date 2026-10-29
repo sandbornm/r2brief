@@ -1,5 +1,3 @@
-"""Domain models for persisted trajectories and analysis artifacts."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -9,20 +7,18 @@ import uuid
 
 
 def _utcnow() -> datetime:
-    """Return current UTC time as timezone-aware datetime."""
     return datetime.now(timezone.utc)
 
 
 @dataclass(slots=True)
 class CodeSnippet:
-    """A single disassembly snippet from a binary block."""
     
     address: str
     function_name: str | None = None
     function_addr: str | None = None
     bytes_hex: str | None = None
     instructions: list[dict[str, str]] = field(default_factory=list)
-    source: str = "unknown"  # "angr" | "radare2" | "capstone"
+    source: str = "unknown"
     created_at: datetime = field(default_factory=_utcnow)
     
     def to_dict(self) -> dict[str, Any]:
@@ -57,7 +53,6 @@ class CodeSnippet:
 
 @dataclass(slots=True)
 class SnippetStore:
-    """Collection of code snippets from an analysis session."""
     
     session_id: str
     binary_path: str
@@ -70,7 +65,6 @@ class SnippetStore:
         self.updated_at = _utcnow()
     
     def add_from_angr(self, block_data: dict[str, Any]) -> None:
-        """Add snippets from angr CFG block data."""
         instructions = []
         for insn in block_data.get("instructions", []):
             instructions.append({
@@ -91,7 +85,6 @@ class SnippetStore:
             ))
     
     def add_from_radare2(self, block_data: dict[str, Any]) -> None:
-        """Add snippets from radare2 function CFG block data."""
         instructions = []
         for insn in block_data.get("disassembly", []):
             instructions.append({

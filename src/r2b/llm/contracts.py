@@ -1,11 +1,3 @@
-"""Provider-neutral contracts for model responses and host-owned tools.
-
-The model may *request* a tool.  Only :class:`LLMBridge` may execute one,
-and only when the caller supplies both an executor and an explicit allowlist.
-This keeps analysis deterministic unless its host deliberately opts into a
-bounded model/tool loop.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -14,7 +6,6 @@ from typing import Any, Callable, Mapping
 
 
 class LLMTransport(str, Enum):
-    """Wire protocols supported by the built-in clients."""
 
     RESPONSES = "responses"
     MESSAGES = "messages"
@@ -24,7 +15,6 @@ class LLMTransport(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class ProviderCapabilities:
-    """Features r2b can normalize for a provider/transport pair."""
 
     tools: bool = False
     reasoning: bool = False
@@ -42,7 +32,6 @@ class LLMUsage:
 
 @dataclass(frozen=True, slots=True)
 class FunctionTool:
-    """A JSON-schema function exposed to a model, not an executable callback."""
 
     name: str
     description: str
@@ -74,7 +63,6 @@ class ToolResult:
 
 @dataclass(frozen=True, slots=True)
 class LLMResponse:
-    """Normalized response returned by every provider client."""
 
     text: str
     provider: str
@@ -92,7 +80,6 @@ ToolExecutor = Callable[[ToolCall], Any]
 
 
 def tool_map(*tools: FunctionTool) -> dict[str, FunctionTool]:
-    """Build a name-indexed tool map and reject ambiguous definitions."""
     mapped = {tool.name: tool for tool in tools}
     if len(mapped) != len(tools):
         raise ValueError("Tool names must be unique")

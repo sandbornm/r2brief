@@ -1,5 +1,3 @@
-"""Binwalk v3 extractor. Scan JSON plus optional ``-e`` into an isolated dir."""
-
 from __future__ import annotations
 
 import json
@@ -40,12 +38,6 @@ _KIND_BY_NAME = {
 
 
 def find_binwalk3() -> str | None:
-    """Return a Binwalk v3 executable, including Homebrew's ``binwalk`` name.
-
-    Some distributions install v3 as ``binwalk3`` so it can coexist with v2.
-    Homebrew exposes the same program as ``binwalk``.  Extraction depends on
-    the v3 JSON CLI, so never accept an unversioned v2 binary by accident.
-    """
     explicit = shutil.which("binwalk3")
     if explicit:
         return explicit
@@ -170,7 +162,6 @@ def _confidence(raw: Any) -> float:
 
 
 def _index_extracted(output_dir: Path) -> dict[int, str]:
-    """Map Binwalk's hexadecimal ``*.extracted/<offset>/`` directories."""
     found: dict[int, str] = {}
     if not output_dir.is_dir():
         return found
@@ -196,7 +187,6 @@ def _recover_squashfs(
     hits: list[dict[str, Any]],
     limits: ExtractLimits,
 ) -> list[str]:
-    """Use unsquashfs when Binwalk v3's sasquatch-only extractor fails."""
     unsquashfs = shutil.which("unsquashfs")
     if not unsquashfs:
         return []

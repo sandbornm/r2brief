@@ -1,10 +1,3 @@
-"""Lightweight firmware container inventory.
-
-This adapter is intentionally dependency-free for the common path. It turns a
-generic firmware blob into a small inventory of embedded components that can be
-used as targets for later Ghidra/angr/radare2 passes.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -159,7 +152,6 @@ _STRING_RULES: tuple[_StringRule, ...] = (
 
 @dataclass(slots=True)
 class FirmwareAdapter:
-    """Detect embedded firmware components without requiring extraction tools."""
 
     name: str = "firmware"
     artifacts_dir: Path | None = None
@@ -196,8 +188,6 @@ class FirmwareAdapter:
         top_level_format = self._classify_top_level(data, artifacts)
         is_executable = top_level_format in {"elf", "pe", "macho", "fat_macho"}
         if is_executable:
-            # Two-byte JFFS2 markers fire inside ARM/Thumb code. An ELF is the
-            # program; the same principle applies to PE and Mach-O subjects.
             artifacts = [
                 artifact
                 for artifact in artifacts

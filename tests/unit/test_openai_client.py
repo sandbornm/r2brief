@@ -131,7 +131,6 @@ def test_rate_limit_message_distinguishes_z_ai_empty_credit():
 
 
 class _StubCompletions:
-    """Capture create() params; return one canned completion."""
 
     def __init__(self, content: str) -> None:
         self.calls: list[dict] = []

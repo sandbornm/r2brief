@@ -1,11 +1,3 @@
-"""Content-addressed artifact DAG.
-
-Extractors (binwalk3, unblob) and in-process inventory (firmware adapter, r2)
-normalize into one graph. Nodes for byte-backed objects carry SHA-256.
-Functions, imports, strings, and observed endpoints are keyed by parent digest
-plus offset. Their labels remain evidence categories, not behavior claims.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -111,7 +103,6 @@ def build_artifact_dag(
     run_extractors: bool = True,
     extract_elf: bool = False,
 ) -> dict[str, Any]:
-    """Build a DAG from inventory plus optional sandboxed extractors."""
     subject = subject.resolve()
     digest = firmware.get("sha256") if isinstance(firmware, dict) and firmware.get("sha256") else None
     if not digest:
@@ -144,7 +135,6 @@ def build_artifact_dag(
 
 
 def compact_dag(dag: dict[str, Any], *, max_nodes: int = 40) -> dict[str, Any]:
-    """Briefing-sized view: root + high-value children, not the full tree."""
     nodes = [n for n in dag.get("nodes") or [] if isinstance(n, dict)]
     preferred = {
         "container",
@@ -519,7 +509,6 @@ def _ingest_extracted_code(
     source_tool: str,
     max_files: int,
 ) -> None:
-    """Add analyzable ELF and script children from an unpacked filesystem."""
     candidates = sorted((path for path in root.rglob("*") if path.is_file()), key=lambda path: str(path))
     added = 0
     for path in candidates:

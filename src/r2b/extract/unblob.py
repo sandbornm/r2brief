@@ -1,5 +1,3 @@
-"""Unblob extractor. Optional; skipped when the CLI is missing."""
-
 from __future__ import annotations
 
 import json
@@ -54,7 +52,6 @@ class UnblobExtractor:
         if result.returncode:
             result.notes.append(f"unblob exited {result.returncode}: {result.stderr[-1000:].strip()}")
         hits = _parse_report(report_path, subject=subject)
-        # Chunk reports do not carry extracted paths. Keep the actual files too.
         known_paths = {hit.get("extracted_path") for hit in hits}
         hits.extend(hit for hit in _walk_tree(extract_dir)
                     if hit.get("extracted_path") not in known_paths)
@@ -63,7 +60,6 @@ class UnblobExtractor:
 
 def _parse_report(path: Path, *, subject: Path | None = None) -> list[dict[str, Any]]:
     if not path.is_file():
-        # unblob sometimes writes next to the extract dir.
         sibling = path.parent / "unblob" / "unblob.json"
         path = sibling if sibling.is_file() else path
     if not path.is_file():

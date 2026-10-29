@@ -17,7 +17,7 @@ describe('SessionList', () => {
       session_id: 'session-2',
       binary_path: '/tmp/path/to/binary2.bin',
       title: null,
-      created_at: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+      created_at: new Date(Date.now() - 86400000).toISOString(),
       updated_at: new Date(Date.now() - 86400000).toISOString(),
       message_count: 3,
     },
@@ -44,7 +44,6 @@ describe('SessionList', () => {
     );
 
     expect(screen.getByText('Binary One')).toBeInTheDocument();
-    // Second session has no title, should show filename
     expect(screen.getByText('binary2.bin')).toBeInTheDocument();
   });
 
@@ -97,7 +96,6 @@ describe('SessionList', () => {
 
     await user.click(screen.getByRole('button', { name: /actions for binary one/i }));
 
-    // Click delete
     const deleteMenuItem = await screen.findByText('Delete');
     await user.click(deleteMenuItem);
 
@@ -113,8 +111,6 @@ describe('SessionList', () => {
       />
     );
 
-    // First session should show something like "a few seconds ago" or "just now"
-    // Second session should show "a day ago" or "1 day ago"
     const timeElements = screen.getAllByText(/ago|just now/i);
     expect(timeElements.length).toBeGreaterThanOrEqual(2);
   });

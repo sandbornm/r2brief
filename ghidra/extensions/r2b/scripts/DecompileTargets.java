@@ -1,6 +1,3 @@
-// Targeted post-script: decompile one or more functions by hex address.
-// Args: <output-path> <hex-addr> [hex-addr...]
-// Each addr may be a call site; the containing function is decompiled.
 import ghidra.app.script.GhidraScript;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileOptions;
@@ -107,7 +104,6 @@ public class DecompileTargets extends GhidraScript {
             try {
                 addrs.add(space.getAddress(candidate.longValue()));
             } catch (AddressOutOfBoundsException e) {
-                // skip unmapped / overflowed candidate
             }
         }
         return addrs.toArray(new Address[0]);

@@ -38,25 +38,21 @@ import InsightsPanel from './InsightsPanel';
 import DisassemblyViewer from './DisassemblyViewer';
 import FirmwareTriagePanel from './FirmwareTriagePanel';
 
-// Lazy load heavy components for better initial load performance
 const CFGViewer = lazy(() => import('./CFGViewer'));
 const DecompilerPanel = lazy(() => import('./DecompilerPanel'));
 const DWARFPanel = lazy(() => import('./DWARFPanel'));
 const GEFPanel = lazy(() => import('./GEFPanel'));
 const GhidraScriptingPanel = lazy(() => import('./GhidraScriptingPanel'));
 
-// Import and re-export CFGContext type for consumers
 import type { CFGContext } from './CFGViewer';
 export type { CFGContext };
 
-// Loading fallback for lazy components
 const ComponentLoader = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
     <CircularProgress size={32} />
   </Box>
 );
 
-// Local storage key for annotations
 const ANNOTATIONS_STORAGE_KEY = 'r2b-annotations';
 
 interface ResultViewerProps {
@@ -100,7 +96,6 @@ const deriveToolScorecard = (toolStatus: Record<string, ToolStatusSummary>): Rec
   );
 };
 
-// Load annotations from localStorage
 const loadAnnotations = (binaryPath: string): AssemblyAnnotation[] => {
   try {
     const stored = localStorage.getItem(ANNOTATIONS_STORAGE_KEY);
@@ -112,7 +107,6 @@ const loadAnnotations = (binaryPath: string): AssemblyAnnotation[] => {
   }
 };
 
-// Save annotations to localStorage
 const saveAnnotations = (binaryPath: string, annotations: AssemblyAnnotation[]) => {
   try {
     const stored = localStorage.getItem(ANNOTATIONS_STORAGE_KEY);
@@ -141,7 +135,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
   const [view, setView] = useState<ViewTab>('overview');
   const [annotations, setAnnotations] = useState<AssemblyAnnotation[]>([]);
 
-  // Load annotations when result or session changes
   useEffect(() => {
     const loadFromServer = async () => {
       if (sessionId) {
@@ -156,7 +149,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
           // Fall back to localStorage
         }
       }
-      // Fallback to localStorage
       if (result?.binary) {
         setAnnotations(loadAnnotations(result.binary));
       } else {
@@ -166,11 +158,9 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
     loadFromServer();
   }, [result?.binary, sessionId]);
 
-  // Handle annotation updates (save to server if session available, else localStorage)
   const handleAnnotate = useCallback(async (address: string, note: string) => {
     if (!result?.binary) return;
     
-    // Optimistically update local state
     setAnnotations((prev) => {
       const filtered = prev.filter((a) => a.address !== address);
       if (note.trim()) {
@@ -179,7 +169,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
       return filtered;
     });
     
-    // Try to save to server if we have a session
     if (sessionId) {
       try {
         await fetch(`/api/chats/${sessionId}/annotations`, {
@@ -192,7 +181,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
       }
     }
     
-    // Always save to localStorage as backup
     setAnnotations((current) => {
       saveAnnotations(result.binary, current);
       return current;
@@ -222,7 +210,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
   const quickScan = result?.quick_scan ?? {};
   const deepScan = result?.deep_scan ?? {};
 
-  // Extract data from radare2
   const r2Quick = (quickScan.radare2 ?? {}) as Record<string, unknown>;
   const r2Deep = (deepScan.radare2 ?? {}) as Record<string, unknown>;
   const angrDeep = (deepScan.angr ?? {}) as Record<string, unknown>;
@@ -243,7 +230,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
   );
   const evidenceCoverage = (result?.evidence_coverage ?? null) as EvidenceCoverage | null;
 
-  // Binary metadata
   const r2QuickInfo = r2Quick.info as Record<string, unknown> | undefined;
   const binInfo = (r2QuickInfo?.bin ?? {}) as Record<string, unknown>;
   const coreInfo = (r2QuickInfo?.core ?? {}) as Record<string, unknown>;
@@ -259,9 +245,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
   const formatDisplay = format !== 'unknown' ? format : (firmwareFormat ?? format);
   const osDisplay = os !== 'unknown' ? os : (firmwareContainer ?? os);
 
-  // Compute a more readable architecture string
-  // For ARM: bits=16 means Thumb mode (still 32-bit architecture)
-  // bits=32 means ARM mode, bits=64 means AArch64
   const getArchDisplay = (): { short: string; full: string } => {
     const lowerArch = rawArch.toLowerCase();
     const lowerMachine = machine.toLowerCase();
@@ -271,7 +254,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
         return { short: 'arm64', full: 'ARM64 (AArch64)' };
       }
       if (bits === 16) {
-        // Thumb mode - check machine for more context
         if (lowerMachine.includes('v7') || lowerMachine.includes('cortex')) {
           return { short: 'arm32', full: 'ARM32 (Thumb)' };
         }
@@ -301,13 +283,11 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
       return { short: bits === 64 ? 'ppc64' : 'ppc32', full: `PowerPC (${bits ?? '?'}-bit)` };
     }
     
-    // Fallback
     return { short: rawArch, full: bits ? `${rawArch} (${bits}-bit)` : rawArch };
   };
 
   const archDisplay = getArchDisplay();
 
-  // Counts
   const functions = Array.isArray(r2Deep.functions) ? r2Deep.functions : [];
   const strings = Array.isArray(r2Quick.strings) ? r2Quick.strings : [];
   const imports = Array.isArray(r2Quick.imports) ? r2Quick.imports : [];
@@ -315,19 +295,16 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
   const firmwareArtifacts = Array.isArray(firmwareQuick?.embedded_artifacts) ? firmwareQuick.embedded_artifacts : [];
   const firmwareTargets = Array.isArray(firmwareQuick?.recommended_targets) ? firmwareQuick.recommended_targets : [];
   
-  // angr data - properly extract CFG nodes, edges, and stats
   const angrCfg = (angrDeep.cfg ?? {}) as Record<string, unknown>;
   const angrNodes = Array.isArray(angrCfg.nodes) ? angrCfg.nodes : [];
   const angrEdges = Array.isArray(angrCfg.edges) ? angrCfg.edges : [];
   const angrActive = typeof angrDeep.active === 'number' ? angrDeep.active : 0;
   const angrFound = typeof angrDeep.found === 'number' ? angrDeep.found : 0;
 
-  // Disassembly
   const entryDisasm = typeof r2Deep.entry_disassembly === 'string' ? r2Deep.entry_disassembly : null;
   const generalDisasm = typeof r2Deep.disassembly === 'string' ? r2Deep.disassembly : null;
   const disasmText = entryDisasm || generalDisasm || 'No disassembly available';
 
-  // Top functions sorted by size
   const topFunctions = useMemo(() => {
     return functions
       .filter((fn: Record<string, unknown>) => typeof fn.offset === 'number')
@@ -340,7 +317,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
       }));
   }, [functions]);
 
-  // Interesting strings
   const interestingStrings = useMemo(() => {
     const seen = new Set<string>();
     return strings
@@ -354,7 +330,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
       .slice(0, 30);
   }, [strings]);
 
-  // Top imports
   const topImports = useMemo(() => {
     return imports
       .slice(0, 15)
@@ -383,7 +358,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
       </Box>
     ) : (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
       <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5 }}>
         <Stack direction="row" alignItems="center" spacing={2}>
           <MemoryIcon sx={{ color: 'primary.main' }} />
@@ -444,7 +418,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
         </Stack>
       </Paper>
 
-      {/* Simplified 4-Tab Structure */}
       <Tabs
         value={view}
         onChange={(_, v) => setView(v)}
@@ -456,9 +429,7 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
         <Tab value="tools" label="Tools" icon={<TerminalIcon sx={{ fontSize: 16 }} />} iconPosition="start" sx={{ minHeight: 36, py: 0 }} />
       </Tabs>
 
-      {/* Content */}
       <Box sx={{ flex: 1, overflow: 'auto', mt: 1.5 }}>
-        {/* OVERVIEW TAB - Binary info, Profile, Tool attribution */}
         {view === 'overview' && (
           <Stack spacing={1.5}>
             {result?.briefing && (
@@ -524,10 +495,8 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
           </Stack>
         )}
 
-        {/* CODE TAB - Disassembly, Decompiler, DWARF */}
         {view === 'code' && (
           <Stack spacing={1.5}>
-            {/* Disassembly */}
             <Paper variant="outlined" sx={{ p: 1.5 }}>
               <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 1, display: 'block' }}>
                 Disassembly
@@ -541,7 +510,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
               />
             </Paper>
 
-            {/* Decompiler (if available) */}
             {ghidraDeep && ghidraDeep.decompiled_count > 0 && (
               <Paper variant="outlined" sx={{ height: 400, overflow: 'hidden' }}>
                 <Suspense fallback={<ComponentLoader />}>
@@ -553,7 +521,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
               </Paper>
             )}
 
-            {/* DWARF Debug Info */}
             <Paper variant="outlined" sx={{ height: 300, overflow: 'hidden' }}>
               <Suspense fallback={<ComponentLoader />}>
                 <DWARFPanel
@@ -565,7 +532,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
           </Stack>
         )}
 
-        {/* ANALYSIS TAB - Functions, Strings, CFG */}
         {view === 'analysis' && (
           <Stack spacing={1.5}>
             {firmwareQuick && (
@@ -576,7 +542,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
               />
             )}
 
-            {/* Functions and Strings side by side */}
             <Grid container spacing={1.5}>
               <Grid item xs={12} md={6}>
                 <Paper variant="outlined" sx={{ p: 1.5, maxHeight: 300, overflow: 'auto' }}>
@@ -627,7 +592,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
               </Grid>
             </Grid>
 
-            {/* CFG Viewer */}
             <Paper variant="outlined" sx={{ height: 500 }}>
               <Suspense fallback={<ComponentLoader />}>
                 <CFGViewer
@@ -644,10 +608,8 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
           </Stack>
         )}
 
-        {/* TOOLS TAB - Scripting, Dynamic analysis */}
         {view === 'tools' && (
           <Stack spacing={1.5}>
-            {/* Scripting Panel */}
             <Paper variant="outlined" sx={{ height: 400, overflow: 'hidden' }}>
               <Suspense fallback={<ComponentLoader />}>
                 <GhidraScriptingPanel
@@ -657,7 +619,6 @@ const ResultViewer: FC<ResultViewerProps> = memo(({ result, sessionId, onAskAbou
               </Suspense>
             </Paper>
 
-            {/* Dynamic Analysis (GEF) if available */}
             {gefDeep && gefDeep.trace && (
               <Paper variant="outlined" sx={{ height: 400, overflow: 'hidden' }}>
                 <Suspense fallback={<ComponentLoader />}>

@@ -11,10 +11,9 @@ interface DisassemblyViewerProps {
   arch?: string;
   annotations?: AssemblyAnnotation[];
   onAnnotate?: (address: string, note: string) => void;
-  onAskAbout?: (selectedCode: string) => void;  // For asking Claude about selected code
+  onAskAbout?: (selectedCode: string) => void;
 }
 
-// Instruction category for grouping in search
 type InstructionCategory = 'data' | 'load_store' | 'branch' | 'system' | 'simd' | 'crypto' | 'atomic';
 
 interface InstructionDoc {
@@ -25,9 +24,7 @@ interface InstructionDoc {
   example?: string;
 }
 
-// ARM instruction documentation (Thumb/ARM32/ARM64) - Enhanced version
 const ARM_DOCS_EXTENDED: Record<string, InstructionDoc> = {
-  // Data processing
   'mov': { desc: 'Move: Copy value to register', category: 'data', syntax: 'MOV Rd, Op2', example: 'mov r0, #1' },
   'movs': { desc: 'Move with flags update: Copy value and update condition flags', category: 'data', flags: 'NZCV' },
   'movw': { desc: 'Move wide: Load 16-bit immediate into lower halfword', category: 'data', syntax: 'MOVW Rd, #imm16' },
@@ -109,7 +106,6 @@ const ARM_DOCS_EXTENDED: Record<string, InstructionDoc> = {
   'cneg': { desc: 'Conditional negate: Rd = cond ? -Rn : Rn', category: 'data' },
   'ccmp': { desc: 'Conditional compare: if cond, compare Rn with Op2, else set flags to nzcv', category: 'data' },
   'ccmn': { desc: 'Conditional compare negative', category: 'data' },
-  // Load/Store
   'ldr': { desc: 'Load register: Load 32/64-bit value from memory', category: 'load_store', example: 'ldr x0, [x1, #8]' },
   'ldrb': { desc: 'Load register byte: Load 8-bit value, zero-extend', category: 'load_store' },
   'ldrh': { desc: 'Load register halfword: Load 16-bit value, zero-extend', category: 'load_store' },
@@ -142,7 +138,6 @@ const ARM_DOCS_EXTENDED: Record<string, InstructionDoc> = {
   'push': { desc: 'Push registers onto stack: SP -= 4×n, store registers', category: 'load_store' },
   'pop': { desc: 'Pop registers from stack: Load registers, SP += 4×n', category: 'load_store' },
   'prfm': { desc: 'Prefetch memory: Hint to cache controller', category: 'load_store', syntax: 'PRFM type, [Xn]' },
-  // Branch
   'b': { desc: 'Branch: Unconditional jump to label (±128MB)', category: 'branch', example: 'b label' },
   'br': { desc: 'Branch to register: Jump to address in register', category: 'branch', syntax: 'BR Xn' },
   'bl': { desc: 'Branch with link: Call subroutine, save return address in LR (X30)', category: 'branch', example: 'bl printf' },
@@ -174,7 +169,6 @@ const ARM_DOCS_EXTENDED: Record<string, InstructionDoc> = {
   'it': { desc: 'If-Then: Make following 1-4 instructions conditional', category: 'branch' },
   'ite': { desc: 'If-Then-Else: Conditional block with else clause', category: 'branch' },
   'itttt': { desc: 'If-Then-Then-Then-Then: 4 conditional instructions', category: 'branch' },
-  // System
   'svc': { desc: 'Supervisor call: Trigger system call exception (syscall #imm)', category: 'system', syntax: 'SVC #imm', example: 'svc #0' },
   'swi': { desc: 'Software interrupt: Trigger system call (legacy name for SVC)', category: 'system' },
   'hvc': { desc: 'Hypervisor call: Call hypervisor from EL1', category: 'system' },
@@ -201,7 +195,6 @@ const ARM_DOCS_EXTENDED: Record<string, InstructionDoc> = {
   'sys': { desc: 'System instruction', category: 'system' },
   'sysl': { desc: 'System instruction with result', category: 'system' },
   'eret': { desc: 'Exception return: Return from exception handler', category: 'system' },
-  // SIMD/VFP (NEON)
   'fmov': { desc: 'Floating-point move: Move between FP and GP registers', category: 'simd' },
   'fadd': { desc: 'Floating-point add', category: 'simd' },
   'fsub': { desc: 'Floating-point subtract', category: 'simd' },
@@ -245,7 +238,6 @@ const ARM_DOCS_EXTENDED: Record<string, InstructionDoc> = {
   'ins': { desc: 'Insert: Copy element from GP or vector register', category: 'simd' },
   'umov': { desc: 'Unsigned move: Copy element to GP register', category: 'simd' },
   'smov': { desc: 'Signed move: Copy element with sign extension', category: 'simd' },
-  // Atomic operations (ARM64)
   'ldadd': { desc: 'Atomic add: [Xn] = [Xn] + Xs, return old value', category: 'atomic' },
   'ldadda': { desc: 'Atomic add with acquire', category: 'atomic' },
   'ldaddl': { desc: 'Atomic add with release', category: 'atomic' },
@@ -267,7 +259,6 @@ const ARM_DOCS_EXTENDED: Record<string, InstructionDoc> = {
   'casl': { desc: 'Compare and swap with release', category: 'atomic' },
   'casal': { desc: 'Compare and swap with acquire-release', category: 'atomic' },
   'casp': { desc: 'Compare and swap pair', category: 'atomic' },
-  // Crypto extensions
   'aese': { desc: 'AES single round encryption', category: 'crypto' },
   'aesd': { desc: 'AES single round decryption', category: 'crypto' },
   'aesmc': { desc: 'AES mix columns', category: 'crypto' },
@@ -282,16 +273,13 @@ const ARM_DOCS_EXTENDED: Record<string, InstructionDoc> = {
   'sha256h2': { desc: 'SHA256 hash update part 2', category: 'crypto' },
   'sha256su0': { desc: 'SHA256 schedule update 0', category: 'crypto' },
   'sha256su1': { desc: 'SHA256 schedule update 1', category: 'crypto' },
-  // Thumb-2 specific
   'ldr.w': { desc: 'Load register wide: 32-bit Thumb-2 LDR encoding', category: 'load_store' },
   'str.w': { desc: 'Store register wide: 32-bit Thumb-2 STR encoding', category: 'load_store' },
   'add.w': { desc: 'Add wide: 32-bit Thumb-2 ADD encoding', category: 'data' },
 };
 
 
-// x86/x64 instruction documentation
 const X86_DOCS: Record<string, string> = {
-  // Data movement
   'mov': 'Move: Copy source to destination',
   'movzx': 'Move with zero-extend: Copy and zero-extend to larger size',
   'movsx': 'Move with sign-extend: Copy and sign-extend to larger size',
@@ -306,7 +294,6 @@ const X86_DOCS: Record<string, string> = {
   'cmovne': 'Conditional move if not equal: Move if ZF=0',
   'cmovg': 'Conditional move if greater (signed)',
   'cmovl': 'Conditional move if less (signed)',
-  // Arithmetic
   'add': 'Add: dest = dest + src',
   'sub': 'Subtract: dest = dest - src',
   'imul': 'Signed multiply: Signed integer multiplication',
@@ -318,7 +305,6 @@ const X86_DOCS: Record<string, string> = {
   'neg': 'Negate: dest = -dest (two\'s complement)',
   'adc': 'Add with carry: dest = dest + src + CF',
   'sbb': 'Subtract with borrow: dest = dest - src - CF',
-  // Logic
   'and': 'Bitwise AND: dest = dest & src',
   'or': 'Bitwise OR: dest = dest | src',
   'xor': 'Bitwise XOR: dest = dest ^ src',
@@ -328,10 +314,8 @@ const X86_DOCS: Record<string, string> = {
   'sar': 'Shift right arithmetic: dest = dest >> count (sign fill)',
   'rol': 'Rotate left: Circular shift left',
   'ror': 'Rotate right: Circular shift right',
-  // Compare/Test
   'cmp': 'Compare: Set flags based on dest - src',
   'test': 'Test bits: Set flags based on dest & src',
-  // Control flow
   'jmp': 'Jump: Unconditional jump to address',
   'call': 'Call: Push return address, jump to function',
   'ret': 'Return: Pop return address, jump to it',
@@ -351,24 +335,20 @@ const X86_DOCS: Record<string, string> = {
   'jns': 'Jump if not sign (positive): SF=0',
   'jo': 'Jump if overflow: OF=1',
   'jno': 'Jump if not overflow: OF=0',
-  // Stack frame
   'enter': 'Make stack frame: Push BP, BP=SP, allocate locals',
   'leave': 'Destroy stack frame: SP=BP, pop BP',
-  // String ops
   'rep': 'Repeat prefix: Repeat following instruction CX times',
   'movsb': 'Move string byte: Copy byte from [SI] to [DI]',
   'stosb': 'Store string byte: Store AL at [DI]',
   'lodsb': 'Load string byte: Load [SI] into AL',
   'cmpsb': 'Compare string bytes: Compare [SI] with [DI]',
   'scasb': 'Scan string byte: Compare AL with [DI]',
-  // System
   'syscall': 'System call: Invoke OS kernel (x64)',
   'int': 'Interrupt: Trigger software interrupt',
   'nop': 'No operation: Do nothing',
   'hlt': 'Halt: Stop execution until interrupt',
   'cpuid': 'CPU identification: Query processor info',
   'rdtsc': 'Read timestamp counter: Get cycle count',
-  // SSE/AVX
   'movss': 'Move scalar single: Move 32-bit float',
   'movsd': 'Move scalar double: Move 64-bit float',
   'movaps': 'Move aligned packed single: Move 128-bit aligned',
@@ -383,39 +363,32 @@ const X86_DOCS: Record<string, string> = {
   'endbr32': 'End branch 32: CET indirect branch tracking marker',
 };
 
-// Get instruction docs based on architecture - returns extended info
 const getInstructionDocsExtended = (mnemonic: string, arch: string): InstructionDoc | null => {
   const normalizedMnemonic = mnemonic.toLowerCase().replace(/\.w$/, '');
 
-  // Check for conditional suffixes on ARM
   if (arch.includes('arm') || arch.includes('thumb') || arch.includes('aarch64')) {
-    // Strip condition codes for lookup
     const armBase = normalizedMnemonic.replace(/(eq|ne|cs|cc|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al|hs|lo)$/, '');
     if (ARM_DOCS_EXTENDED[normalizedMnemonic]) return ARM_DOCS_EXTENDED[normalizedMnemonic];
     if (ARM_DOCS_EXTENDED[armBase]) return ARM_DOCS_EXTENDED[armBase];
   }
 
-  // x86 uses simple docs for now
   if (arch.includes('x86') || arch.includes('amd64') || arch.includes('i386')) {
     if (X86_DOCS[normalizedMnemonic]) {
       return { desc: X86_DOCS[normalizedMnemonic], category: 'data' };
     }
   }
 
-  // Fallback: check ARM then x86
   if (ARM_DOCS_EXTENDED[normalizedMnemonic]) return ARM_DOCS_EXTENDED[normalizedMnemonic];
   if (X86_DOCS[normalizedMnemonic]) return { desc: X86_DOCS[normalizedMnemonic], category: 'data' };
 
   return null;
 };
 
-// Simple string lookup for backward compatibility
 const getInstructionDocs = (mnemonic: string, arch: string): string | null => {
   const extended = getInstructionDocsExtended(mnemonic, arch);
   return extended?.desc ?? null;
 };
 
-// Category display names and colors
 const CATEGORY_INFO: Record<InstructionCategory, { label: string; color: string }> = {
   data: { label: 'Data Processing', color: '#9c27b0' },
   load_store: { label: 'Load/Store', color: '#2196f3' },
@@ -438,35 +411,24 @@ interface ParsedInstruction {
   isEmpty?: boolean;
 }
 
-// Parse a single line of radare2 disassembly
 const parseDisasmLine = (line: string): ParsedInstruction => {
   const trimmed = line.trimEnd();
   
-  // Empty line
   if (!trimmed) {
     return { raw: line, isEmpty: true };
   }
   
-  // Pure comment line (starts with ; after optional whitespace)
   if (/^\s*;/.test(trimmed)) {
     return { raw: line, isComment: true, comment: trimmed };
   }
   
-  // Label line (ends with : and has no instruction)
   if (/^\s*\w+:$/.test(trimmed) || /^[│├└─\s]*;--\s*\w+:?/.test(trimmed)) {
     return { raw: line, isLabel: true };
   }
   
-  // Try to parse standard radare2 format: 
-  // │ │ 0x000003fc 4ff0000b mov.w fp, 0 ; [13] -r-x section...
-  // or simpler: 0x000003fc 4ff0000b mov.w fp, 0
-  
   const patterns = [
-    // Full r2 format with tree chars
     /^([│├└─\s]*)\s*(0x[0-9a-f]+)\s+([0-9a-f]+)\s+(\w+(?:\.\w+)?)\s*([^;]*)?(?:;\s*(.*))?$/i,
-    // Simple format
     /^\s*(0x[0-9a-f]+):\s*([0-9a-f]+)\s+(\w+(?:\.\w+)?)\s*([^;]*)?(?:;\s*(.*))?$/i,
-    // Another common format
     /^\s*(0x[0-9a-f]+)\s+(\w+(?:\.\w+)?)\s*([^;]*)?(?:;\s*(.*))?$/i,
   ];
   
@@ -503,7 +465,6 @@ const parseDisasmLine = (line: string): ParsedInstruction => {
     }
   }
   
-  // Fallback: treat as raw line
   return { raw: line };
 };
 
@@ -511,16 +472,12 @@ const parseDisasmLine = (line: string): ParsedInstruction => {
 // Reference: https://developer.arm.com/documentation/dui0489/h/arm-and-thumb-instructions/instruction-summary
 const getARMDocUrl = (mnemonic: string): string => {
   const cleanMnemonic = mnemonic.toLowerCase().replace(/\.w$/, '').replace(/(eq|ne|cs|cc|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al|hs|lo)$/, '');
-  // ARM Developer documentation - Thumb/ARM instruction reference
-  // The URL pattern depends on the instruction category
   return `https://developer.arm.com/documentation/dui0489/h/arm-and-thumb-instructions/${cleanMnemonic.toUpperCase()}`;
 };
 
 
-// Build x86 documentation URL
 const getX86DocUrl = (mnemonic: string): string => {
   const cleanMnemonic = mnemonic.toLowerCase();
-  // Use Felix Cloutier's x86 reference (community standard)
   return `https://www.felixcloutier.com/x86/${cleanMnemonic}`;
 };
 
@@ -536,7 +493,6 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
   
   const isDark = theme.palette.mode === 'dark';
   
-  // Colors for syntax highlighting
   const colors = {
     address: isDark ? '#6a9fb5' : '#0550ae',
     bytes: isDark ? '#555' : '#999',
@@ -549,36 +505,29 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
     tree: isDark ? '#333' : '#ddd',
   };
   
-  // Get instruction documentation (extended version for rich tooltips)
   const docs = parsed.mnemonic ? getInstructionDocs(parsed.mnemonic, arch) : null;
   const extendedDocs = parsed.mnemonic ? getInstructionDocsExtended(parsed.mnemonic, arch) : null;
   
-  // Highlight operands (registers, immediates, memory refs)
   const highlightOperands = useCallback((operands: string) => {
     if (!operands) return null;
     
     const parts: JSX.Element[] = [];
     let key = 0;
     
-    // Split by common delimiters while preserving them
     const tokens = operands.split(/(\s+|,|\[|\]|\{|\})/);
     
     for (const token of tokens) {
       if (!token) continue;
       
-      // Register patterns
       if (/^(r\d+|sp|lr|pc|fp|ip|sl|sb|[re]?[abcd]x|[re]?[sd]i|[re]?bp|[re]?sp|r\d{1,2}[dwb]?|[xy]mm\d+|zmm\d+)$/i.test(token)) {
         parts.push(<span key={key++} style={{ color: colors.register }}>{token}</span>);
       }
-      // Immediate values (hex or decimal)
       else if (/^#?-?0x[0-9a-f]+$/i.test(token) || /^#?-?\d+$/.test(token)) {
         parts.push(<span key={key++} style={{ color: colors.immediate }}>{token}</span>);
       }
-      // Memory brackets
       else if (token === '[' || token === ']') {
         parts.push(<span key={key++} style={{ color: colors.memory }}>{token}</span>);
       }
-      // Everything else
       else {
         parts.push(<span key={key++}>{token}</span>);
       }
@@ -587,7 +536,6 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
     return parts;
   }, [colors]);
   
-  // Handle special line types
   if (parsed.isEmpty) {
     return <Box sx={{ height: '1.4em' }} />;
   }
@@ -608,9 +556,7 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
     );
   }
   
-  // If we couldn't parse it, check for tree characters and try to extract
   if (!parsed.mnemonic) {
-    // Still try to colorize any recognizable parts
     const treeMatch = parsed.raw.match(/^([│├└─\s]*)(.*)/);
     if (treeMatch && treeMatch[1]) {
       return (
@@ -623,7 +569,6 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
     return <Box>{parsed.raw}</Box>;
   }
   
-  // Render parsed instruction with syntax highlighting
   const instructionContent = (
     <Box
       component="span"
@@ -641,29 +586,24 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
         transition: 'background-color 0.15s',
       }}
     >
-      {/* Address */}
       {parsed.address && (
         <span style={{ color: colors.address, minWidth: '10ch' }}>{parsed.address}</span>
       )}
       
-      {/* Bytes */}
       {parsed.bytes && (
         <span style={{ color: colors.bytes, minWidth: '8ch', fontSize: '0.9em' }}>{parsed.bytes}</span>
       )}
       
-      {/* Mnemonic */}
       <span style={{ color: colors.mnemonic, fontWeight: 500, minWidth: '6ch' }}>
         {parsed.mnemonic}
       </span>
       
-      {/* Operands */}
       {parsed.operands && (
         <span style={{ minWidth: '20ch' }}>
           {highlightOperands(parsed.operands)}
         </span>
       )}
       
-      {/* Comment */}
       {parsed.comment && (
         <span style={{ color: colors.comment, marginLeft: '2ch' }}>
           ; {parsed.comment}
@@ -672,21 +612,18 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
     </Box>
   );
   
-  // Build documentation URL based on architecture
   const isARM = arch.includes('arm') || arch.includes('thumb');
   const isX86 = arch.includes('x86') || arch.includes('amd64') || arch.includes('i386');
   const docUrl = parsed.mnemonic 
     ? (isARM ? getARMDocUrl(parsed.mnemonic) : isX86 ? getX86DocUrl(parsed.mnemonic) : null)
     : null;
 
-  // Wrap with tooltip if we have docs
   if (docs && extendedDocs) {
     const categoryInfo = CATEGORY_INFO[extendedDocs.category];
     return (
       <Tooltip
         title={
           <Box sx={{ maxWidth: 420, p: 0.5 }}>
-            {/* Header with mnemonic and category badge */}
             <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: 0.5 }}>
               <Stack direction="row" alignItems="center" spacing={1}>
                 <Typography variant="subtitle2" fontWeight={700} sx={{ fontFamily: 'monospace', fontSize: '0.95rem' }}>
@@ -724,12 +661,10 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
               )}
             </Stack>
 
-            {/* Description */}
             <Typography variant="body2" sx={{ mb: 0.75, lineHeight: 1.4 }}>
               {docs}
             </Typography>
 
-            {/* Syntax if available */}
             {extendedDocs.syntax && (
               <Box sx={{ mb: 0.5 }}>
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -753,7 +688,6 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
               </Box>
             )}
 
-            {/* Flags if available */}
             {extendedDocs.flags && (
               <Box sx={{ mb: 0.5 }}>
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -771,7 +705,6 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
               </Box>
             )}
 
-            {/* Example if available */}
             {extendedDocs.example && (
               <Box sx={{ mt: 0.5, pt: 0.5, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -878,7 +811,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
     return disassembly.split('\n').map(parseDisasmLine);
   }, [disassembly]);
 
-  // Build annotation lookup map
   const annotationMap = useMemo(() => {
     const map: Record<string, string> = {};
     for (const ann of annotations) {
@@ -887,7 +819,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
     return map;
   }, [annotations]);
 
-  // Get selected lines
   const selectedLines = useMemo(() => {
     if (selectionStart === null || selectionEnd === null) return [];
     const start = Math.min(selectionStart, selectionEnd);
@@ -899,9 +830,8 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
     return selectedLines.map(l => l.raw).join('\n');
   }, [selectedLines]);
 
-  // Selection handlers
   const handleLineMouseDown = useCallback((index: number, e: React.MouseEvent) => {
-    if (e.button !== 0) return; // Only left click
+    if (e.button !== 0) return;
     setIsSelecting(true);
     setSelectionStart(index);
     setSelectionEnd(index);
@@ -917,7 +847,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
   const handleMouseUp = useCallback(() => {
     if (isSelecting && selectionStart !== null && selectionEnd !== null) {
       setIsSelecting(false);
-      // Show popover if we have a selection of more than one line
       if (Math.abs(selectionEnd - selectionStart) > 0 && containerRef.current) {
         setSelectionPopoverAnchor(containerRef.current);
       }
@@ -942,7 +871,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
 
   const handleAnnotateRange = useCallback(() => {
     if (onAnnotate && selectedLines.length > 0 && rangeAnnotationText.trim()) {
-      // Get the first address in the range
       const firstWithAddr = selectedLines.find(l => l.address);
       if (firstWithAddr?.address) {
         onAnnotate(firstWithAddr.address, rangeAnnotationText.trim());
@@ -968,11 +896,9 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
   const isDark = theme.palette.mode === 'dark';
   const isARM = arch.includes('arm') || arch.includes('thumb');
   
-  // State for user question input
   const [askQuestionText, setAskQuestionText] = useState('');
   const [showAskInput, setShowAskInput] = useState(false);
 
-  // A new listing invalidates stale line selections.
   useEffect(() => {
     handleClearSelection();
     setShowAskInput(false);
@@ -985,13 +911,10 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
 
   const handleAskWithQuestion = useCallback(() => {
     if (onAskAbout && selectedText) {
-      // If user provided a question, include it; otherwise use boilerplate
       const userQuestion = askQuestionText.trim();
       if (userQuestion) {
-        // User provided their own question
         onAskAbout(`${userQuestion}\n\n\`\`\`asm\n${selectedText}\n\`\`\``);
       } else {
-        // No user question - use boilerplate analysis
         onAskAbout(selectedText);
       }
     }
@@ -1000,7 +923,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
     setAskQuestionText('');
   }, [onAskAbout, selectedText, askQuestionText, handleClearSelection]);
 
-  // Selection popover for range actions
   const selectionPopover = (
     <Popover
       open={Boolean(selectionPopoverAnchor) && selectedLines.length > 0}
@@ -1018,7 +940,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
           {selectedLines.length} line{selectedLines.length !== 1 ? 's' : ''} selected
         </Typography>
         
-        {/* Main action buttons */}
         <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
           <Tooltip title="Copy selection">
             <Button size="small" variant="outlined" onClick={handleCopySelection} startIcon={<ContentCopyIcon sx={{ fontSize: 14 }} />}>
@@ -1034,7 +955,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
           )}
         </Stack>
 
-        {/* Ask model input area */}
         {onAskAbout && showAskInput && (
           <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
             <Typography variant="caption" color="primary.main" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
@@ -1069,7 +989,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
           </Box>
         )}
 
-        {/* Annotation input */}
         {onAnnotate && !showAskInput && (
           <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
             <TextField
@@ -1202,7 +1121,6 @@ const DisassemblyViewer: FC<DisassemblyViewerProps> = ({
               borderLeft: isLineSelected(i) 
                 ? `3px solid ${theme.palette.warning.main}`
                 : '3px solid transparent',
-              // Clean, crisp transitions
               transition: 'background-color 0.15s ease-out, border-color 0.15s ease-out',
               '&:hover': {
                 bgcolor: isLineSelected(i) 

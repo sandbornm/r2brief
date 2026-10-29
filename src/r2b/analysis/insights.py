@@ -1,11 +1,3 @@
-"""Cross-record pattern cards.
-
-This is *not* a skill factory. It only reports facts that appear in at
-least two persisted records. One binary is a briefing; two siblings are
-the first reusable pattern. Auto-writing SKILL.md from a thin corpus
-produces lectures, not skills.
-"""
-
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -137,7 +129,6 @@ def _siblings(catalog: list[dict[str, Any]], focus: dict[str, Any]) -> list[dict
 
 
 def _identity_patterns(dossiers: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Same SHA-256 under different names/paths is one binary, not two findings."""
     by_hash: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for dossier in dossiers:
         digest = str(dossier.get("sha256") or dossier.get("record_id") or "")
@@ -176,7 +167,6 @@ def _import_patterns(dossiers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     patterns = []
     total = len(dossiers)
     hot = {"system", "popen", "execve", "execl", "strcpy", "strcat", "sprintf", "gets", "memcpy"}
-    # libc-ubiquitous: present in almost every ELF, never a finding.
     ubiquitous = {
         "close", "exit", "memset", "memcpy", "memmove", "memcmp",
         "malloc", "free", "calloc", "realloc",
@@ -317,7 +307,6 @@ def _import_names(dossier: dict[str, Any]) -> set[str]:
         name = name.removeprefix("sym.imp.").removeprefix("imp.").removeprefix("sym.")
         if not name:
             continue
-        # CRT/start stubs are shared by every glibc PIE and drown strcpy/system.
         if name.startswith("_"):
             continue
         names.add(name)

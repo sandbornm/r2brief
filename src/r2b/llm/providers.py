@@ -1,5 +1,3 @@
-"""Explicit provider identities, transports, and capability metadata."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -112,8 +110,6 @@ PROVIDERS: dict[str, ProviderSpec] = {
         default_base_url="http://127.0.0.1:52415/v1",
         capabilities=_RESPONSES_CAPABILITIES,
     ),
-    # Explicit identities retained for common user overlays. These are not
-    # collapsed into a vague SDK/wire-protocol label.
     "openrouter": ProviderSpec(
         id="openrouter",
         display_name="OpenRouter",

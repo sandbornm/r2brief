@@ -51,7 +51,6 @@ export const SessionList: FC<SessionListProps> = memo(({
     handleMenuClose();
   }, [menuSessionId, onDelete, handleMenuClose]);
 
-  // Memoize session items with pre-computed file names
   const sessionItems = useMemo(() =>
     sessions.map(session => ({
       ...session,

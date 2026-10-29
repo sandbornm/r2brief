@@ -1,25 +1,6 @@
 #!/usr/bin/env bash
-################################################################################
-# setup_compiler.sh - ARM Cross-Compiler Container Setup
-#
-# Builds and verifies the Docker container for ARM cross-compilation.
-# This script can be run standalone or via scripts/setup.sh --compiler
-#
-# Prerequisites:
-#   - Docker installed and running
-#
-# Usage:
-#   ./scripts/setup_compiler.sh [options]
-#
-# Options:
-#   --rebuild    Force rebuild the Docker image (don't use cache)
-#   --verify     Only verify the image, don't build
-#   --quiet      Suppress non-error output
-#   -h, --help   Show this help message
-################################################################################
 set -euo pipefail
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -30,7 +11,6 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOCKER_IMAGE="r2b-compiler:latest"
 DOCKERFILE="Dockerfile.compiler"
 
-# Default options
 REBUILD=false
 VERIFY_ONLY=false
 QUIET=false
@@ -84,7 +64,6 @@ Examples:
 EOF
 }
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --rebuild)
@@ -111,7 +90,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check Docker availability
 check_docker() {
     log "Checking Docker availability..."
     
@@ -128,12 +106,10 @@ check_docker() {
     log_success "Docker is available and running"
 }
 
-# Check if image exists
 image_exists() {
     docker image inspect "$DOCKER_IMAGE" &>/dev/null
 }
 
-# Build the Docker image
 build_image() {
     log "Building Docker image: $DOCKER_IMAGE"
     
@@ -161,13 +137,11 @@ build_image() {
     fi
 }
 
-# Verify the toolchains in the container
 verify_toolchains() {
     log "Verifying ARM toolchains..."
     
     local failed=false
     
-    # Test ARM32 compiler (use -c since entrypoint is /bin/bash)
     log "  Testing ARM32 compiler (arm-linux-gnueabihf-gcc)..."
     if docker run --rm "$DOCKER_IMAGE" -c "arm-linux-gnueabihf-gcc --version" &>/dev/null; then
         local arm32_version
@@ -178,7 +152,6 @@ verify_toolchains() {
         failed=true
     fi
     
-    # Test ARM64 compiler
     log "  Testing ARM64 compiler (aarch64-linux-gnu-gcc)..."
     if docker run --rm "$DOCKER_IMAGE" -c "aarch64-linux-gnu-gcc --version" &>/dev/null; then
         local arm64_version
@@ -197,10 +170,8 @@ verify_toolchains() {
     log_success "All toolchains verified"
 }
 
-# Global variable for test cleanup
 _TEST_TMPDIR=""
 
-# Cleanup function for unexpected exits
 cleanup_on_exit() {
     if [[ -n "$_TEST_TMPDIR" && -d "$_TEST_TMPDIR" ]]; then
         rm -rf "$_TEST_TMPDIR" 2>/dev/null || true
@@ -208,12 +179,10 @@ cleanup_on_exit() {
 }
 trap cleanup_on_exit EXIT
 
-# Test compilation with a simple C program
 test_compilation() {
     log "Running compilation tests..."
     
     local test_source='
-#include <stdio.h>
 int main(void) { return 42; }
 '
     _TEST_TMPDIR=$(mktemp -d)
@@ -221,12 +190,10 @@ int main(void) { return 42; }
     
     echo "$test_source" > "$tmpdir/test.c"
     
-    # Test ARM64 compilation (use -c to pass commands through bash entrypoint)
     log "  Compiling test program for ARM64..."
     if docker run --rm -v "$tmpdir:/compile" -w /compile "$DOCKER_IMAGE" \
         -c "aarch64-linux-gnu-gcc -o test_arm64 test.c" &>/dev/null; then
         
-        # Verify it's an ELF for aarch64 using host file command or check ELF magic
         if [[ -f "$tmpdir/test_arm64" ]]; then
             local magic
             magic=$(head -c 4 "$tmpdir/test_arm64" 2>/dev/null | xxd -p || echo "")
@@ -243,12 +210,10 @@ int main(void) { return 42; }
         return 1
     fi
     
-    # Test ARM32 compilation
     log "  Compiling test program for ARM32..."
     if docker run --rm -v "$tmpdir:/compile" -w /compile "$DOCKER_IMAGE" \
         -c "arm-linux-gnueabihf-gcc -o test_arm32 test.c" &>/dev/null; then
         
-        # Verify ELF magic bytes on host
         if [[ -f "$tmpdir/test_arm32" ]]; then
             local magic
             magic=$(head -c 4 "$tmpdir/test_arm32" 2>/dev/null | xxd -p || echo "")
@@ -265,7 +230,6 @@ int main(void) { return 42; }
         return 1
     fi
     
-    # Test freestanding compilation (no libc)
     log "  Testing freestanding compilation..."
     local freestanding_source='
 void _start(void) {
@@ -283,7 +247,6 @@ void _start(void) {
         return 1
     fi
     
-    # Cleanup (also handled by trap on exit)
     rm -rf "$tmpdir" 2>/dev/null || true
     _TEST_TMPDIR=""
     
@@ -291,7 +254,6 @@ void _start(void) {
     return 0
 }
 
-# Print summary
 print_summary() {
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
@@ -311,7 +273,6 @@ print_summary() {
     echo "═══════════════════════════════════════════════════════════════"
 }
 
-# Main execution
 main() {
     cd "$PROJECT_ROOT"
     
@@ -332,7 +293,6 @@ main() {
             exit 1
         fi
     else
-        # Build if image doesn't exist or rebuild requested
         if ! image_exists || $REBUILD; then
             build_image
         else

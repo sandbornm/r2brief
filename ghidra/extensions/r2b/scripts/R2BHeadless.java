@@ -1,6 +1,3 @@
-// Headless post-analysis script for r2b.
-// Outputs JSON with functions, strings, and decompiled code to a file.
-
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileOptions;
 import ghidra.app.decompiler.DecompileResults;
@@ -37,7 +34,6 @@ public class R2BHeadless extends GhidraScript {
         String programName = currentProgram.getName();
         println("[r2b] Analyzing: " + programName);
         
-        // Output file path - use env var or default location
         String outputPath = System.getenv("R2B_OUTPUT");
         if (outputPath == null || outputPath.isEmpty()) {
             File programFile = getProgramFile();
@@ -51,12 +47,10 @@ public class R2BHeadless extends GhidraScript {
         
         println("[r2b] Output: " + outputPath);
         
-        // Collect data
         List<String[]> functions = collectFunctions();
         List<String[]> strings = collectStrings();
         List<String[]> decompiled = decompileFunctions(functions);
         
-        // Write JSON output
         writeJsonOutput(outputPath, functions, strings, decompiled);
         
         println("[r2b] Analysis complete. Functions: " + functions.size() +
@@ -91,7 +85,6 @@ public class R2BHeadless extends GhidraScript {
         List<String[]> strings = new ArrayList<>();
         Listing listing = currentProgram.getListing();
         
-        // Iterate over defined data looking for strings
         Iterator<Data> iter = listing.getDefinedData(true);
         int count = 0;
         
@@ -111,7 +104,6 @@ public class R2BHeadless extends GhidraScript {
                         }
                     }
                 } catch (Exception e) {
-                    // Skip problematic strings
                 }
             }
         }
@@ -123,7 +115,6 @@ public class R2BHeadless extends GhidraScript {
     private List<String[]> decompileFunctions(List<String[]> functions) throws CancelledException {
         List<String[]> decompiled = new ArrayList<>();
         
-        // Initialize decompiler
         DecompInterface decomp = new DecompInterface();
         DecompileOptions options = new DecompileOptions();
         decomp.setOptions(options);
@@ -144,7 +135,6 @@ public class R2BHeadless extends GhidraScript {
             String addrStr = funcInfo[1];
             String isThunk = funcInfo[3];
             
-            // Skip thunks
             if ("true".equals(isThunk)) continue;
             
             try {
@@ -163,7 +153,6 @@ public class R2BHeadless extends GhidraScript {
                     }
                 }
             } catch (Exception e) {
-                // Skip functions that fail to decompile
                 println("[r2b] Failed to decompile " + name + ": " + e.getMessage());
             }
         }
@@ -179,7 +168,6 @@ public class R2BHeadless extends GhidraScript {
         
         writer.println("{");
         
-        // Write program info
         writer.println("  \"program\": {");
         writer.println("    \"name\": \"" + escapeJson(currentProgram.getName()) + "\",");
         writer.println("    \"language\": \"" + currentProgram.getLanguageID().toString() + "\",");
@@ -187,7 +175,6 @@ public class R2BHeadless extends GhidraScript {
         writer.println("    \"image_base\": \"" + currentProgram.getImageBase().toString() + "\"");
         writer.println("  },");
         
-        // Write functions
         writer.println("  \"functions\": [");
         for (int i = 0; i < functions.size(); i++) {
             String[] f = functions.get(i);
@@ -201,7 +188,6 @@ public class R2BHeadless extends GhidraScript {
         }
         writer.println("  ],");
         
-        // Write strings
         writer.println("  \"strings\": [");
         for (int i = 0; i < strings.size(); i++) {
             String[] s = strings.get(i);
@@ -211,7 +197,6 @@ public class R2BHeadless extends GhidraScript {
         }
         writer.println("  ],");
         
-        // Write decompiled code
         writer.println("  \"decompiled\": [");
         for (int i = 0; i < decompiled.size(); i++) {
             String[] d = decompiled.get(i);

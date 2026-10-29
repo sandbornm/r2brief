@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Build GitHub Release artifacts into dist/.
-#   ./scripts/package_release.sh
-#   SKIP_FRONTEND=1 ./scripts/package_release.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +13,6 @@ PY
 TAG="v${VERSION}"
 
 mkdir -p dist
-# Keep previously built wheels only from this run.
 find dist -maxdepth 1 -type f -delete
 
 echo "[*] frontend bundle for wheel"

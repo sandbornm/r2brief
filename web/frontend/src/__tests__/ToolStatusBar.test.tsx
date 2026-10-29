@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import ToolStatusBar from '../components/ToolStatusBar';
 
-// Mock fetch
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
@@ -16,7 +15,7 @@ describe('ToolStatusBar', () => {
   });
 
   it('shows loading state initially', () => {
-    mockFetch.mockImplementation(() => new Promise(() => {})); // Never resolves
+    mockFetch.mockImplementation(() => new Promise(() => {}));
 
     render(<ToolStatusBar />);
     expect(screen.getByLabelText(/loading tools/i)).toBeInTheDocument();

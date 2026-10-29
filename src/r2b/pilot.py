@@ -1,18 +1,3 @@
-"""Goal-driven pilot: planner LLM -> r2b execution -> grounded report.
-
-The pilot drives the r2b CLI over a lab corpus root (a directory holding
-``samples/`` and carved ``work/`` output). The explicitly configured provider
-acts as planner, reporter, and
-follow-up decider; every step runs as an ``r2b`` subprocess so a shifting
-CLI surface degrades that step to ``failed`` in the run log instead of
-crashing the pilot.
-
-Run state lives under ``<root>/work/pilot/<runid>/``:
-``goal.json``, ``planner_raw.txt``, ``plan.json``, ``steps/*.log``,
-``state.json``, ``report.md``, ``followup.json``. The directory is lab
-scratch — keep it gitignored.
-"""
-
 from __future__ import annotations
 
 import json
@@ -73,19 +58,14 @@ FOLLOWUP_SYSTEM = (
 
 
 def pilot_dir_for(root: Path) -> Path:
-    """Run state lives under ``<root>/work/pilot/``."""
     return Path(root).resolve() / "work" / "pilot"
 
 
-# ---------------------------------------------------------------- LLM bridge
-
 class PilotLLM:
-    """Planner/reporter chat over the configured provider endpoint."""
 
     def __init__(self, config: AppConfig) -> None:
         self._client = OpenAIClient(config)
         base_url = resolve_provider_base_url(config)
-        # Local gateways (exo) take enable_thinking; hosted APIs would reject it.
         self._extra_body: dict[str, Any] | None = (
             {"enable_thinking": False} if not requires_api_key(base_url) else None
         )
@@ -108,7 +88,7 @@ class PilotLLM:
                      {"role": "user", "content": user}],
                     **kwargs,
                 )
-            except Exception as exc:  # noqa: BLE001 - transport/API errors retry once
+            except Exception as exc:
                 last_exc = exc
                 if attempt < retries:
                     time.sleep(5)
@@ -116,13 +96,10 @@ class PilotLLM:
         raise last_exc
 
 
-# ------------------------------------------------------------- validation
-
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def validate_plan(plan: dict, root: Path) -> list[str]:
-    """Return a list of rule violations; empty means the plan is safe to run."""
     root = Path(root).resolve()
     errs: list[str] = []
     if not isinstance(plan, dict) or "steps" not in plan:
@@ -160,7 +137,6 @@ def validate_plan(plan: dict, root: Path) -> list[str]:
 
 
 def extract_json(text: str) -> dict:
-    """Pull the outermost JSON object out of a model reply (fences/prose ok)."""
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```[a-z]*\n?|\n?```$", "", text, flags=re.M).strip()
@@ -170,10 +146,7 @@ def extract_json(text: str) -> dict:
     return json.loads(text[start:end + 1])
 
 
-# ----------------------------------------------------------------- context
-
 def corpus_context(root: Path) -> str:
-    """Inventory the lab corpus for the planner: samples and carved ELFs."""
     root = Path(root)
     lines = ["SAMPLES (id | product | wrapper family):"]
     for meta in sorted(root.glob("samples/*/meta.json")):
@@ -194,10 +167,7 @@ def corpus_context(root: Path) -> str:
     return "\n".join(lines[:60])
 
 
-# ---------------------------------------------------------------- executor
-
 def r2b_invocation() -> list[str]:
-    """Argv prefix that re-enters the r2b CLI (same environment)."""
     override = os.environ.get("R2B_PILOT_BIN")
     if override:
         return [override]
@@ -233,7 +203,6 @@ def build_cmd(step: dict, *, root: Path, config_path: Optional[Path] = None) -> 
 
 def run_step(step: dict, log_path: Path, timeout: int, *,
              root: Path, config_path: Optional[Path] = None) -> tuple[str, int]:
-    """Execute one step as a subprocess; return (output digest, return code)."""
     cmd = build_cmd(step, root=root, config_path=config_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -250,11 +219,8 @@ def run_step(step: dict, log_path: Path, timeout: int, *,
     return (digest[:1500] if len(digest) > 1500 else digest), rc
 
 
-# ------------------------------------------------------------- run engine
-
 @dataclass(slots=True)
 class PilotEngine:
-    """One pilot configuration: an LLM endpoint plus a lab corpus root."""
 
     llm: PilotLLM
     root: Path
@@ -271,10 +237,7 @@ class PilotEngine:
     def queue_dir(self) -> Path:
         return self.pilot_dir / "queue"
 
-    # -- preflight -------------------------------------------------------
-
     def preflight(self) -> tuple[bool, str]:
-        """Probe the r2b CLI surface before spending LLM budget on it."""
         try:
             proc = subprocess.run(
                 [*r2b_invocation(), "--help"],
@@ -287,8 +250,6 @@ class PilotEngine:
         if missing:
             return False, f"r2b CLI no longer advertises: {missing}"
         return True, "ok"
-
-    # -- state ------------------------------------------------------------
 
     def new_run(self, goal: str) -> Path:
         runid = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
@@ -311,10 +272,7 @@ class PilotEngine:
         p = rundir / "state.json"
         return json.loads(p.read_text()) if p.exists() else {}
 
-    # -- planning ----------------------------------------------------------
-
     def plan(self, goal: str) -> tuple[dict, list[str], str]:
-        """Ask the planner for a plan; returns (plan, violations, raw reply)."""
         raw = self.llm.chat(
             PLANNER_SYSTEM,
             f"CONTEXT:\n{corpus_context(self.root)}\n\nGOAL: {goal}",
@@ -342,8 +300,6 @@ class PilotEngine:
             print(f"  {n}: {status} (rc={rc})")
         return results
 
-    # -- reporting ---------------------------------------------------------
-
     @staticmethod
     def run_payload(goal: str, plan: dict, results: list[dict], digests: list[str]) -> str:
         return json.dumps({
@@ -364,7 +320,6 @@ class PilotEngine:
 
     @staticmethod
     def grounded(report: str, digests: list[str]) -> bool:
-        """Cheap hallucination guard: report must echo some real digest tokens."""
         words = {w for d in digests for w in re.findall(r"[A-Za-z0-9_]{5,}", d)}
         rlow = report.lower()
         hits = sum(1 for w in words if w.lower() in rlow)
@@ -372,7 +327,6 @@ class PilotEngine:
 
     @staticmethod
     def mechanical_report(goal: str, results: list[dict], digests: list[str]) -> str:
-        """Deterministic fallback the harness can always trust."""
         lines = ["# Pilot report (mechanical fallback)", "", f"Goal: {goal}", ""]
         for r, d in zip(results, digests):
             lines.append(f"## {r['step']} — {r['verb']} {r['target']} (rc={r['rc']})")
@@ -386,7 +340,6 @@ class PilotEngine:
 
     def write_report(self, goal: str, plan: dict,
                      results: list[dict], digests: list[str]) -> tuple[str, str]:
-        """Returns (report, provenance) where provenance is llm|fallback."""
         try:
             raw = self.llm.chat(
                 REPORT_SYSTEM,
@@ -395,7 +348,7 @@ class PilotEngine:
             ).strip()
             if raw and self.grounded(raw, digests):
                 return raw, "llm"
-        except Exception:  # noqa: BLE001 - never lose the run over reporting
+        except Exception:
             pass
         return self.mechanical_report(goal, results, digests), "fallback"
 
@@ -412,8 +365,6 @@ class PilotEngine:
                     user = ("Your previous reply was not valid JSON. Reply with "
                             "ONLY the JSON object.\n\n" + user)
         return None
-
-    # -- full run -----------------------------------------------------------
 
     def do_run(self, goal: str, *, max_steps: int = 3, followup: bool = True,
                timeout: int = 900) -> Path:
@@ -450,7 +401,7 @@ class PilotEngine:
             (rundir / "report.md").write_text(report_md + "\n")
             self.set_state(rundir, report=provenance)
             print(f"  reported ({provenance})")
-        except Exception as exc:  # noqa: BLE001 - report failure must not lose the run
+        except Exception as exc:
             self.set_state(rundir, report_error=str(exc))
             print(f"  report failed: {exc}")
 
@@ -458,7 +409,7 @@ class PilotEngine:
             self.set_state(rundir, phase="followup-decision")
             try:
                 decision = self.decide_followup(goal, plan, results, digests)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 decision = None
                 self.set_state(rundir, followup_decision_error=str(exc))
             fplan = decision.get("followup") if isinstance(decision, dict) else None
@@ -477,15 +428,13 @@ class PilotEngine:
                         tail, _prov = self.write_report(goal, fplan, fresults, fdigests)
                         (rundir / "report.md").write_text(
                             (report_md + "\n\n---\n\n" + tail if report_md else tail) + "\n")
-                    except Exception as exc:  # noqa: BLE001
+                    except Exception as exc:
                         self.set_state(rundir, followup_report_error=str(exc))
 
         self.set_state(rundir, phase="done", finished=datetime.now(timezone.utc).isoformat())
         print(f"done {rundir.name}")
         return rundir
 
-
-# --------------------------------------------------------------- queue/CLI
 
 def enqueue(queue_dir: Path, goal: str, *, max_steps: int = 3,
             followup: bool = True) -> Path:
@@ -498,7 +447,6 @@ def enqueue(queue_dir: Path, goal: str, *, max_steps: int = 3,
 
 
 def watch(engine: PilotEngine, *, once: bool = False, interval: int = 5) -> int:
-    """Process queued goals; move each job file to queue/done/ afterwards."""
     engine.queue_dir.mkdir(parents=True, exist_ok=True)
     print(f"watching {engine.queue_dir} (interval {interval}s)")
     while True:
@@ -551,7 +499,6 @@ def status(pilot_dir: Path, run: Optional[str] = None) -> int:
 def step_log(pilot_dir: Path, run: str, n: str = "00") -> str:
     path = pilot_dir / run / "steps" / f"{n}.log"
     if not path.exists():
-        # tolerate full step names like 00-analyze
         cands = list((pilot_dir / run / "steps").glob(f"{n}*.log"))
         path = cands[0] if cands else path
     return path.read_text() if path.exists() else f"no log at {path}\n"

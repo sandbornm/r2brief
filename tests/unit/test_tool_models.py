@@ -1,8 +1,3 @@
-"""Unit tests for tool execution models.
-
-Following TDD: these tests are written FIRST, before any implementation.
-"""
-
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -12,10 +7,8 @@ from pydantic import ValidationError as PydanticValidationError
 
 
 class TestToolNameEnum:
-    """Tests for ToolName enum."""
 
     def test_all_tools_defined(self):
-        """Test all expected tools are in the enum."""
         from r2b.tools.models import ToolName
 
         assert ToolName.GHIDRA.value == "ghidra"
@@ -26,10 +19,8 @@ class TestToolNameEnum:
 
 
 class TestScriptLanguageEnum:
-    """Tests for ScriptLanguage enum."""
 
     def test_all_languages_defined(self):
-        """Test all expected languages are in the enum."""
         from r2b.tools.models import ScriptLanguage
 
         assert ScriptLanguage.PYTHON.value == "python"
@@ -38,10 +29,8 @@ class TestScriptLanguageEnum:
 
 
 class TestArchitectureEnum:
-    """Tests for Architecture enum."""
 
     def test_all_architectures_defined(self):
-        """Test all expected architectures are in the enum."""
         from r2b.tools.models import Architecture
 
         assert Architecture.ARM32.value == "arm32"
@@ -49,10 +38,8 @@ class TestArchitectureEnum:
 
 
 class TestBinaryFormatEnum:
-    """Tests for BinaryFormat enum."""
 
     def test_all_formats_defined(self):
-        """Test all expected formats are in the enum."""
         from r2b.tools.models import BinaryFormat
 
         assert BinaryFormat.ELF.value == "elf"
@@ -60,17 +47,14 @@ class TestBinaryFormatEnum:
 
 
 class TestSubject:
-    """Tests for Subject model."""
 
     def test_valid_subject(self, tmp_path: Path):
-        """Test creating a valid Subject."""
         from r2b.tools.models import Subject, Architecture, BinaryFormat
 
-        # Create a real file
         binary_path = tmp_path / "test_binary"
         binary_path.write_bytes(b"\x7fELF" + b"\x00" * 100)
 
-        sha256 = "a" * 64  # Valid 64 hex chars
+        sha256 = "a" * 64
         subject = Subject(
             path=binary_path,
             sha256=sha256,
@@ -86,7 +70,6 @@ class TestSubject:
         assert subject.size_bytes == 104
 
     def test_nonexistent_path_rejected(self, tmp_path: Path):
-        """Test that path must point to an existing file."""
         from r2b.tools.models import Subject, Architecture, BinaryFormat
 
         nonexistent = tmp_path / "nonexistent"
@@ -101,13 +84,11 @@ class TestSubject:
         assert "path" in str(exc_info.value).lower()
 
     def test_invalid_sha256_rejected(self, tmp_path: Path):
-        """Test sha256 validation."""
         from r2b.tools.models import Subject, Architecture, BinaryFormat
 
         binary_path = tmp_path / "test_binary"
         binary_path.write_bytes(b"\x7fELF" + b"\x00" * 100)
 
-        # Too short
         with pytest.raises(PydanticValidationError) as exc_info:
             Subject(
                 path=binary_path,
@@ -118,7 +99,6 @@ class TestSubject:
             )
         assert "sha256" in str(exc_info.value).lower()
 
-        # Too long
         with pytest.raises(PydanticValidationError) as exc_info:
             Subject(
                 path=binary_path,
@@ -129,11 +109,10 @@ class TestSubject:
             )
         assert "sha256" in str(exc_info.value).lower()
 
-        # Invalid chars
         with pytest.raises(PydanticValidationError) as exc_info:
             Subject(
                 path=binary_path,
-                sha256="g" * 64,  # 'g' is not a valid hex char
+                sha256="g" * 64,
                 arch=Architecture.ARM32,
                 format=BinaryFormat.ELF,
                 size_bytes=104,
@@ -141,7 +120,6 @@ class TestSubject:
         assert "sha256" in str(exc_info.value).lower()
 
     def test_zero_size_rejected(self, tmp_path: Path):
-        """Test size_bytes must be > 0."""
         from r2b.tools.models import Subject, Architecture, BinaryFormat
 
         binary_path = tmp_path / "test_binary"
@@ -169,10 +147,8 @@ class TestSubject:
 
 
 class TestValidationError:
-    """Tests for ValidationError model."""
 
     def test_create_validation_error(self):
-        """Test creating a ValidationError."""
         from r2b.tools.models import ValidationError
 
         error = ValidationError(
@@ -188,7 +164,6 @@ class TestValidationError:
         assert error.severity == "error"
 
     def test_suggestion_is_optional(self):
-        """Test that suggestion field is optional."""
         from r2b.tools.models import ValidationError
 
         error = ValidationError(
@@ -200,23 +175,18 @@ class TestValidationError:
         assert error.suggestion is None
 
     def test_severity_must_be_error_or_warning(self):
-        """Test severity validation."""
         from r2b.tools.models import ValidationError
 
-        # Valid severities
         ValidationError(location="a", message="b", severity="error")
         ValidationError(location="a", message="b", severity="warning")
 
-        # Invalid severity
         with pytest.raises(PydanticValidationError):
             ValidationError(location="a", message="b", severity="info")
 
 
 class TestValidationResult:
-    """Tests for ValidationResult model."""
 
     def test_valid_result(self):
-        """Test creating a valid ValidationResult."""
         from r2b.tools.models import ValidationResult
 
         result = ValidationResult(
@@ -231,7 +201,6 @@ class TestValidationResult:
         assert result.warnings == []
 
     def test_invalid_result_with_errors(self):
-        """Test ValidationResult with errors."""
         from r2b.tools.models import ValidationResult, ValidationError
 
         errors = [
@@ -249,7 +218,6 @@ class TestValidationResult:
         assert len(result.errors) == 2
 
     def test_error_summary_property(self):
-        """Test error_summary property returns formatted string."""
         from r2b.tools.models import ValidationResult, ValidationError
 
         errors = [
@@ -270,7 +238,6 @@ class TestValidationResult:
         assert "error 2" in summary
 
     def test_error_summary_empty_when_no_errors(self):
-        """Test error_summary is empty string when no errors."""
         from r2b.tools.models import ValidationResult
 
         result = ValidationResult(
@@ -284,10 +251,8 @@ class TestValidationResult:
 
 
 class TestExecutionStatus:
-    """Tests for ExecutionStatus enum."""
 
     def test_all_statuses_defined(self):
-        """Test all expected statuses are in the enum."""
         from r2b.tools.models import ExecutionStatus
 
         assert ExecutionStatus.SUCCESS.value == "success"
@@ -298,10 +263,8 @@ class TestExecutionStatus:
 
 
 class TestExecutionResult:
-    """Tests for ExecutionResult model."""
 
     def test_success_result(self):
-        """Test creating a successful ExecutionResult."""
         from r2b.tools.models import ExecutionResult, ExecutionStatus
 
         result = ExecutionResult(
@@ -319,7 +282,6 @@ class TestExecutionResult:
         assert result.traceback is None
 
     def test_error_with_traceback(self):
-        """Test ExecutionResult with exception details."""
         from r2b.tools.models import ExecutionResult, ExecutionStatus
 
         result = ExecutionResult(
@@ -336,7 +298,6 @@ class TestExecutionResult:
         assert result.traceback == "Traceback..."
 
     def test_error_display_property_formats_error(self):
-        """Test error_display property returns formatted error message."""
         from r2b.tools.models import ExecutionResult, ExecutionStatus
 
         result = ExecutionResult(
@@ -353,7 +314,6 @@ class TestExecutionResult:
         assert "error output" in display or "File line" in display
 
     def test_error_display_empty_for_success(self):
-        """Test error_display returns empty string for success status."""
         from r2b.tools.models import ExecutionResult, ExecutionStatus
 
         result = ExecutionResult(
@@ -366,7 +326,6 @@ class TestExecutionResult:
         assert result.error_display == ""
 
     def test_timeout_result(self):
-        """Test that ExecutionResult with status=TIMEOUT includes 'exceeded' in error_display."""
         from r2b.tools.models import ExecutionResult, ExecutionStatus
 
         result = ExecutionResult(
@@ -377,16 +336,13 @@ class TestExecutionResult:
         )
 
         display = result.error_display
-        # Should indicate timeout and show duration
         assert "exceeded" in display.lower() or "timeout" in display.lower()
         assert result.duration_ms == 5000
 
 
 class TestTrajectoryEntry:
-    """Tests for TrajectoryEntry model."""
 
     def test_valid_entry(self):
-        """Test creating a basic TrajectoryEntry."""
         from r2b.tools.models import TrajectoryEntry, ToolName
 
         entry = TrajectoryEntry(
@@ -394,9 +350,8 @@ class TestTrajectoryEntry:
             intent="List all functions",
         )
 
-        # Should have auto-generated id and timestamp
         assert entry.id is not None
-        assert isinstance(UUID(entry.id), UUID)  # Valid UUID
+        assert isinstance(UUID(entry.id), UUID)
         assert entry.timestamp is not None
         assert entry.tool == ToolName.GHIDRA
         assert entry.intent == "List all functions"
@@ -408,7 +363,6 @@ class TestTrajectoryEntry:
         assert entry.context_summary is None
 
     def test_full_entry_with_all_fields(self):
-        """Test creating a TrajectoryEntry with all fields."""
         from r2b.tools.models import (
             TrajectoryEntry,
             ToolName,
@@ -450,7 +404,6 @@ class TestTrajectoryEntry:
         assert entry.context_summary == "Analyzing ARM binary with 2 functions"
 
     def test_script_requires_language(self):
-        """Test that providing script requires script_language."""
         from r2b.tools.models import TrajectoryEntry, ToolName
 
         with pytest.raises(PydanticValidationError) as exc_info:
@@ -458,13 +411,10 @@ class TestTrajectoryEntry:
                 tool=ToolName.GHIDRA,
                 intent="List functions",
                 script="print('hello')",
-                # Missing script_language
             )
-        # Should mention the cross-field validation failure
         assert "script_language" in str(exc_info.value).lower()
 
     def test_execution_requires_valid_validation(self):
-        """Test that execution result requires valid validation."""
         from r2b.tools.models import (
             TrajectoryEntry,
             ToolName,
@@ -495,13 +445,11 @@ class TestTrajectoryEntry:
                 script="print('hello')",
                 script_language=ScriptLanguage.PYTHON,
                 validation=invalid_validation,
-                execution=execution,  # Should not have execution if validation failed
+                execution=execution,
             )
-        # Should mention validation must be valid for execution
         assert "validation" in str(exc_info.value).lower()
 
     def test_cannot_execute_invalid_script(self):
-        """Test that creating TrajectoryEntry with invalid validation and execution raises ValidationError."""
         from r2b.tools.models import (
             TrajectoryEntry,
             ToolName,
@@ -512,7 +460,6 @@ class TestTrajectoryEntry:
             ExecutionStatus,
         )
 
-        # Create invalid validation result
         invalid_validation = ValidationResult(
             valid=False,
             errors=[ValidationError(location="line 1", message="syntax error", severity="error")],
@@ -520,7 +467,6 @@ class TestTrajectoryEntry:
             validated_at=datetime.now(timezone.utc),
         )
 
-        # Try to create entry with execution despite invalid validation
         execution = ExecutionResult(
             status=ExecutionStatus.SUCCESS,
             duration_ms=100,

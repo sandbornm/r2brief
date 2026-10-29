@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
-# Least-invasive r2b install. User-space only.
-#   No sudo, no ~/.config, no clone unless R2B_CLONE=1, no flavor overlay.
-#
-#   git clone https://github.com/sandbornm/r2brief.git
-#   cd r2brief && ./scripts/install.sh
-#
-# Optional: R2B_FLAVOR=full ./scripts/install.sh
-#           R2B_CLONE=1 R2B_DIR=$HOME/src/r2brief ./scripts/install.sh
 set -euo pipefail
 
-# C.UTF-8 is not a valid locale name on every supported host (notably macOS).
-# The setup output is ASCII, so use the portable POSIX locale for child tools.
 export LANG=C
 export LC_ALL=C
 

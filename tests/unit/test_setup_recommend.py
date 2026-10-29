@@ -19,7 +19,7 @@ def _facts(**overrides: object) -> HostFacts:
         tools={"radare2": True, "file": True, "binwalk3": False, "ghidra": False},
     )
     base.update(overrides)
-    return HostFacts(**base)  # type: ignore[arg-type]
+    return HostFacts(**base)
 
 
 def test_pi_box_gets_core_and_skips_ghidra_angr() -> None:

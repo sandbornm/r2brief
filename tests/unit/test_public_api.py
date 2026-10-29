@@ -20,7 +20,7 @@ def test_public_surface_is_r2b() -> None:
 
 def test_options_reject_invalid_profile_and_region_count() -> None:
     with pytest.raises(ValueError, match="Unsupported analysis profile"):
-        AnalysisOptions(profile="mystery")  # type: ignore[arg-type]
+        AnalysisOptions(profile="mystery")
     with pytest.raises(ValueError, match="max_regions"):
         AnalysisOptions(max_regions=0)
 
@@ -54,7 +54,7 @@ def test_analyze_is_pure_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
     assert captured["quick_only"] is True
     assert captured["profile"] == "triage"
-    assert captured["config"].analysis.enable_trajectory_recording is False  # type: ignore[union-attr]
+    assert captured["config"].analysis.enable_trajectory_recording is False
     assert report.binary == binary.resolve()
     assert report.briefing["schema_version"] == "r2b.briefing.v1"
     assert report.payload["briefing"] == report.briefing
@@ -89,7 +89,7 @@ def test_ask_keeps_model_and_tools_opt_in(tmp_path: Path) -> None:
 
     class Bridge:
         def generate(self, messages: object, **kwargs: object) -> str:
-            assert "What is this?" in list(messages)[1].content  # type: ignore[arg-type]
+            assert "What is this?" in list(messages)[1].content
             assert kwargs["tools"] == ()
             assert kwargs["tool_executor"] is None
             return "answer"
@@ -142,7 +142,7 @@ def test_evidence_region_carries_scoped_context(tmp_path: Path) -> None:
 
     class Bridge:
         def generate(self, messages: object, **_kwargs: object) -> str:
-            context = list(messages)[1].content  # type: ignore[arg-type]
+            context = list(messages)[1].content
             assert "Entry / main" in context
             assert "0x1000" in context
             return "scoped answer"

@@ -1,12 +1,3 @@
-/**
- * Trajectory Store - A serialization-friendly system for tracking user analysis actions.
- *
- * This creates a compact representation of what the user has done during analysis,
- * which can be sent to the LLM without blowing up context size.
- *
- * The trajectory is structured as a graph with nodes (actions) and edges (transitions).
- */
-
 export type TrajectoryNodeType =
   | 'session_start'
   | 'binary_upload'
@@ -36,35 +27,27 @@ export interface TrajectoryNode {
 }
 
 export interface TrajectoryNodeData {
-  // For function views
   function_name?: string;
   function_address?: string;
 
-  // For address navigation
   address?: string;
 
-  // For code selection
   code_snippet?: string;
   line_count?: number;
 
-  // For questions/answers
   question?: string;
   question_topic?: string;
   answer_preview?: string;
 
-  // For analysis
   tools_used?: string[];
   binary_name?: string;
   architecture?: string;
 
-  // For annotations
   note?: string;
 
-  // For tab switches
   from_tab?: string;
   to_tab?: string;
 
-  // Generic metadata
   [key: string]: unknown;
 }
 
@@ -82,7 +65,6 @@ export interface Trajectory {
   nodes: TrajectoryNode[];
   edges: TrajectoryEdge[];
 
-  // Aggregated stats for quick reference
   stats: TrajectoryStats;
 }
 
@@ -97,43 +79,30 @@ export interface TrajectoryStats {
   unique_addresses_visited: number;
 }
 
-/**
- * Compact serialization format for sending to LLM.
- * Designed to be human-readable and token-efficient.
- */
 export interface TrajectorySnapshot {
-  // Current state
   current_view: string;
   current_function?: string;
   current_address?: string;
 
-  // Session summary
   session_duration_s: number;
   actions_count: number;
   functions_explored: string[];
   addresses_visited: string[];
 
-  // Recent timeline (last N actions)
   recent_actions: string[];
 
-  // Questions asked in this session
   questions: { q: string; answered: boolean }[];
 
-  // User focus indicators
   focus_area?: 'functions' | 'strings' | 'security' | 'dynamic' | 'exploration';
   depth_level: 'overview' | 'investigating' | 'deep_dive';
 }
 
-// Generate unique IDs
 let nodeCounter = 0;
 const generateNodeId = (): string => {
   nodeCounter++;
   return `n${nodeCounter}_${Date.now().toString(36)}`;
 };
 
-/**
- * Create a new empty trajectory
- */
 export const createTrajectory = (sessionId: string): Trajectory => ({
   id: `traj_${Date.now().toString(36)}`,
   session_id: sessionId,
@@ -153,9 +122,6 @@ export const createTrajectory = (sessionId: string): Trajectory => ({
   },
 });
 
-/**
- * Add a node to the trajectory
- */
 export const addNode = (
   trajectory: Trajectory,
   type: TrajectoryNodeType,
@@ -172,7 +138,6 @@ export const addNode = (
   const lastNode = trajectory.nodes[trajectory.nodes.length - 1];
   const edges = [...trajectory.edges];
 
-  // Add sequential edge from last node
   if (lastNode) {
     edges.push({
       from: lastNode.id,
@@ -180,11 +145,9 @@ export const addNode = (
       type: 'sequence',
     });
 
-    // Calculate duration for last node
     lastNode.duration_ms = node.timestamp - lastNode.timestamp;
   }
 
-  // Update stats
   const stats = { ...trajectory.stats };
   stats.total_actions++;
 
@@ -210,9 +173,6 @@ export const addNode = (
   };
 };
 
-/**
- * Update tab time tracking based on node durations
- */
 export const updateTabTimes = (trajectory: Trajectory): Trajectory => {
   const stats = { ...trajectory.stats };
 
@@ -231,10 +191,6 @@ export const updateTabTimes = (trajectory: Trajectory): Trajectory => {
   return { ...trajectory, stats };
 };
 
-/**
- * Create a compact snapshot for LLM context.
- * This is designed to give the LLM enough context without excessive tokens.
- */
 export const createSnapshot = (
   trajectory: Trajectory,
   currentView: string,
@@ -244,7 +200,6 @@ export const createSnapshot = (
   const startTime = trajectory.nodes[0]?.timestamp || now;
   const sessionDuration = Math.floor((now - startTime) / 1000);
 
-  // Extract unique functions explored
   const functionsExplored = new Set<string>();
   const addressesVisited = new Set<string>();
   const questions: { q: string; answered: boolean }[] = [];
@@ -267,19 +222,16 @@ export const createSnapshot = (
     if (node.type === 'ask_question' && node.data.question) {
       questions.push({
         q: truncate(node.data.question, 50),
-        answered: true, // Assume answered if we have the node
+        answered: true,
       });
     }
   }
 
-  // Create recent actions timeline
   const recentNodes = trajectory.nodes.slice(-maxRecentActions);
   const recentActions = recentNodes.map(formatNodeAction);
 
-  // Determine user focus area
   const focusArea = determineFocusArea(trajectory);
 
-  // Determine depth level based on actions
   const depthLevel = determineDepthLevel(trajectory);
 
   return {
@@ -297,9 +249,6 @@ export const createSnapshot = (
   };
 };
 
-/**
- * Serialize snapshot to a compact string for LLM prompt injection.
- */
 export const serializeSnapshot = (snapshot: TrajectorySnapshot): string => {
   const lines: string[] = [];
 
@@ -340,8 +289,6 @@ export const serializeSnapshot = (snapshot: TrajectorySnapshot): string => {
 
   return lines.join('\n');
 };
-
-// Helper functions
 
 function truncate(str: string, maxLen: number): string {
   if (str.length <= maxLen) return str;
@@ -434,12 +381,10 @@ function determineFocusArea(trajectory: Trajectory): TrajectorySnapshot['focus_a
 function determineDepthLevel(trajectory: Trajectory): TrajectorySnapshot['depth_level'] {
   const stats = trajectory.stats;
 
-  // Deep dive: multiple functions, annotations, or many questions
   if (stats.functions_viewed >= 5 || stats.annotations_made >= 2 || stats.questions_asked >= 3) {
     return 'deep_dive';
   }
 
-  // Investigating: some function views or questions
   if (stats.functions_viewed >= 2 || stats.questions_asked >= 1) {
     return 'investigating';
   }

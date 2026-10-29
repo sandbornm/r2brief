@@ -31,7 +31,6 @@ def test_sniff_readelf_on_elf(tmp_path: Path) -> None:
     elf.write_bytes(b"\x7fELF" + b"\x00" * 128)
     payload = sniff_binary(elf)
     assert "ELF" in str(payload["file"])
-    # readelf may fail on a stub header; sniff should still return a payload
     assert "readelf" in payload
 
 

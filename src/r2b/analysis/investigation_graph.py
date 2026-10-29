@@ -1,9 +1,3 @@
-"""Investigation/provenance graph for analysis sessions.
-
-This graph answers "where have we been and what did we do?" while
-``analysis_graph`` answers "what did we find in the subject under test?".
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -138,7 +132,6 @@ def build_investigation_graph(
     activities: Iterable[dict[str, Any]] = (),
     trajectory_actions: Iterable[dict[str, Any]] = (),
 ) -> dict[str, Any]:
-    """Build a graph of human/model/agent/tool actions for one session."""
 
     acc = _InvestigationAccumulator(session)
     actor_nodes = {

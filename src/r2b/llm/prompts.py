@@ -1,9 +1,3 @@
-"""Versioned prompt text. DTOs stay on briefing.v1; this id is the voice.
-
-CLI --ask, web chat, and briefing ask templates must import from here.
-Do not fork a second system voice in app.py / cli.py.
-"""
-
 from __future__ import annotations
 
 from typing import Any

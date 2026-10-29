@@ -1,5 +1,3 @@
-"""Unit tests for configuration module."""
-
 from pathlib import Path
 from unittest.mock import patch
 import os
@@ -25,10 +23,8 @@ from r2b.paths import find_checkout_root, shipped_config_dir
 
 
 class TestAppConfig:
-    """Tests for AppConfig."""
 
     def test_default_config_has_expected_structure(self):
-        """Test default AppConfig has all expected sections."""
         config = AppConfig()
 
         assert isinstance(config.llm, LLMSettings)
@@ -46,7 +42,6 @@ class TestAppConfig:
         assert config.web.enable_native_execution is False
 
     def test_verbosity_property_returns_output_verbosity(self):
-        """Test verbosity property delegates to output.verbosity."""
         config = AppConfig()
         config.output.verbosity = "debug"
 
@@ -54,22 +49,19 @@ class TestAppConfig:
 
 
 class TestLLMSettings:
-    """Tests for LLMSettings."""
 
     def test_default_values(self):
-        """Test LLMSettings has sensible defaults."""
         settings = LLMSettings()
 
         assert settings.provider == "ollama"
         assert settings.model == "gemma3:4b"
         assert settings.base_url == "http://127.0.0.1:11434"
         assert settings.compact_context is True
-        assert settings.enable_fallback is False  # Disabled by default
+        assert settings.enable_fallback is False
         assert settings.max_tokens > 0
         assert 0 <= settings.temperature <= 1
 
     def test_custom_values(self):
-        """Test LLMSettings accepts custom values."""
         settings = LLMSettings(
             provider="openai",
             model="gpt-5.6-luna",
@@ -85,10 +77,8 @@ class TestLLMSettings:
 
 
 class TestAnalysisSettings:
-    """Tests for AnalysisSettings."""
 
     def test_default_values(self):
-        """Test AnalysisSettings has sensible defaults."""
         settings = AnalysisSettings()
 
         assert settings.auto_analyze is True
@@ -98,7 +88,6 @@ class TestAnalysisSettings:
         assert settings.enable_ghidra is False
 
     def test_disable_adapters(self):
-        """Test adapters can be disabled."""
         settings = AnalysisSettings(
             enable_angr=False,
             enable_ghidra=False,
@@ -109,17 +98,14 @@ class TestAnalysisSettings:
 
 
 class TestStorageSettings:
-    """Tests for StorageSettings."""
 
     def test_default_database_path(self):
-        """Test default database path is in user's data directory."""
         settings = StorageSettings()
 
         assert isinstance(settings.database_path, Path)
         assert "r2b" in str(settings.database_path)
 
     def test_custom_database_path(self, tmp_path):
-        """Test custom database path can be set."""
         custom_path = tmp_path / "custom.db"
         settings = StorageSettings(database_path=custom_path)
 
@@ -127,7 +113,6 @@ class TestStorageSettings:
 
 
 class TestUISettings:
-    """Tests for UI feature flags."""
 
     def test_compiler_hidden_by_default(self):
         settings = UISettings()
@@ -136,10 +121,8 @@ class TestUISettings:
 
 
 class TestGhidraSettings:
-    """Tests for GhidraSettings."""
 
     def test_default_values(self):
-        """Test GhidraSettings has sensible defaults."""
         settings = GhidraSettings()
 
         assert settings.use_bridge is False
@@ -148,7 +131,6 @@ class TestGhidraSettings:
         assert settings.install_dir is None
 
     def test_bridge_configuration(self):
-        """Test bridge settings can be configured."""
         settings = GhidraSettings(
             use_bridge=True,
             bridge_host="192.168.1.1",
@@ -160,7 +142,6 @@ class TestGhidraSettings:
         assert settings.bridge_port == 9999
 
     def test_project_dir_from_tilde_is_home_not_literal(self):
-        """Shipped toml stores ~; Ghidra must not mkdir a cwd-relative ~ tree."""
         settings = GhidraSettings.model_validate(
             {"project_dir": "~/r2b/ghidra-projects"}
         )
@@ -169,17 +150,14 @@ class TestGhidraSettings:
         assert "~" not in settings.project_dir.parts
 
     def test_shipped_ghidra_project_dir_has_no_dot_path_elements(self):
-        """analyzeHeadless rejects path elements that start with '.' such as .local."""
         config = load_config()
 
         assert not any(part.startswith(".") for part in config.ghidra.project_dir.parts)
 
 
 class TestMerge:
-    """Tests for _merge function."""
 
     def test_merge_flat_dicts(self):
-        """Test merging flat dictionaries."""
         base = {"a": 1, "b": 2}
         override = {"b": 3, "c": 4}
         result = _merge(base, override)
@@ -187,7 +165,6 @@ class TestMerge:
         assert result == {"a": 1, "b": 3, "c": 4}
 
     def test_merge_nested_dicts(self):
-        """Test merging nested dictionaries."""
         base = {"outer": {"a": 1, "b": 2}}
         override = {"outer": {"b": 3, "c": 4}}
         result = _merge(base, override)
@@ -195,7 +172,6 @@ class TestMerge:
         assert result == {"outer": {"a": 1, "b": 3, "c": 4}}
 
     def test_merge_preserves_base(self):
-        """Test merge doesn't modify base dictionary."""
         base = {"a": 1}
         override = {"a": 2}
         _merge(base, override)
@@ -203,7 +179,6 @@ class TestMerge:
         assert base == {"a": 1}
 
     def test_merge_deeply_nested(self):
-        """Test merging deeply nested structures."""
         base = {"l1": {"l2": {"l3": {"a": 1}}}}
         override = {"l1": {"l2": {"l3": {"b": 2}}}}
         result = _merge(base, override)
@@ -212,16 +187,13 @@ class TestMerge:
 
 
 class TestLoadConfig:
-    """Tests for load_config function."""
 
     def test_load_config_returns_app_config(self):
-        """Test load_config returns an AppConfig instance."""
         config = load_config()
 
         assert isinstance(config, AppConfig)
 
     def test_load_config_from_custom_path(self, tmp_path):
-        """Test load_config loads from custom path."""
         config_path = tmp_path / "custom_config.toml"
         config_path.write_text("""
 [llm]
@@ -237,7 +209,6 @@ max_binary_size = "10MB"
         assert config.analysis.max_binary_size == "10MB"
 
     def test_load_config_honors_env_ghidra_dir(self, tmp_path):
-        """Test GHIDRA_INSTALL_DIR env var is honored."""
         ghidra_dir = str(tmp_path / "ghidra")
 
         with patch.dict(os.environ, {"GHIDRA_INSTALL_DIR": ghidra_dir}):
@@ -246,21 +217,18 @@ max_binary_size = "10MB"
             assert config.ghidra.install_dir == Path(ghidra_dir)
 
     def test_load_config_honors_show_compiler_env_bool(self):
-        """Test show_compiler accepts compact boolean environment values."""
         with patch.dict(os.environ, {"R2B_SHOW_COMPILER": "1"}, clear=True):
             config = load_config()
 
             assert config.ui.show_compiler is True
 
     def test_load_config_honors_lowercase_show_compiler_env(self):
-        """Test shell-friendly lowercase show_compiler env aliases are honored."""
         with patch.dict(os.environ, {"r2b_show_compiler": "1"}, clear=True):
             config = load_config()
 
             assert config.ui.show_compiler is True
 
     def test_load_config_env_can_disable_show_compiler(self, tmp_path):
-        """Test false-like environment values override config files."""
         config_path = tmp_path / "show_compiler.toml"
         config_path.write_text("""
 [ui]
@@ -273,16 +241,12 @@ show_compiler = true
             assert config.ui.show_compiler is False
 
     def test_load_config_without_custom_config(self):
-        """Test load_config works without custom config file."""
-        # When R2B_CONFIG env var is not set and no config_path provided,
-        # load_config should still return a valid AppConfig from defaults
         with patch.dict(os.environ, {"R2B_CONFIG": ""}, clear=False):
             config = load_config()
 
             assert isinstance(config, AppConfig)
 
     def test_load_config_picks_up_implicit_local_overlay(self, tmp_path, monkeypatch):
-        """config/local.toml should merge without setting R2B_CONFIG."""
         local = tmp_path / "local.toml"
         local.write_text("""
 [llm]
@@ -304,7 +268,6 @@ api_key_env = "GLM_API_KEY"
         assert config.llm.api_key_env == "GLM_API_KEY"
 
     def test_load_config_glm_provider_fills_defaults(self, tmp_path):
-        """R2B_LLM_PROVIDER=glm should pick the current GLM model and host."""
         config_path = tmp_path / "empty.toml"
         config_path.write_text("")
 
@@ -409,7 +372,6 @@ class TestDetectEnvironmentHeadless:
 
 
 class TestExplicitConfigPath:
-    """An explicitly requested config must exist — no silent fallback."""
 
     def test_missing_explicit_config_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="no-such-file.toml"):

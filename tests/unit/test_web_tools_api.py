@@ -1,12 +1,9 @@
-"""Tests for tool execution API endpoints."""
-
 import pytest
 from unittest.mock import MagicMock, patch
 
 
 @pytest.fixture
 def client(monkeypatch):
-    """Create test client with mocked dependencies."""
     monkeypatch.setenv("R2B_WEB_EXECUTION_TOKEN", "test-execution-token")
     with patch('r2b.web.app.build_state') as mock_build:
         mock_state = MagicMock()
@@ -29,10 +26,8 @@ def client(monkeypatch):
 
 
 class TestToolsExecuteEndpoint:
-    """Test POST /api/tools/execute endpoint."""
 
     def test_execute_requires_tool(self, client):
-        """Returns 400 when tool is missing."""
         response = client.post('/api/tools/execute', json={
             'script': 'print("hello")',
             'language': 'python',
@@ -41,7 +36,6 @@ class TestToolsExecuteEndpoint:
         assert 'tool' in response.get_json()['error'].lower()
 
     def test_execute_requires_script(self, client):
-        """Returns 400 when script is missing."""
         response = client.post('/api/tools/execute', json={
             'tool': 'ghidra',
             'language': 'python',
@@ -50,7 +44,6 @@ class TestToolsExecuteEndpoint:
         assert 'script' in response.get_json()['error'].lower()
 
     def test_execute_validates_tool_name(self, client):
-        """Returns 400 for invalid tool name."""
         response = client.post('/api/tools/execute', json={
             'tool': 'invalid_tool',
             'script': 'print("hello")',
@@ -60,7 +53,6 @@ class TestToolsExecuteEndpoint:
         assert 'tool' in response.get_json()['error'].lower()
 
     def test_execute_validates_language(self, client):
-        """Returns 400 for invalid language."""
         response = client.post('/api/tools/execute', json={
             'tool': 'ghidra',
             'script': 'print("hello")',
@@ -70,10 +62,9 @@ class TestToolsExecuteEndpoint:
         assert 'language' in response.get_json()['error'].lower()
 
     def test_execute_returns_validation_errors(self, client):
-        """Returns validation errors for invalid script."""
         response = client.post('/api/tools/execute', json={
             'tool': 'ghidra',
-            'script': 'def broken(',  # Invalid Python syntax
+            'script': 'def broken(',
             'language': 'python',
         })
         data = response.get_json()
@@ -83,37 +74,30 @@ class TestToolsExecuteEndpoint:
         assert len(data['validation']['errors']) > 0
 
     def test_execute_ghidra_without_bridge_returns_error(self, client):
-        """Returns error when Ghidra bridge not configured."""
         response = client.post('/api/tools/execute', json={
             'tool': 'ghidra',
             'script': 'print("hello")',
             'language': 'python',
         })
         data = response.get_json()
-        # Script is valid but Ghidra bridge not available
         assert 'validation' in data
         assert data['validation']['valid'] is True
         assert 'error' in data
         assert 'ghidra' in data['error'].lower() or 'bridge' in data['error'].lower()
 
     def test_execute_radare2_without_r2pipe_returns_error(self, client):
-        """Returns error when r2pipe not initialized."""
         response = client.post('/api/tools/execute', json={
             'tool': 'radare2',
             'script': 'aaa',
             'language': 'r2',
         })
         data = response.get_json()
-        # Validation passes but execution fails
         assert 'validation' in data
-        # r2 commands don't have syntax checking like Python, so they validate
-        # But execution should fail without r2pipe
         assert 'error' in data or (
             data.get('execution') and data['execution'].get('status') == 'error'
         )
 
     def test_execute_success_returns_output(self, client):
-        """Returns execution output on success."""
         with patch('r2b.web.app.build_state') as mock_build:
             mock_state = MagicMock()
             mock_state.chat_dao = MagicMock()
@@ -174,24 +158,21 @@ class TestToolsExecuteEndpoint:
         assert 'disabled' in response.get_json()['error']
 
     def test_execute_empty_script_returns_error(self, client):
-        """Returns 400 for empty script."""
         response = client.post('/api/tools/execute', json={
             'tool': 'ghidra',
-            'script': '   ',  # Just whitespace
+            'script': '   ',
             'language': 'python',
         })
         assert response.status_code == 400
         assert 'script' in response.get_json()['error'].lower()
 
     def test_execute_unimplemented_tool_returns_error(self, client):
-        """Returns error for unimplemented tool executor."""
         response = client.post('/api/tools/execute', json={
             'tool': 'angr',
             'script': 'print("test")',
             'language': 'python',
         })
         data = response.get_json()
-        # Validation passes but executor not implemented
         assert 'validation' in data
         assert data['validation']['valid'] is True
         assert 'error' in data
@@ -199,15 +180,12 @@ class TestToolsExecuteEndpoint:
 
 
 class TestToolsStatusEndpoint:
-    """Test GET /api/tools/status endpoint."""
 
     def test_status_returns_all_tools(self, client):
-        """Returns status for all supported tools."""
         response = client.get('/api/tools/status')
         assert response.status_code == 200
         data = response.get_json()
 
-        # Should have status for all tools
         assert 'tools' in data
         tools = data['tools']
         assert 'ghidra' in tools
@@ -220,15 +198,12 @@ class TestToolsStatusEndpoint:
         assert 'unblob' in tools
         assert 'frida' in tools
         assert 'gef' in tools
-        # Environment probes are not advertised as integrations. A tool enters
-        # this contract only after r2b can schedule and normalize its evidence.
         assert 'rizin' not in tools
         assert 'lief' not in tools
         assert 'keystone' not in tools
         assert 'pwntools' not in tools
 
     def test_status_tool_has_required_fields(self, client):
-        """Each tool status has required fields."""
         response = client.get('/api/tools/status')
         data = response.get_json()
 
@@ -238,7 +213,6 @@ class TestToolsStatusEndpoint:
             assert isinstance(tool_status['available'], bool)
 
     def test_status_ghidra_has_bridge_info(self, client):
-        """Ghidra status includes bridge connection info."""
         response = client.get('/api/tools/status')
         data = response.get_json()
 
@@ -248,7 +222,6 @@ class TestToolsStatusEndpoint:
         assert 'headless_available' in ghidra
 
     def test_status_includes_summary(self, client):
-        """Status includes summary of available tools."""
         response = client.get('/api/tools/status')
         data = response.get_json()
 
@@ -264,10 +237,8 @@ class TestToolsStatusEndpoint:
 
 
 class TestCompilerCapabilitiesEndpoint:
-    """Test GET /api/compilers endpoint."""
 
     def test_compilers_returns_backward_compatible_fields(self, client):
-        """Compiler capabilities preserve the existing compilers contract."""
         snapshot = {
             'state': 'ready',
             'generated_at': '2026-01-01T00:00:00+00:00',
@@ -312,7 +283,6 @@ class TestCompilerCapabilitiesEndpoint:
             assert 'assemble' in data['architectures'][arch]['operations']
 
     def test_compile_preview_includes_support_diagnostics(self, client):
-        """Compile preview includes command plus actionable support diagnostics."""
         preview = {
             'command': 'docker run r2b-compiler:latest aarch64-linux-gnu-gcc -o sample source.c',
             'uses_docker': True,

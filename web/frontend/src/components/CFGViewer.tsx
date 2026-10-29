@@ -35,13 +35,11 @@ import {
 import type { FunctionName, FunctionNameSuggestion } from '../types';
 import { FC, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-// Smooth fade-in animation
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 `;
 
-// Pulse animation for empty state
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
@@ -92,7 +90,6 @@ interface FunctionCFG {
   }>;
 }
 
-// Graph node for layout
 interface GraphNode {
   id: string;
   x: number;
@@ -106,14 +103,12 @@ interface GraphNode {
   failTarget?: string | null;
 }
 
-// Graph edge for layout
 interface GraphEdge {
   source: string;
   target: string;
   type: 'jump' | 'fall' | 'call';
 }
 
-// Context for Ask model feature
 export interface CFGContext {
   functionName: string | null;
   functionOffset: string | null;
@@ -135,7 +130,6 @@ interface CFGViewerProps {
   sessionId?: string | null;
 }
 
-// Simple hierarchical layout for CFG
 const layoutGraph = (
   blocks: Array<{
     offset?: string | null;
@@ -153,7 +147,6 @@ const layoutGraph = (
   const horizontalGap = 60;
   const verticalGap = 40;
 
-  // Build adjacency map
   const blockMap = new Map<string, typeof blocks[0]>();
   const incomingEdges = new Map<string, Set<string>>();
   const outgoingEdges = new Map<string, Set<string>>();
@@ -165,7 +158,6 @@ const layoutGraph = (
     if (!incomingEdges.has(offset)) incomingEdges.set(offset, new Set());
     if (!outgoingEdges.has(offset)) outgoingEdges.set(offset, new Set());
 
-    // Add edges
     if (block.jump) {
       outgoingEdges.get(offset)!.add(block.jump);
       if (!incomingEdges.has(block.jump)) incomingEdges.set(block.jump, new Set());
@@ -178,14 +170,11 @@ const layoutGraph = (
     }
   }
 
-  // Assign levels using BFS from entry
   const levels = new Map<string, number>();
   const queue: string[] = [];
   
-  // Find entry block
   let entry = entryOffset;
   if (!blockMap.has(entry)) {
-    // Fallback to first block
     entry = blocks[0]?.offset || '';
   }
   if (!entry) return { nodes: [], edges: [] };
@@ -206,14 +195,12 @@ const layoutGraph = (
     }
   }
 
-  // Group nodes by level
   const levelGroups = new Map<number, string[]>();
   for (const [nodeId, level] of levels) {
     if (!levelGroups.has(level)) levelGroups.set(level, []);
     levelGroups.get(level)!.push(nodeId);
   }
 
-  // Calculate positions
   const graphNodes: GraphNode[] = [];
   const graphEdges: GraphEdge[] = [];
 
@@ -228,7 +215,6 @@ const layoutGraph = (
       const block = blockMap.get(nodeId);
       if (!block) return;
 
-      // Get disassembly
       const disasm = block.disassembly || [];
       const ops = block.ops || [];
       const instructions = disasm.length > 0
@@ -257,7 +243,6 @@ const layoutGraph = (
         failTarget: block.fail || null,
       });
 
-      // Add edges
       if (block.jump) {
         graphEdges.push({
           source: nodeId,
@@ -278,7 +263,6 @@ const layoutGraph = (
   return { nodes: graphNodes, edges: graphEdges };
 };
 
-// SVG CFG Graph Component
 interface CFGGraphProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -308,7 +292,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
-  // Calculate bounding box
   useEffect(() => {
     if (nodes.length === 0) return;
 
@@ -345,7 +328,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
     setPan({ x: 0, y: 0 });
   }, []);
 
-  // Mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const factor = e.deltaY > 0 ? 0.9 : 1.1;
@@ -356,9 +338,7 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
     });
   }, []);
 
-  // Keyboard shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Don't handle if in an input field
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
       return;
     }
@@ -407,7 +387,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
       };
       setPan(newPan);
 
-      // Throttle pan logging (only every 100ms)
       const now = Date.now();
       if (now - lastPanLog.current > 100) {
         debug.cfg.pan(newPan.x, newPan.y);
@@ -418,7 +397,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
 
   const handleMouseUp = () => setIsPanning(false);
 
-  // Build node position map for edge drawing
   const nodePositions = useMemo(() => {
     const map = new Map<string, GraphNode>();
     for (const node of nodes) {
@@ -427,7 +405,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
     return map;
   }, [nodes]);
 
-  // Edge path calculation with curved lines
   const getEdgePath = (edge: GraphEdge) => {
     const source = nodePositions.get(edge.source);
     const target = nodePositions.get(edge.target);
@@ -438,10 +415,8 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
     const targetX = target.x + target.width / 2;
     const targetY = target.y;
 
-    // Offset for multiple edges
     const offset = edge.type === 'fall' ? -15 : 15;
 
-    // Simple curved path
     const midY = (sourceY + targetY) / 2;
     return `M ${sourceX} ${sourceY} C ${sourceX + offset} ${midY}, ${targetX + offset} ${midY}, ${targetX} ${targetY}`;
   };
@@ -493,7 +468,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
         },
       }}
     >
-      {/* Toolbar controls */}
       <Stack
         direction="row"
         spacing={0.5}
@@ -547,7 +521,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
         )}
       </Stack>
 
-      {/* SVG Canvas */}
       <svg
         width="100%"
         height="100%"
@@ -581,7 +554,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
           </marker>
         </defs>
 
-        {/* Edges */}
         {edges.map((edge, idx) => (
           <path
             key={`edge-${idx}`}
@@ -595,7 +567,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
           />
         ))}
 
-        {/* Nodes */}
         {nodes.map((node) => {
           const isSelected = selectedNode === node.id;
           const borderColor = node.isEntry
@@ -610,7 +581,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
               onClick={() => onNodeClick?.(node.id)}
               style={{ cursor: 'pointer' }}
             >
-              {/* Node background */}
               <rect
                 x={node.x}
                 y={node.y}
@@ -622,7 +592,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
                 strokeWidth={isSelected || node.isEntry ? 2 : 1}
               />
 
-              {/* Node header */}
               <rect
                 x={node.x}
                 y={node.y}
@@ -639,7 +608,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
                 fill={alpha(borderColor, 0.15)}
               />
 
-              {/* Address label */}
               <text
                 x={node.x + 8}
                 y={node.y + 16}
@@ -657,7 +625,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
                 )}
               </text>
 
-              {/* Instructions */}
               {node.instructions.map((instr, idx) => (
                 <text
                   key={idx}
@@ -690,7 +657,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
         })}
       </svg>
 
-      {/* Legend */}
       <Box
         sx={{
           position: 'absolute',
@@ -729,7 +695,6 @@ const CFGGraphBase: FC<CFGGraphProps> = ({
   );
 };
 
-// Memoize CFG Graph to prevent unnecessary re-renders
 const CFGGraph = memo(CFGGraphBase);
 
 const CFGViewer: FC<CFGViewerProps> = ({
@@ -743,14 +708,12 @@ const CFGViewer: FC<CFGViewerProps> = ({
   const isDark = theme.palette.mode === 'dark';
   const activity = useActivity();
 
-  // Function naming state
   const [functionNames, setFunctionNames] = useState<Map<string, FunctionName>>(new Map());
   const [isNamingFunctions, setIsNamingFunctions] = useState(false);
   const [namingProgress, setNamingProgress] = useState<string | null>(null);
   const [editingFunction, setEditingFunction] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
-  // Load function names from server
   useEffect(() => {
     if (!sessionId) return;
 
@@ -772,13 +735,10 @@ const CFGViewer: FC<CFGViewerProps> = ({
     loadFunctionNames();
   }, [sessionId]);
 
-  // Use function_cfgs directly - these are functions with actual CFG blocks extracted
-  // Don't create empty shells from radareFunctions as they provide no CFG value
   const allFunctions = useMemo(() => {
     return functions;
   }, [functions]);
 
-  // Get display name for a function (custom name or original)
   const getDisplayName = useCallback((fn: FunctionCFG): { display: string; original: string; isRenamed: boolean; isProposed?: boolean; proposed?: string; source?: string; reasoning?: string } => {
     const fnName = functionNames.get(fn.offset);
     if (!fnName) {
@@ -817,7 +777,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
   const [isMaximized, setIsMaximized] = useState(false);
 
-  // Auto-name functions using LLM
   const handleAutoNameFunctions = useCallback(async () => {
     if (!sessionId || isNamingFunctions) return;
 
@@ -826,7 +785,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
     debug.cfg.autoName(allFunctions.length, 'start');
 
     try {
-      // Prepare function data for the API
       const functionsToName = allFunctions
         .filter((fn) => /^(sub_|fcn\.|func_|FUN_)[0-9a-fA-F]+$/i.test(fn.name))
         .slice(0, 10)
@@ -868,7 +826,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
       const data = await response.json();
       const suggestions: FunctionNameSuggestion[] = data.suggestions || [];
 
-      // Save each suggestion to the server
       for (const suggestion of suggestions) {
         const originalFn = allFunctions.find((f) => f.offset === suggestion.address);
         if (!originalFn) continue;
@@ -890,7 +847,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
           }),
         });
 
-        // Update local state
         setFunctionNames((prev) => {
           const newMap = new Map(prev);
           newMap.set(suggestion.address, {
@@ -967,7 +923,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
     }
   }, [sessionId, functionNames]);
 
-  // Save a custom function name
   const handleSaveFunctionName = useCallback(async (fn: FunctionCFG, newName: string) => {
     if (!sessionId || !newName.trim()) return;
 
@@ -1005,7 +960,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
     setEditValue('');
   }, [sessionId]);
 
-  // Toggle maximize state
   const handleMaximizeToggle = useCallback(() => {
     setIsMaximized(prev => {
       const newMaximized = !prev;
@@ -1018,7 +972,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
     });
   }, [activity, selectedFunction]);
 
-  // Handle escape key at document level for maximize
   useEffect(() => {
     const handleEscapeKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isMaximized) {
@@ -1029,15 +982,12 @@ const CFGViewer: FC<CFGViewerProps> = ({
     return () => document.removeEventListener('keydown', handleEscapeKey);
   }, [isMaximized]);
 
-  // Update selected function when allFunctions changes
   useEffect(() => {
     if (allFunctions.length > 0 && !selectedFunction) {
       setSelectedFunction(allFunctions[0]);
     }
   }, [allFunctions, selectedFunction]);
 
-  // Get blocks from selected function - use radare2 function_cfgs directly
-  // No fallback synthesis from angr nodes to avoid brittle assumptions
   const currentBlocks = useMemo(() => {
     if (selectedFunction?.blocks && selectedFunction.blocks.length > 0) {
       return selectedFunction.blocks;
@@ -1047,7 +997,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
 
   const currentBlock = currentBlocks[selectedBlockIndex] ?? null;
 
-  // Layout graph for current function
   const graphLayout = useMemo(() => {
     if (!selectedFunction || currentBlocks.length === 0) {
       return { nodes: [], edges: [] };
@@ -1078,7 +1027,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
   const handleCopyDisasm = useCallback(() => {
     if (!currentBlock) return;
 
-    // Handle both radare2 format (disassembly or ops) and angr format
     const blockAny = currentBlock as Record<string, unknown>;
     const disasm = (currentBlock.disassembly || blockAny.ops) as Array<Record<string, unknown>> | undefined;
     if (!disasm) return;
@@ -1100,7 +1048,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
         block: nodeId,
         function: selectedFunction?.name,
       });
-      // Find block index
       const idx = currentBlocks.findIndex((b) => b.offset === nodeId);
       if (idx >= 0) {
         setSelectedBlockIndex(idx);
@@ -1109,22 +1056,18 @@ const CFGViewer: FC<CFGViewerProps> = ({
     [currentBlocks, activity, selectedFunction]
   );
 
-  // Handle view mode switch
   const handleViewModeSwitch = useCallback((newMode: 'graph' | 'blocks') => {
     debug.cfg.viewModeSwitch(viewMode, newMode);
     setViewMode(newMode);
   }, [viewMode]);
 
-  // Handle Ask About CFG - collect context and call callback
   const handleAskAboutCFGInternal = useCallback(() => {
     if (!onAskAboutCFG) return;
 
-    // Find the selected block
     const selectedBlock = selectedGraphNode
       ? currentBlocks.find((b) => b.offset === selectedGraphNode)
       : currentBlock;
 
-    // Build context
     const context: CFGContext = {
       functionName: selectedFunction?.name ?? null,
       functionOffset: selectedFunction?.offset ?? null,
@@ -1142,7 +1085,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
       })),
     };
 
-    // Track activity
     activity.trackEvent('ask_claude', {
       topic: 'cfg',
       function: selectedFunction?.name,
@@ -1155,11 +1097,9 @@ const CFGViewer: FC<CFGViewerProps> = ({
     onAskAboutCFG(context);
   }, [onAskAboutCFG, selectedFunction, selectedGraphNode, currentBlocks, currentBlock, activity]);
 
-  // Get disassembly from current block (handle both radare2 and angr formats)
   const blockDisasm = useMemo(() => {
     if (!currentBlock) return [];
 
-    // Handle radare2 format (disassembly array with addr/opcode)
     if (currentBlock.disassembly && currentBlock.disassembly.length > 0) {
       return currentBlock.disassembly.map((d: Record<string, unknown>) => ({
         addr: (d.addr as string) || '?',
@@ -1171,7 +1111,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
       }));
     }
 
-    // Handle radare2 ops format (from agfj command)
     const blockAny = currentBlock as Record<string, unknown>;
     const ops = blockAny.ops as Array<Record<string, unknown>> | undefined;
     if (ops && ops.length > 0) {
@@ -1188,7 +1127,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
     return [];
   }, [currentBlock]);
 
-  // CFG status for debugging - only show functions with actual CFG blocks
   const cfgStatus = useMemo(() => {
     const issues: string[] = [];
     const functionsWithBlocks = functions.filter((f) => f.blocks && f.blocks.length > 0);
@@ -1203,7 +1141,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
     }
 
     return {
-      // Only show CFG viewer if we have functions with actual blocks
       hasData: functionsWithBlocks.length > 0,
       hasCFGBlocks: functionsWithBlocks.length > 0,
       issues,
@@ -1242,7 +1179,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
           Run full analysis (not quick scan) to generate CFG
         </Typography>
 
-        {/* Debug info */}
         <Paper variant="outlined" sx={{ mt: 2, p: 1.5, maxWidth: 350 }}>
           <Typography
             variant="caption"
@@ -1291,10 +1227,8 @@ const CFGViewer: FC<CFGViewerProps> = ({
     );
   }
 
-  // Main content component
   const mainContent = (
     <Box sx={{ height: '100%', display: 'flex', gap: 1.5 }}>
-      {/* Functions list */}
       <Paper
         variant="outlined"
         sx={{
@@ -1512,9 +1446,7 @@ const CFGViewer: FC<CFGViewerProps> = ({
         </Box>
       </Paper>
 
-      {/* Main content area */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* View mode toggle and header */}
         <Paper
           variant="outlined"
           sx={{ p: 1, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}
@@ -1569,7 +1501,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
           </Stack>
         </Paper>
 
-        {/* Graph or Block view */}
         <Paper
           variant="outlined"
           sx={{
@@ -1614,7 +1545,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
             </Box>
           ) : selectedFunction && currentBlocks.length > 0 ? (
             <>
-              {/* Block navigation header */}
               <Stack
                 direction="row"
                 alignItems="center"
@@ -1650,11 +1580,9 @@ const CFGViewer: FC<CFGViewerProps> = ({
                 </Tooltip>
               </Stack>
 
-              {/* Block content */}
               <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
                 {currentBlock && (
                   <>
-                    {/* Block info */}
                     <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
                       <Chip
                         size="small"
@@ -1686,7 +1614,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
                       )}
                     </Stack>
 
-                    {/* Disassembly */}
                     <Paper
                       variant="outlined"
                       sx={{
@@ -1777,7 +1704,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
         </Paper>
       </Box>
 
-      {/* Stats sidebar */}
       <Paper
         variant="outlined"
         sx={{
@@ -1868,7 +1794,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
           )}
         </Stack>
 
-        {/* Source indicator */}
         <Box sx={{ mt: 'auto', pt: 1, borderTop: 1, borderColor: 'divider' }}>
           <Typography
             variant="caption"
@@ -1902,7 +1827,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
     </Box>
   );
 
-  // Render with optional maximize overlay
   if (isMaximized) {
     return (
       <Box
@@ -1919,7 +1843,6 @@ const CFGViewer: FC<CFGViewerProps> = ({
           flexDirection: 'column',
         }}
       >
-        {/* Header with close button */}
         <Stack
           direction="row"
           alignItems="center"

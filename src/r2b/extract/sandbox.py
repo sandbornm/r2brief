@@ -1,11 +1,3 @@
-"""Run extractors with a tight timeout, isolated output dir, and no network.
-
-Uses bubblewrap when present (``--unshare-net``). If bubblewrap is unavailable,
-execution fails closed unless the caller explicitly accepts an unsafe subprocess
-fallback. Byte and file output is sampled while the process runs and pruned to
-the configured limits before results are returned.
-"""
-
 from __future__ import annotations
 
 import os
@@ -40,7 +32,6 @@ class SandboxResult:
 
 
 def enforce_limits(output_dir: Path, limits: ExtractLimits) -> list[str]:
-    """Delete extracted files past max_files / max_bytes. JSON logs at the root stay."""
     notes: list[str] = []
     if not output_dir.is_dir():
         return notes
@@ -84,7 +75,6 @@ def run_sandboxed(
     limits: ExtractLimits | None = None,
     extra_ro_binds: Sequence[Path] | None = None,
 ) -> SandboxResult:
-    """Execute ``argv`` with ``output_dir`` writable and the input read-only."""
     limits = limits or ExtractLimits()
     output_dir.mkdir(parents=True, exist_ok=True)
     input_file = input_file.resolve()
@@ -103,8 +93,6 @@ def run_sandboxed(
             tool_dirs.append(str(resolved.parent))
     tool_dirs.extend(["/usr/bin", "/bin"])
     env = {
-        # Keep the environment scrubbed while allowing an absolute Homebrew
-        # extractor to find sibling helpers such as unsquashfs.
         "PATH": os.pathsep.join(dict.fromkeys(tool_dirs)),
         "HOME": str(output_dir),
         "TMPDIR": str(output_dir / "tmp"),
@@ -247,7 +235,6 @@ def _bwrap_argv(
         path = Path(root)
         if path.exists():
             cmd.extend(_bind_or_symlink(path))
-    # Interpreter and dynamic linker live here on Debian usrmerge hosts.
     for extra in extra_ro_binds or ():
         resolved = extra.resolve()
         if resolved.exists():

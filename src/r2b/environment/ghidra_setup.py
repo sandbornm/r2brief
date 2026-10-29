@@ -1,5 +1,3 @@
-"""Ghidra setup helpers for reproducible local installations."""
-
 from __future__ import annotations
 
 import json
@@ -19,12 +17,11 @@ DEFAULT_GHIDRA_INSTALL_ROOT = Path("~/.local/share/r2b/tools").expanduser()
 
 
 class GhidraSetupError(RuntimeError):
-    """Raised when a Ghidra setup action cannot be completed."""
+    pass
 
 
 @dataclass(slots=True)
 class GhidraSetupResult:
-    """Result from preparing or installing a Ghidra distribution."""
 
     archive_url: str | None
     archive_path: Path | None
@@ -47,12 +44,6 @@ class GhidraSetupResult:
 
 
 def resolve_ghidra_release_url(version: str) -> str:
-    """Resolve a Ghidra version to the official release archive URL.
-
-    Ghidra release asset names include a build date, so constructing a URL from
-    the version alone is fragile. Use release metadata instead and ask the user
-    for an explicit URL when a tag cannot be resolved.
-    """
 
     errors: list[str] = []
     for tag_template in GHIDRA_TAG_TEMPLATES:
@@ -95,7 +86,6 @@ def setup_ghidra(
     force: bool = False,
     dry_run: bool = False,
 ) -> GhidraSetupResult:
-    """Download/extract Ghidra and validate the resulting installation."""
 
     choices = [value is not None for value in (version, url, archive)]
     if sum(choices) != 1:
@@ -148,7 +138,6 @@ def setup_ghidra(
 
 
 def download_archive(url: str, destination: Path) -> None:
-    """Download a Ghidra archive to destination."""
 
     request = urllib.request.Request(url, headers={"User-Agent": "r2b-ghidra-setup"})
     try:
@@ -160,7 +149,6 @@ def download_archive(url: str, destination: Path) -> None:
 
 
 def extract_ghidra_archive(archive: Path, install_root: Path, *, force: bool = False) -> Path:
-    """Extract a Ghidra zip archive and return its installation directory."""
 
     if archive.suffix.lower() != ".zip":
         raise GhidraSetupError("Ghidra setup currently supports .zip archives only.")

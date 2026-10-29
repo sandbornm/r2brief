@@ -2,7 +2,6 @@ import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ActivityProvider, useActivity } from '../contexts/ActivityContext';
 
-// Test component that uses the activity context
 function TestComponent() {
   const activity = useActivity();
 
@@ -98,7 +97,6 @@ describe('ActivityContext', () => {
       </ActivityProvider>
     );
 
-    // Perform some actions
     await user.click(screen.getByText('View Function'));
 
     const summary = screen.getByTestId('context-summary').textContent;
@@ -107,7 +105,6 @@ describe('ActivityContext', () => {
   });
 
   it('throws error when used outside provider', () => {
-    // Suppress console.error for this test
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     expect(() => {
@@ -125,14 +122,12 @@ describe('ActivityContext', () => {
       </ActivityProvider>
     );
 
-    // Track more than MAX_EVENTS (100)
     for (let i = 0; i < 110; i++) {
       await act(async () => {
         await user.click(screen.getByText('Track Select'));
       });
     }
 
-    // Should be capped at 100
     const count = parseInt(screen.getByTestId('event-count').textContent || '0', 10);
     expect(count).toBeLessThanOrEqual(100);
   });

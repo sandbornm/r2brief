@@ -64,7 +64,6 @@ describe('ToolAttribution', () => {
       />
     );
 
-    // All 6 tools should be present
     expect(screen.getByText('radare2')).toBeInTheDocument();
     expect(screen.getByText('angr')).toBeInTheDocument();
     expect(screen.getByText('Capstone')).toBeInTheDocument();
@@ -83,7 +82,6 @@ describe('ToolAttribution', () => {
       />
     );
 
-    // Should still recognize the tools
     expect(screen.getByText(/3 active/i)).toBeInTheDocument();
   });
 });

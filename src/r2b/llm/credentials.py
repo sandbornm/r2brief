@@ -1,5 +1,3 @@
-"""Resolve provider-specific LLM keys and endpoints without conflating hosts."""
-
 from __future__ import annotations
 
 import os
@@ -47,7 +45,6 @@ _OLLAMA_DEFAULT_URL = "http://127.0.0.1:11434"
 
 
 def is_openai_sdk_provider(provider: str | None) -> bool:
-    """Whether the provider uses an OpenAI SDK transport in this process."""
     return canonical_provider(provider) in {
         "openai", "xai", "kimi", "glm", "exo", "openrouter", "vllm", "llamacpp"
     }
@@ -61,7 +58,6 @@ def resolve_llm_api_key(
     config: AppConfig,
     provider: str | None = None,
 ) -> tuple[str | None, str | None]:
-    """Return the key for exactly one provider, never an unrelated cloud key."""
     identity = canonical_provider(provider or config.llm.provider)
     names: list[str] = []
     if identity == canonical_provider(config.llm.provider) and config.llm.api_key_env:
@@ -94,7 +90,6 @@ def resolve_provider_base_url(
     key_env: str | None = None,
     provider: str | None = None,
 ) -> str | None:
-    """Resolve the selected provider's endpoint without conflating host and protocol."""
     identity = canonical_provider(provider or config.llm.provider)
     explicit = (config.llm.base_url or "").rstrip("/")
     has_explicit_provider_url = bool(explicit and explicit != _OLLAMA_DEFAULT_URL)
@@ -118,7 +113,6 @@ def resolve_provider_base_url(
 
 
 def apply_provider_defaults(config: AppConfig) -> None:
-    """Fill identity-specific model, key name, endpoint, and transport defaults."""
     identity = canonical_provider(config.llm.provider)
     spec = provider_spec(identity)
     config.llm.provider = identity

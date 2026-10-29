@@ -1,9 +1,3 @@
-"""Optional static CLI evidence from Detect It Easy and Mandiant capa.
-
-Keep native JSON intact: rule matches and signatures are tool observations,
-not runtime observations or vulnerability verdicts.
-"""
-
 from __future__ import annotations
 
 import json
@@ -20,7 +14,6 @@ MAX_REPORT_BYTES = 16 * 1024 * 1024
 
 
 def _run_json(argv: list[str], timeout_s: int) -> tuple[int, dict[str, Any], str]:
-    # Spool output to disk so a verbose analyzer cannot exhaust Python memory.
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         try:
             completed = subprocess.run(

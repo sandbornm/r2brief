@@ -1,5 +1,3 @@
-"""Data access helpers for trajectory storage."""
-
 from __future__ import annotations
 
 import json
@@ -35,7 +33,6 @@ class TrajectoryDAO:
         action: str | None = None,
         payload: Any = None,
     ) -> None:
-        """Persist a tool/script action when only the trajectory id is known."""
         name = action or ".".join(part for part in (adapter, stage) if part) or "tools.action"
         stub = AnalysisTrajectory(binary_path="", trajectory_id=trajectory_id)
         self.append_action(stub, TrajectoryAction(action=name, payload=payload))

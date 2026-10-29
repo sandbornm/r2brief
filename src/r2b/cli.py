@@ -1,5 +1,3 @@
-"""Typer-based CLI (binary: r2b; library: r2b)."""
-
 from __future__ import annotations
 
 import json
@@ -94,7 +92,6 @@ def _root(
 
 
 def _emit_json(payload: Any) -> None:
-    """Write JSON to stdout without Rich wrapping or ANSI."""
     sys.stdout.write(to_json(payload) + "\n")
 
 
@@ -549,8 +546,6 @@ def verify(
     from .analysis.verify import DEFAULT_IMPORTS
 
     _require_binary(binary)
-    # Loading config applies the configured tool path and makes --config a
-    # real option rather than an accepted-but-ignored argument.
     load_config(config_path)
     names = [item.strip() for item in (imports or list(DEFAULT_IMPORTS)) if item.strip()]
     adapter = Radare2Adapter()
@@ -645,7 +640,6 @@ def env_check(
     config = load_config(config_path)
     report = detect_environment(config)
     if json_output:
-        # Raw stdout so SSH/scripts can pipe this. Do not send it through Rich.
         _emit_json(report)
         return
     _render_env_report(report)
@@ -1035,11 +1029,6 @@ def _ask_briefing(
     region_count: int,
     out: Console | None = None,
 ) -> tuple[bool, dict[str, Any] | None]:
-    """Send compact briefing asks instead of dumping adapter JSON.
-
-    Returns (ok, payload). ok is False if any ask came back empty after retry
-    (harness: exit 2). payload is attached to --json as ask_result.
-    """
     stream = out or console
     asks: list[tuple[str, str]] = []
     if question:
@@ -1064,8 +1053,6 @@ def _ask_briefing(
         try:
             response = (bridge.chat(messages) or "").strip()
             if not response:
-                # Empty bodies arrive with HTTP 200 on some gateways; retry
-                # once, then fail the ask loudly instead of printing nothing.
                 response = (bridge.chat(messages) or "").strip()
         except (LLMError, RuntimeError) as exc:
             stream.print(f"[red]LLM unavailable: {exc}")

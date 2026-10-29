@@ -1,5 +1,3 @@
-"""radare2 integration via r2pipe with enhanced CFG and snippet extraction."""
-
 from __future__ import annotations
 
 import json
@@ -42,7 +40,6 @@ class DecompilerBackends:
 
 
 def parse_decompiler_backends(ld_output: str, core_plugins: str = "") -> DecompilerBackends:
-    """Parse `LD` (and optional `Lc`) without treating builtin `pdc` as r2ghidra."""
     backends = _plugin_names(ld_output)
     cores = _plugin_names(core_plugins)
     names = set(backends) | set(cores)
@@ -78,9 +75,9 @@ class Radare2Adapter:
     def _r2pipe() -> types.ModuleType:
         try:
             import r2pipe
-        except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        except ModuleNotFoundError as exc:  # pragma: no cover
             raise AdapterUnavailable("r2pipe module is not installed") from exc
-        return r2pipe  # type: ignore[no-any-return]
+        return r2pipe
 
     def is_available(self) -> bool:
         return shutil.which("radare2") is not None and self._module_available()
@@ -110,7 +107,6 @@ class Radare2Adapter:
 
     @staticmethod
     def _cmdj(session: Any, command: str) -> Any:
-        """Parse a JSON command without letting r2pipe pollute CLI stderr."""
         # r2pipe.cmdj prints JSON decoder failures directly to stderr on some
         # radare2 builds. session.cmd returns the same wire payload, so parse it
         # locally and treat version-specific non-JSON output as unavailable.
@@ -242,7 +238,6 @@ class Radare2Adapter:
 
     @classmethod
     def _function_listing(cls, session: Any, addr: int) -> str | None:
-        """Function-aware listing. `pD N` can tear an instruction (CGC `c7 invalid`)."""
         try:
             session.cmd(f"s {addr:#x}")
             session.cmd(f"af @ {addr:#x}")
@@ -267,7 +262,6 @@ class Radare2Adapter:
         symbols: list[Any],
         entry_points: list[Any],
     ) -> tuple[dict[str, Any] | None, str | None]:
-        """Cheap entry listing without `aaa` so --quick ELFs are not overview-only."""
         preferred = ("main", "sym.main", "entry0", "_start", "start")
         chosen: dict[str, Any] | None = None
         for item in symbols:
@@ -324,7 +318,7 @@ class Radare2Adapter:
                 decompilers = self._decompiler_caps(session)
             except Exception:
                 decompilers = parse_decompiler_backends("")
-        except Exception as exc:  # pragma: no cover - runtime guard
+        except Exception as exc:  # pragma: no cover
             _LOGGER.exception("radare2 quick scan failed: %s", exc)
             raise AdapterUnavailable(f"radare2 quick scan failed: {exc}") from exc
         finally:
@@ -352,11 +346,6 @@ class Radare2Adapter:
         }
 
     def verify_scan(self, binary: Path, imports: list[str]) -> list[dict[str, Any]]:
-        """Resolve the first argument at every call site of ``imports``.
-
-        Returns one verdict dict per import (see analysis.verify). Uses `aa`
-        analysis so the pass stays cheap next to a quick scan.
-        """
         from ..analysis.verify import verify_imports
 
         if not self.is_available():
@@ -364,7 +353,7 @@ class Radare2Adapter:
 
         session = self._open(binary)
         try:
-            session.cmd("aaa")  # aa leaves GOT-indirect calls without xrefs
+            session.cmd("aaa")
             info = self._cmdj(session, "ij") or {}
             arch = ""
             if isinstance(info, dict):
@@ -393,10 +382,6 @@ class Radare2Adapter:
                     if not addr.startswith("0x"):
                         continue
                     caller = parts[0] if parts else "unknown"
-                    # Anchor the window at the xref'd instruction (the GOT
-                    # load or direct jal) and include setup instructions
-                    # before it: pd -N walks back, then a forward read keeps
-                    # the call itself in frame.
                     back = session.cmd(f"pd -16 @ {addr}") or ""
                     fwd = session.cmd(f"pd 8 @ {addr}") or ""
                     lines.extend(back.splitlines())
@@ -418,7 +403,6 @@ class Radare2Adapter:
             session.quit()
 
     def containing_function_va(self, binary: Path, address: str) -> str | None:
-        """Return the radare2 function start containing ``address``, if any."""
         if not self.is_available():
             raise AdapterUnavailable("radare2 is not available on this system")
         session = self._open(binary)
@@ -453,9 +437,8 @@ class Radare2Adapter:
         session = self._open(binary)
         
         try:
-            session.cmd("aaa")  # Full analysis
+            session.cmd("aaa")
             
-            # Basic analysis data
             functions = self._cmdj(session, "aflj") or []
             if not isinstance(functions, list):
                 functions = []
@@ -467,16 +450,14 @@ class Radare2Adapter:
                 cfg = []
             disassembly = session.cmd("pd 256")
 
-            # Enhanced function-level data with CFG blocks
             function_cfgs: list[dict[str, Any]] = []
             function_snippets: list[dict[str, Any]] = []
             
-            # Get detailed info for top functions by size
             sorted_functions = sorted(
                 [f for f in functions if isinstance(f, dict)],
                 key=lambda f: f.get("size", 0),
                 reverse=True
-            )[:30]  # Top 30 functions by size
+            )[:30]
 
             for func in sorted_functions:
                 func_offset = func.get("offset")
@@ -488,7 +469,6 @@ class Radare2Adapter:
                     continue
                     
                 try:
-                    # Get function CFG blocks using agfj (graph JSON format)
                     func_cfg = self._cmdj(session, f"agfj @ {func_offset}")
                     if not func_cfg:
                         _LOGGER.debug("No CFG data from agfj for %s at %s", func_name, hex(func_offset))
@@ -508,7 +488,6 @@ class Radare2Adapter:
                             if not block_offset:
                                 continue
 
-                            # Get block disassembly - use ops from agfj directly (no fallback chain)
                             raw_ops = block.get("ops", [])
                             block_disasm = []
                             for op in raw_ops[:50]:
@@ -530,7 +509,6 @@ class Radare2Adapter:
                                 "disassembly": block_disasm,
                             })
 
-                    # Only add function if we extracted blocks
                     if blocks:
                         function_cfgs.append({
                             "name": func_name,
@@ -542,7 +520,6 @@ class Radare2Adapter:
                             "block_count": len(blocks),
                         })
 
-                        # Store snippets for this function
                         function_snippets.append({
                             "function": func_name,
                             "offset": hex(func_offset),
@@ -555,7 +532,6 @@ class Radare2Adapter:
                 except Exception as exc:
                     _LOGGER.debug("Failed to get CFG for %s: %s", func_name, exc)
 
-            # Entry function disassembly
             entry_disassembly = None
             entry_function = None
             entry_decompile = None
@@ -576,14 +552,13 @@ class Radare2Adapter:
                             entry_disassembly = self._clean_listing(
                                 session.cmd(f"pdf @ {entry_offset}")
                             )
-                        except Exception:  # pragma: no cover - best effort
+                        except Exception:  # pragma: no cover
                             entry_disassembly = None
                         if isinstance(entry_offset, int):
                             entry_decompile = self._try_decompile(
                                 session, entry_offset, decompilers
                             )
                             
-            # Get cross-references for main functions
             xref_map: dict[str, list[dict[str, Any]]] = {}
             for func in sorted_functions[:10]:
                 func_offset = func.get("offset")
@@ -602,7 +577,7 @@ class Radare2Adapter:
                     except Exception as exc:
                         _LOGGER.debug("xrefs for %s failed: %s", func_offset, exc)
                         
-        except Exception as exc:  # pragma: no cover - runtime guard
+        except Exception as exc:  # pragma: no cover
             _LOGGER.exception("radare2 deep scan failed: %s", exc)
             raise AdapterUnavailable(f"radare2 deep scan failed: {exc}") from exc
         finally:

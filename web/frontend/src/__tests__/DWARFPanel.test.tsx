@@ -4,7 +4,6 @@ import DWARFPanel from '../components/DWARFPanel';
 import type { DWARFData } from '../types';
 import { ActivityProvider } from '../contexts/ActivityContext';
 
-// Wrap component with ActivityProvider for testing
 const renderWithActivity = (ui: React.ReactElement) => {
   return render(<ActivityProvider>{ui}</ActivityProvider>);
 };
@@ -20,7 +19,7 @@ describe('DWARFPanel', () => {
         unit_length: 100,
         name: 'main.c',
         producer: 'GCC 11.2.0',
-        language: 0x000c, // C99
+        language: 0x000c,
         comp_dir: '/home/user/project',
         source_files: ['main.c', 'utils.h'],
         functions: [
@@ -138,7 +137,7 @@ describe('DWARFPanel', () => {
 
     expect(screen.getByText('main')).toBeInTheDocument();
     expect(screen.getByText('helper_inline')).toBeInTheDocument();
-    expect(screen.getByText('inline')).toBeInTheDocument(); // inline chip
+    expect(screen.getByText('inline')).toBeInTheDocument();
   });
 
   it('switches to types tab', async () => {
@@ -176,10 +175,8 @@ describe('DWARFPanel', () => {
 
     renderWithActivity(<DWARFPanel data={mockDWARFData} onAskClaude={handleAskClaude} />);
 
-    // Navigate to functions tab
     await user.click(screen.getByRole('tab', { name: /functions/i }));
 
-    // Click the help button for the first function
     const helpButtons = screen.getAllByRole('button');
     const askButton = helpButtons.find(btn => btn.querySelector('[data-testid="HelpOutlineIcon"]'));
     if (askButton) {
@@ -211,12 +208,10 @@ describe('DWARFPanel', () => {
     const user = userEvent.setup();
     renderWithActivity(<DWARFPanel data={mockDWARFData} />);
 
-    // Click on the accordion to expand it
     const accordion = screen.getByText('main.c').closest('div[class*="MuiAccordion"]');
     if (accordion) {
       await user.click(accordion);
 
-      // Check for compiler info
       expect(await screen.findByText(/GCC 11.2.0/i)).toBeInTheDocument();
       expect(screen.getByText('C99')).toBeInTheDocument();
     }

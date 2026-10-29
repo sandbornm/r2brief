@@ -1,5 +1,3 @@
-"""r2brief public Python API."""
-
 from importlib.metadata import PackageNotFoundError, version
 
 from .api import (
@@ -29,7 +27,7 @@ __all__ = [
     "verify",
 ]
 
-try:  # pragma: no cover - metadata probe
+try:  # pragma: no cover
     __version__ = version("r2b")
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "0.1.0"

@@ -1,5 +1,3 @@
-"""Optional angr symbolic execution adapter with enhanced CFG extraction."""
-
 from __future__ import annotations
 
 import logging
@@ -35,8 +33,6 @@ def _cfg_options_for_project(project: Any) -> dict[str, Any]:
         and int(segment.max_addr) >= int(segment.min_addr)
     ]
     if regions:
-        # Stripped firmware ELFs often omit section headers. CFGFast otherwise
-        # sees no scan region even though executable LOAD segments are present.
         options.update(
             regions=regions,
             force_smart_scan=False,
@@ -59,7 +55,7 @@ class AngrAdapter:
     def _angr(self) -> types.ModuleType:
         try:
             import angr
-        except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        except ModuleNotFoundError as exc:  # pragma: no cover
             raise AdapterUnavailable("angr is not installed") from exc
         return angr
 
@@ -87,7 +83,6 @@ class AngrAdapter:
         if target is not None:
             simgr.explore(find=target)
 
-        # Build comprehensive CFG with block details
         cfg_nodes: list[dict[str, Any]] = []
         cfg_edges: list[dict[str, str]] = []
         function_map: dict[int, dict[str, Any]] = {}
@@ -99,7 +94,6 @@ class AngrAdapter:
         try:
             cfg_analysis = proj.analyses.CFGFast(**_cfg_options_for_project(proj))
             
-            # Extract functions first
             for func_addr, func in cfg_analysis.kb.functions.items():
                 function_map[func_addr] = {
                     "addr": hex(func_addr),
@@ -111,7 +105,6 @@ class AngrAdapter:
                     "block_count": len(list(func.blocks)),
                 }
             
-            # Extract CFG nodes with block-level details
             node_map: dict[int, dict[str, Any]] = {}
             total_nodes_available = cfg_analysis.graph.number_of_nodes()
             
@@ -130,16 +123,13 @@ class AngrAdapter:
                 block = getattr(node, "block", None)
                 func_addr = getattr(node, "function_address", addr)
                 
-                # Extract block disassembly if available
                 disasm_lines: list[dict[str, str]] = []
                 block_bytes: str | None = None
                 
                 if block is not None:
                     try:
-                        # Get block bytes for snippet storage
                         block_bytes = block.bytes.hex() if hasattr(block, "bytes") else None
                         
-                        # Extract instruction details
                         if hasattr(block, "capstone") and block.capstone:
                             for insn in block.capstone.insns:
                                 disasm_lines.append({
@@ -159,12 +149,11 @@ class AngrAdapter:
                     "name": getattr(node, "name", None),
                     "type": block.__class__.__name__ if block else None,
                     "instruction_count": len(disasm_lines),
-                    "disassembly": disasm_lines[:20],  # Limit per block
+                    "disassembly": disasm_lines[:20],
                 }
                 cfg_nodes.append(entry)
                 node_map[addr] = entry
                 
-                # Store block snippet for session persistence
                 if disasm_lines:
                     block_snippets.append({
                         "addr": hex(addr),
@@ -174,7 +163,6 @@ class AngrAdapter:
                         "instructions": disasm_lines,
                     })
 
-            # Extract edges between nodes
             selected_addrs = {int(entry["addr"], 16) for entry in cfg_nodes}
             for node in cfg_analysis.graph.nodes():
                 addr = getattr(node, "addr", None)
@@ -186,7 +174,7 @@ class AngrAdapter:
                         cfg_edges.append({
                             "source": hex(addr),
                             "target": hex(succ_addr),
-                            "type": "fallthrough",  # Could be enhanced with edge types
+                            "type": "fallthrough",
                         })
                         
         except Exception as exc:
@@ -197,7 +185,6 @@ class AngrAdapter:
             function_map = {}
             block_snippets = []
 
-        # Build functions list for output
         functions_list = sorted(
             function_map.values(), 
             key=lambda f: int(f["addr"], 16)
@@ -221,5 +208,5 @@ class AngrAdapter:
             },
             "functions": functions_list,
             "function_count": len(function_map),
-            "snippets": block_snippets[:200],  # Store snippets for session persistence
+            "snippets": block_snippets[:200],
         }

@@ -1,11 +1,3 @@
-"""Portable provenance and replay recipes for one analysis run.
-
-This is deliberately independent of the trajectory database.  A result carries
-enough information to answer which adapters produced each evidence bag, which
-configuration gates were active, and how to repeat the analysis against the
-same input bytes.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -50,7 +42,6 @@ _QUICK_ALIASES = frozenset({"identification", "readelf", "packer"})
 
 
 def sha256_path(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
-    """Return the SHA-256 of ``path`` without loading the whole file."""
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(chunk_size), b""):
@@ -62,13 +53,6 @@ def build_analysis_provenance(
     result: AnalysisResult,
     config: AppConfig | None = None,
 ) -> dict[str, Any]:
-    """Build a small deterministic recipe from an in-memory analysis result.
-
-    Adapter payloads stay in ``quick_scan``/``deep_scan``.  Provenance points to
-    those bags with JSON pointers and records a canonical digest, so an export
-    can prove which evidence was used without duplicating large disassembly or
-    decompiler output.
-    """
     binary = Path(result.binary).expanduser().resolve()
     digest = _input_digest(result, binary)
     plan = asdict(result.plan) if result.plan is not None else {}
@@ -98,7 +82,7 @@ def build_analysis_provenance(
         },
     }
     replay = provenance["replay"]
-    assert isinstance(replay, dict)  # built directly above; narrows static type
+    assert isinstance(replay, dict)
     replay["python"] = render_replay_python(provenance)
     return provenance
 
@@ -108,7 +92,6 @@ def render_replay_shell(
     *,
     input_path: str | Path | None = None,
 ) -> str:
-    """Render a one-line, copyable command from provenance or recipe argv."""
     if isinstance(provenance_or_argv, Mapping):
         replay = provenance_or_argv.get("replay")
         replay_dict = replay if isinstance(replay, Mapping) else {}
@@ -120,7 +103,6 @@ def render_replay_shell(
     rendered: list[str] = []
     for item in argv:
         if item == INPUT_TOKEN and input_path is None:
-            # Keep the shell variable expandable while quoting paths with spaces.
             rendered.append('"$R2B_INPUT"')
         else:
             rendered.append(shlex.quote(replacement if item == INPUT_TOKEN else item))
@@ -132,7 +114,6 @@ def render_replay_python(
     *,
     input_path: str | Path | None = None,
 ) -> str:
-    """Render a standalone Python recipe using only the public r2b API."""
     input_info = provenance.get("input")
     input_dict = input_info if isinstance(input_info, Mapping) else {}
     plan_info = provenance.get("plan")
@@ -200,8 +181,6 @@ def _ordered_actions(result: AnalysisResult) -> list[dict[str, Any]]:
         actions.append(_action(name, "deep", payload, status_map, len(actions) + 1))
         seen.add(("deep", name))
 
-    # Failed/skipped adapters may not have an output bag.  Preserve them as
-    # status-only steps so "how did this run?" includes tool gaps.
     missing: list[tuple[str, str, dict[str, Any]]] = []
     for name, raw_status in status_map.items():
         if not isinstance(raw_status, dict):
@@ -284,8 +263,6 @@ def _replay_argv(plan: Mapping[str, Any], config: AppConfig | None) -> list[str]
 def _safe_config(config: AppConfig | None) -> dict[str, Any]:
     if config is None:
         return {}
-    # Analysis provenance never needs LLM or storage settings.  Whitelisting
-    # also guarantees that an exported recipe cannot leak an API key or secret.
     return {
         "analysis": {
             "enable_angr": config.analysis.enable_angr,
@@ -397,7 +374,7 @@ def _action_name(name: str, stage: str, payload: Mapping[str, Any] | list[Any] |
 def _package_version() -> str:
     try:
         return version("r2b")
-    except PackageNotFoundError:  # pragma: no cover - editable checkout without metadata
+    except PackageNotFoundError:  # pragma: no cover
         return "0.1.0"
 
 

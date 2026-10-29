@@ -1,5 +1,3 @@
-"""Compilation module for assembling and compiling code."""
-
 from .compiler import (
     Compiler,
     CompilerResult,

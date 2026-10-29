@@ -1,30 +1,13 @@
 #!/usr/bin/env python3
-"""Test script for Ghidra bridge connectivity and functionality.
-
-This script verifies that the Ghidra bridge server is running and can
-provide decompiled function data.
-
-Usage:
-    # Start Ghidra with a binary loaded, then run the bridge server script:
-    # In Ghidra's Script Manager, run ghidra_bridge_server_background.py
-
-    # Then run this test:
-    python scripts/test_ghidra_bridge.py
-
-    # Or with a specific binary path to verify:
-    python scripts/test_ghidra_bridge.py samples/bin/arm64/hello
-"""
 
 import argparse
 import sys
 from pathlib import Path
 
-# Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 def test_bridge_connectivity(host: str, port: int, timeout: int) -> bool:
-    """Test basic bridge connectivity."""
     print(f"\n[1] Testing connection to Ghidra bridge at {host}:{port}...")
 
     try:
@@ -49,7 +32,6 @@ def test_bridge_connectivity(host: str, port: int, timeout: int) -> bool:
 
 
 def test_program_info(client) -> dict | None:
-    """Test getting current program information."""
     print("\n[2] Getting current program information...")
 
     try:
@@ -70,7 +52,6 @@ def test_program_info(client) -> dict | None:
 
 
 def test_functions(client, limit: int = 10) -> list:
-    """Test getting function list."""
     print(f"\n[3] Getting function list (limit {limit})...")
 
     try:
@@ -96,7 +77,6 @@ def test_functions(client, limit: int = 10) -> list:
 
 
 def test_decompilation(client, functions: list, limit: int = 3) -> list:
-    """Test decompilation of functions."""
     print(f"\n[4] Testing decompilation (limit {limit})...")
 
     if not functions:
@@ -111,7 +91,6 @@ def test_decompilation(client, functions: list, limit: int = 3) -> list:
             print(f"    ✓ Decompiled {len(decompiled)} functions")
             for i, func in enumerate(decompiled[:2]):
                 print(f"\n    --- {func.name} @ 0x{func.address:x} ---")
-                # Show first few lines of decompiled code
                 lines = func.decompiled_c.split("\n")[:8]
                 for line in lines:
                     print(f"    {line}")
@@ -128,7 +107,6 @@ def test_decompilation(client, functions: list, limit: int = 3) -> list:
 
 
 def test_types(client, limit: int = 10) -> list:
-    """Test getting type information."""
     print(f"\n[5] Getting type information (limit {limit})...")
 
     try:
@@ -136,7 +114,6 @@ def test_types(client, limit: int = 10) -> list:
 
         if types:
             print(f"    ✓ Retrieved {len(types)} types")
-            # Show structs first as they're most useful
             structs = [t for t in types if t.kind == "struct"]
             for i, t in enumerate(structs[:3]):
                 print(f"       struct {t.name} ({t.size} bytes)")
@@ -155,7 +132,6 @@ def test_types(client, limit: int = 10) -> list:
 
 
 def test_strings(client, limit: int = 10) -> list:
-    """Test getting string data."""
     print(f"\n[6] Getting strings (limit {limit})...")
 
     try:
@@ -166,7 +142,6 @@ def test_strings(client, limit: int = 10) -> list:
             for i, s in enumerate(strings[:5]):
                 addr = s.get("address", 0)
                 value = s.get("value", "")
-                # Truncate long strings
                 if len(value) > 50:
                     value = value[:50] + "..."
                 print(f"       0x{addr:x}: \"{value}\"")
@@ -181,7 +156,6 @@ def test_strings(client, limit: int = 10) -> list:
 
 
 def test_xrefs(client, functions: list) -> dict:
-    """Test cross-reference functionality."""
     print("\n[7] Testing cross-references...")
 
     if not functions:
@@ -189,7 +163,6 @@ def test_xrefs(client, functions: list) -> dict:
         return {}
 
     try:
-        # Get xrefs for first function
         func = functions[0]
         addr = func.get("address", 0)
         name = func.get("name", "unknown")
@@ -225,7 +198,6 @@ def main():
     print("Ghidra Bridge Test Script")
     print("=" * 60)
 
-    # Test connectivity
     from r2b.adapters.ghidra_bridge_client import GhidraBridgeClient
 
     client = GhidraBridgeClient(host=args.host, port=args.port, timeout=args.timeout)
@@ -241,12 +213,10 @@ def main():
 
     print("    ✓ Connected to Ghidra bridge")
 
-    # Test program info
     program_info = test_program_info(client)
     if not program_info:
         print("\n⚠ WARNING: No program loaded in Ghidra")
 
-    # Verify binary if specified
     if args.binary and program_info:
         binary_path = Path(args.binary).resolve()
         if client.is_binary_loaded(binary_path):
@@ -256,22 +226,16 @@ def main():
             print(f"      Expected: {binary_path}")
             print(f"      Loaded:   {program_info.get('path')}")
 
-    # Test functions
     functions = test_functions(client)
 
-    # Test decompilation
     decompiled = test_decompilation(client, functions)
 
-    # Test types
     types = test_types(client)
 
-    # Test strings
     strings = test_strings(client)
 
-    # Test xrefs
     xrefs = test_xrefs(client, functions)
 
-    # Summary
     print("\n" + "=" * 60)
     print("Test Summary")
     print("=" * 60)
@@ -289,7 +253,6 @@ def main():
     else:
         print("\n⚠ Some tests failed. Check the output above for details.")
 
-    # Disconnect
     client.disconnect()
     return 0 if all_passed else 1
 

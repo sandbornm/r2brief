@@ -2,9 +2,7 @@ import { alpha, createTheme } from '@mui/material/styles';
 
 type PaletteMode = 'light' | 'dark';
 
-// Improved color palette with better contrast ratios
 const colors = {
-  // Neutral grays - softer for better readability
   gray50: '#f6f5f2',
   gray100: '#eceae4',
   gray200: '#d8d4ca',
@@ -17,13 +15,11 @@ const colors = {
   gray900: '#11100e',
   gray950: '#0a0908',
 
-  // Accent — warm paper, not SaaS blue
   blue400: '#f0e6d2',
   blue500: '#e4d4b4',
   blue600: '#c8a96a',
   blue700: '#a88a4a',
 
-  // Semantic colors - clearer distinction
   green500: '#22c55e',
   green600: '#16a34a',
   amber500: '#f59e0b',
@@ -33,13 +29,12 @@ const colors = {
   slate400: '#94a3b8',
   slate500: '#64748b',
 
-  // Tool-specific colors for attribution
-  toolRadare2: '#e97451',    // Warm orange
-  toolAngr: '#8b5cf6',       // Purple
-  toolGhidra: '#10b981',     // Emerald
-  toolCapstone: '#f472b6',   // Pink
-  toolFrida: '#fbbf24',      // Amber
-  toolGef: '#06b6d4',        // Cyan
+  toolRadare2: '#e97451',
+  toolAngr: '#8b5cf6',
+  toolGhidra: '#10b981',
+  toolCapstone: '#f472b6',
+  toolFrida: '#fbbf24',
+  toolGef: '#06b6d4',
 };
 
 export const createAppTheme = (mode: PaletteMode) => {
@@ -75,16 +70,13 @@ export const createAppTheme = (mode: PaletteMode) => {
         paper: isDark ? colors.gray900 : '#ffffff',
       },
       text: {
-        // Improved contrast for readability
         primary: isDark ? colors.gray100 : colors.gray900,
         secondary: isDark ? colors.gray400 : colors.gray600,
       },
       divider: isDark ? colors.gray800 : colors.gray200,
     },
     typography: {
-      // Improved font stack with better fallbacks
       fontFamily: 'var(--font-sans)',
-      // Larger base font for better readability
       fontSize: 14,
       h1: {
         fontFamily: 'var(--font-sans)',
@@ -125,17 +117,17 @@ export const createAppTheme = (mode: PaletteMode) => {
         lineHeight: 1.5,
       },
       body1: {
-        fontSize: '0.9375rem', // 15px - slightly larger for readability
+        fontSize: '0.9375rem',
         lineHeight: 1.65,
         letterSpacing: '0.01em',
       },
       body2: {
-        fontSize: '0.875rem', // 14px
+        fontSize: '0.875rem',
         lineHeight: 1.6,
         letterSpacing: '0.01em',
       },
       caption: {
-        fontSize: '0.8125rem', // 13px
+        fontSize: '0.8125rem',
         lineHeight: 1.5,
         letterSpacing: '0.02em',
       },
@@ -145,7 +137,6 @@ export const createAppTheme = (mode: PaletteMode) => {
         fontSize: '0.875rem',
         letterSpacing: '0.01em',
       },
-      // Code/monospace typography
       overline: {
         fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
         fontSize: '0.8125rem',
@@ -160,7 +151,6 @@ export const createAppTheme = (mode: PaletteMode) => {
     components: {
       MuiCssBaseline: {
         styleOverrides: {
-          // Better scrollbar styling
           '*': {
             scrollbarWidth: 'thin',
             scrollbarColor: isDark ? `${colors.gray700} transparent` : `${colors.gray300} transparent`,
@@ -179,7 +169,6 @@ export const createAppTheme = (mode: PaletteMode) => {
               backgroundColor: isDark ? colors.gray600 : colors.gray400,
             },
           },
-          // Monospace code blocks
           'code, pre, .mono': {
             fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
             fontSize: '0.8125rem',
@@ -411,7 +400,6 @@ export const createAppTheme = (mode: PaletteMode) => {
   });
 };
 
-// Tool colors for attribution badges
 export const toolColors = {
   firmware: colors.green500,
   binwalk: colors.green600,

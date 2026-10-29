@@ -1,11 +1,3 @@
-"""Optional, goal-aware review of a deterministic r2b briefing.
-
-The briefing remains the source of truth.  A model may only reorder the
-candidate region IDs and cite evidence capsules already present in that
-briefing.  Review output is a separate, versioned document and never mutates
-the briefing, its scores, or its handoff.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -108,18 +100,17 @@ deterministic scores or proving a security finding."""
 
 
 class ReviewError(ValueError):
-    """A briefing or model review failed the strict review contract."""
+    pass
 
 
 def normalize_review_mode(mode: str) -> Literal["rules", "llm", "both"]:
-    """Normalize a public mode name; ``compare`` is an alias for ``both``."""
 
     normalized = mode.strip().lower()
     if normalized == "compare":
         normalized = "both"
     if normalized not in {"rules", "llm", "both"}:
         raise ReviewError("mode must be one of: rules, llm, both, compare")
-    return normalized  # type: ignore[return-value]
+    return normalized
 
 
 def review_briefing(
@@ -131,13 +122,6 @@ def review_briefing(
     config: AppConfig | None = None,
     config_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Review known regions without modifying deterministic briefing output.
-
-    ``rules`` copies the existing point-table order and makes no model call.
-    ``llm`` adds a strictly validated model order. ``both`` also computes rank
-    disagreements. Tool execution is deliberately disabled in this first
-    contract version.
-    """
 
     selected_mode = normalize_review_mode(str(mode))
     if bridge is not None and (config is not None or config_path is not None):
@@ -185,8 +169,6 @@ def review_briefing(
     question = (thesis or "").strip() or "Prioritize these regions for first-pass binary triage."
     prompt_payload = {
         "thesis": question,
-        # Canonical ID order prevents the deterministic point order from
-        # anchoring the independent model review.
         "candidates": candidates,
     }
     try:
@@ -238,13 +220,6 @@ def review_briefing_set(
     config: AppConfig | None = None,
     config_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Run independent review lenses over one immutable briefing.
-
-    Width changes the number of questions asked of the same evidence. It does
-    not run an analyzer, add a region, or change a briefing score. Every lens
-    fans out from the canonical candidate set; no lens sees another lens's
-    output. The overlay is computed only after all passes finish.
-    """
 
     if isinstance(width, bool) or not isinstance(width, int) or not 1 <= width <= MAX_REVIEW_WIDTH:
         raise ReviewError(f"width must be between 1 and {MAX_REVIEW_WIDTH}")
@@ -357,7 +332,6 @@ def _noise_assessment(
     base_order: list[dict[str, Any]],
     evidence_by_region: Mapping[str, frozenset[str]],
 ) -> dict[str, Any]:
-    """Classify evidence maturity without changing briefing scores or order."""
 
     regions = briefing.get("regions")
     assert isinstance(regions, list)
@@ -893,10 +867,10 @@ def _base_order(
     briefing: Mapping[str, Any], evidence_by_region: Mapping[str, frozenset[str]]
 ) -> list[dict[str, Any]]:
     regions = briefing.get("regions")
-    assert isinstance(regions, list)  # validated by _candidate_documents
+    assert isinstance(regions, list)
     order: list[dict[str, Any]] = []
     for rank, raw in enumerate(regions, start=1):
-        assert isinstance(raw, Mapping)  # validated by _candidate_documents
+        assert isinstance(raw, Mapping)
         region_id = str(raw["id"])
         order.append(
             {
@@ -966,7 +940,7 @@ def _validated_model_order(
     missing = expected - seen
     if missing:
         raise ReviewError("model omitted region ids: " + ", ".join(sorted(missing)))
-    if len(order) != len(expected_ids):  # pragma: no cover - duplicates/unknowns checked above
+    if len(order) != len(expected_ids):  # pragma: no cover
         raise ReviewError("model order is not an exact candidate permutation")
     return order
 
@@ -1004,7 +978,6 @@ def _disagreements(
                 "region_id": region_id,
                 "base_rank": base_rank,
                 "model_rank": model_rank,
-                # Positive means the model moved the region earlier.
                 "rank_shift": base_rank - model_rank,
             }
         )
@@ -1043,9 +1016,9 @@ def _json_object(value: Mapping[str, Any], label: str) -> dict[str, Any]:
         raise ReviewError(f"{label} must be a JSON object")
     try:
         normalized = json.loads(_canonical_json(value))
-    except json.JSONDecodeError as exc:  # pragma: no cover - canonical JSON is valid
+    except json.JSONDecodeError as exc:  # pragma: no cover
         raise ReviewError(f"{label} is not valid JSON: {exc}") from exc
-    if not isinstance(normalized, dict):  # pragma: no cover - Mapping encodes as object
+    if not isinstance(normalized, dict):  # pragma: no cover
         raise ReviewError(f"{label} must be a JSON object")
     return normalized
 

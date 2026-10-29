@@ -1,5 +1,3 @@
-"""Anthropic Claude client wrapper."""
-
 from __future__ import annotations
 
 import logging
@@ -24,13 +22,13 @@ class ChatMessage(BaseModel):
     role: str
     content: str
 
-try:  # pragma: no cover - optional dependency
+try:  # pragma: no cover
     from anthropic import Anthropic, APIError, AuthenticationError, RateLimitError
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    Anthropic = None  # type: ignore[misc,assignment]
+except ModuleNotFoundError:  # pragma: no cover
+    Anthropic = None
     APIError = Exception  # type: ignore
     AuthenticationError = Exception  # type: ignore
-    RateLimitError = Exception  # type: ignore
+    RateLimitError = Exception
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,12 +38,10 @@ class ClaudeChatResponse(BaseModel):
 
 
 class ClaudeError(Exception):
-    """Wrapper for Anthropic API errors with clean messages."""
     pass
 
 
 class ClaudeClient:
-    """Thin wrapper over Anthropic's Messages API for chat parity with OpenAI client."""
 
     def __init__(
         self,
@@ -69,8 +65,6 @@ class ClaudeClient:
         self._client = Anthropic(api_key=api_key)
         self._config = config
         self._provider = "anthropic"
-        # Support both primary and fallback model configuration
-        # Default to Opus 4.5 if no model specified
         if config.llm.provider and config.llm.provider.lower() in {"anthropic", "claude"}:
             self._model = model or config.llm.model or "claude-sonnet-5"
         else:
@@ -85,8 +79,7 @@ class ClaudeClient:
         tool_results: Sequence[ToolResult] = (),
         **_: Any,
     ) -> LLMResponse:
-        """Send a conversation through Anthropic Messages and normalize it."""
-        del previous_response, tool_results  # history is carried in ``messages``
+        del previous_response, tool_results
 
         system_prompt: str | None = None
         formatted: list[dict[str, Any]] = []
@@ -98,7 +91,6 @@ class ClaudeClient:
             role = str(data["role"])
             content = data.get("content", "")
 
-            # Claude handles system prompt separately
             if role == "system":
                 if system_prompt is None:
                     system_prompt = content
@@ -218,7 +210,6 @@ class ClaudeClient:
             raise ClaudeError(f"Anthropic API error: {msg}")
 
     def chat(self, messages: Iterable[ChatMessage] | Iterable[dict[str, Any]]) -> str:
-        """Compatibility wrapper returning only response text."""
         return self.generate(messages).text
 
     def summarize_analysis(self, summary: dict[str, Any]) -> str:

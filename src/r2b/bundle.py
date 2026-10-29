@@ -1,11 +1,3 @@
-"""Portable, content-addressed r2b evidence bundles.
-
-The container is deliberately boring: a deterministic ZIP with a small,
-versioned manifest and canonical JSON members.  The analyzed target is
-identified by SHA-256 but is not copied into the bundle unless the caller
-explicitly opts in.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -53,17 +45,11 @@ _COPY_CHUNK = 1024 * 1024
 
 
 class BundleError(ValueError):
-    """The bundle could not be created or failed validation."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class BundleContents:
-    """Validated metadata and evidence documents from a bundle.
-
-    Target bytes are intentionally not loaded into memory.  Consumers that
-    need them can inspect ``manifest["subject"]["member"]`` and make a
-    separate, explicit extraction decision.
-    """
 
     path: Path
     sha256: str
@@ -98,12 +84,6 @@ def create_bundle(
     target: str | Path | None = None,
     include_target: bool = False,
 ) -> BundleContents:
-    """Write and validate a deterministic evidence bundle.
-
-    ``target`` is hashed when supplied, even when ``include_target`` is false.
-    This content address lets a recipient match the evidence to bytes already
-    in their custody without redistributing the target.
-    """
 
     output = Path(destination)
     if output.exists() and output.is_dir():
@@ -192,7 +172,6 @@ def create_bundle(
 
 
 def read_bundle(path: str | Path) -> BundleContents:
-    """Read every evidence document after validating paths, sizes, and hashes."""
 
     bundle_path = Path(path)
     if not bundle_path.is_file():
@@ -243,13 +222,11 @@ def read_bundle(path: str | Path) -> BundleContents:
 
 
 def inspect_bundle(path: str | Path) -> dict[str, Any]:
-    """Return a compact summary of a fully validated bundle."""
 
     return read_bundle(path).summary()
 
 
 def default_bundle_path(target: str | Path) -> Path:
-    """Return ``TARGET`` with its final suffix replaced by ``.r2br``."""
 
     path = Path(target)
     return path.with_suffix(BUNDLE_EXTENSION) if path.suffix else path.with_name(path.name + BUNDLE_EXTENSION)
@@ -289,9 +266,9 @@ def _json_object(value: Any, label: str) -> dict[str, Any]:
         raise BundleError(f"{label} must be a JSON object")
     try:
         normalized = json.loads(_canonical_json(value))
-    except json.JSONDecodeError as exc:  # pragma: no cover - canonical output is valid JSON
+    except json.JSONDecodeError as exc:  # pragma: no cover
         raise BundleError(f"{label} is not valid JSON: {exc}") from exc
-    if not isinstance(normalized, dict):  # pragma: no cover - Mapping always encodes as an object
+    if not isinstance(normalized, dict):  # pragma: no cover
         raise BundleError(f"{label} must be a JSON object")
     return normalized
 

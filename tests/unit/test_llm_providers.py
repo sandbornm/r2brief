@@ -1,6 +1,8 @@
+import inspect
 from types import SimpleNamespace
 
 import pytest
+from anthropic.resources.messages import Messages as AnthropicMessages
 
 from r2b.config import AppConfig, LLMSettings
 from r2b.llm import FunctionTool, LLMResponse, LLMTransport, ToolCall
@@ -63,6 +65,47 @@ def test_claude_5_uses_default_sampling(monkeypatch):
     )
     client = ClaudeClient(config)
     client.generate([{"role": "user", "content": "summarize"}])
+    assert "temperature" not in calls[0]
+
+
+def test_anthropic_2_omits_temperature_for_opus_4_5(monkeypatch):
+    """SDK 2.x messages.create rejects temperature. Opus 4.5 used to send it."""
+    accepted = set(inspect.signature(AnthropicMessages.create).parameters)
+    assert "temperature" not in accepted
+    calls = []
+
+    class Messages:
+        def create(self, **params):
+            unexpected = sorted(set(params) - accepted)
+            if unexpected:
+                name = unexpected[0]
+                raise TypeError(f"Messages.create() got an unexpected keyword argument {name!r}")
+            calls.append(params)
+            return SimpleNamespace(
+                content=[],
+                id="msg-opus",
+                model=params["model"],
+                stop_reason="end_turn",
+                usage=SimpleNamespace(input_tokens=3, output_tokens=2),
+            )
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(
+        claude_module,
+        "Anthropic",
+        lambda **_: SimpleNamespace(messages=Messages()),
+    )
+    config = AppConfig(
+        llm=LLMSettings(
+            provider="anthropic",
+            model="claude-opus-4-5",
+            api_key_env="ANTHROPIC_API_KEY",
+            temperature=0.1,
+        )
+    )
+    client = ClaudeClient(config)
+    result = client.generate([{"role": "user", "content": "summarize"}])
+    assert result.model == "claude-opus-4-5"
     assert "temperature" not in calls[0]
 
 

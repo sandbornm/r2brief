@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 from time import perf_counter
@@ -33,6 +34,24 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     RateLimitError = Exception  # type: ignore
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _create_accepts_temperature(create: Any) -> bool:
+    """True when this SDK still declares temperature on messages.create.
+
+    Anthropic 1.x and 2.x dropped the parameter. Passing it raises TypeError,
+    and the 2026-10-21 API rejects the field. 0.x clients still declare it.
+    """
+    try:
+        parameter = inspect.signature(create).parameters.get("temperature")
+    except (TypeError, ValueError):
+        return False
+    if parameter is None:
+        return False
+    return parameter.kind in {
+        inspect.Parameter.KEYWORD_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }
 
 
 class ClaudeChatResponse(BaseModel):
@@ -155,8 +174,11 @@ class ClaudeClient:
                 "messages": formatted,
             }
             # Claude 5 accepts only its default sampling configuration.
+            # Newer SDKs do not declare temperature at all; omit it rather than raise.
             claude_5_prefixes = ("claude-sonnet-5", "claude-opus-5", "claude-fable-5")
-            if not self._model.lower().startswith(claude_5_prefixes):
+            if not self._model.lower().startswith(claude_5_prefixes) and _create_accepts_temperature(
+                self._client.messages.create
+            ):
                 params["temperature"] = self._config.llm.temperature
             if tools:
                 params["tools"] = [

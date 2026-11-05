@@ -39,8 +39,8 @@ _LOGGER = logging.getLogger(__name__)
 def _create_accepts_temperature(create: Any) -> bool:
     """True when this SDK still declares temperature on messages.create.
 
-    Anthropic 1.x and 2.x dropped the parameter. Passing it raises TypeError,
-    and the 2026-10-21 API rejects the field. 0.x clients still declare it.
+    Anthropic 1.x and 2.x dropped the keyword. Older models still accept the
+    field in the JSON body, which the SDK merges from extra_body.
     """
     try:
         parameter = inspect.signature(create).parameters.get("temperature")
@@ -174,12 +174,14 @@ class ClaudeClient:
                 "messages": formatted,
             }
             # Claude 5 accepts only its default sampling configuration.
-            # Newer SDKs do not declare temperature at all; omit it rather than raise.
+            # Older models still sample. SDKs that dropped the keyword take it via extra_body.
             claude_5_prefixes = ("claude-sonnet-5", "claude-opus-5", "claude-fable-5")
-            if not self._model.lower().startswith(claude_5_prefixes) and _create_accepts_temperature(
-                self._client.messages.create
-            ):
-                params["temperature"] = self._config.llm.temperature
+            if not self._model.lower().startswith(claude_5_prefixes):
+                temperature = self._config.llm.temperature
+                if _create_accepts_temperature(self._client.messages.create):
+                    params["temperature"] = temperature
+                else:
+                    params["extra_body"] = {"temperature": temperature}
             if tools:
                 params["tools"] = [
                     {

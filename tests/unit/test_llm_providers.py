@@ -66,12 +66,67 @@ def test_claude_5_uses_default_sampling(monkeypatch):
     client = ClaudeClient(config)
     client.generate([{"role": "user", "content": "summarize"}])
     assert "temperature" not in calls[0]
+    assert "temperature" not in (calls[0].get("extra_body") or {})
 
 
-def test_anthropic_2_omits_temperature_for_opus_4_5(monkeypatch):
-    """SDK 2.x messages.create rejects temperature. Opus 4.5 used to send it."""
+def _claude(monkeypatch, messages_type, **llm):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(
+        claude_module,
+        "Anthropic",
+        lambda **_: SimpleNamespace(messages=messages_type()),
+    )
+    config = AppConfig(
+        llm=LLMSettings(
+            provider="anthropic",
+            api_key_env="ANTHROPIC_API_KEY",
+            **llm,
+        )
+    )
+    return ClaudeClient(config)
+
+
+def _message(model):
+    return SimpleNamespace(
+        content=[],
+        id="msg-opus",
+        model=model,
+        stop_reason="end_turn",
+        usage=SimpleNamespace(input_tokens=3, output_tokens=2),
+    )
+
+
+def test_legacy_sdk_passes_temperature_keyword(monkeypatch):
+    calls = []
+
+    class Messages:
+        def create(self, *, model, max_tokens, messages, system=None, temperature=None, tools=None):
+            calls.append(
+                {
+                    "model": model,
+                    "temperature": temperature,
+                    "tools": tools,
+                }
+            )
+            return _message(model)
+
+    client = _claude(
+        monkeypatch,
+        Messages,
+        model="claude-opus-4-5",
+        temperature=0.4,
+    )
+    result = client.generate([{"role": "user", "content": "summarize"}])
+    assert result.model == "claude-opus-4-5"
+    assert calls[0]["temperature"] == 0.4
+    assert "extra_body" not in calls[0]
+
+
+def test_anthropic_2_sends_temperature_via_extra_body(monkeypatch):
+    """SDK 2.x has no temperature kwarg. Older models still sample through extra_body."""
     accepted = set(inspect.signature(AnthropicMessages.create).parameters)
     assert "temperature" not in accepted
+    assert "extra_body" in accepted
     calls = []
 
     class Messages:
@@ -81,32 +136,18 @@ def test_anthropic_2_omits_temperature_for_opus_4_5(monkeypatch):
                 name = unexpected[0]
                 raise TypeError(f"Messages.create() got an unexpected keyword argument {name!r}")
             calls.append(params)
-            return SimpleNamespace(
-                content=[],
-                id="msg-opus",
-                model=params["model"],
-                stop_reason="end_turn",
-                usage=SimpleNamespace(input_tokens=3, output_tokens=2),
-            )
+            return _message(params["model"])
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setattr(
-        claude_module,
-        "Anthropic",
-        lambda **_: SimpleNamespace(messages=Messages()),
+    client = _claude(
+        monkeypatch,
+        Messages,
+        model="claude-opus-4-5",
+        temperature=0.2,
     )
-    config = AppConfig(
-        llm=LLMSettings(
-            provider="anthropic",
-            model="claude-opus-4-5",
-            api_key_env="ANTHROPIC_API_KEY",
-            temperature=0.1,
-        )
-    )
-    client = ClaudeClient(config)
     result = client.generate([{"role": "user", "content": "summarize"}])
     assert result.model == "claude-opus-4-5"
     assert "temperature" not in calls[0]
+    assert calls[0]["extra_body"] == {"temperature": 0.2}
 
 
 class _Responses:

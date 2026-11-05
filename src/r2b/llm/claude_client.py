@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
+import re
 from time import perf_counter
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from pydantic import BaseModel
 
@@ -33,6 +35,56 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     RateLimitError = Exception  # type: ignore
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# Messages requests on this version 400 if temperature, top_p, or top_k are present.
+_SAMPLING_REJECTED_API_VERSION = "2026-10-21"
+# Generation 5, not 4.5 ids such as claude-haiku-4-5.
+_CLAUDE_5_MODEL = re.compile(r"^claude-(?:sonnet|opus|haiku|fable|mythos)-5(?:[.-]|$)")
+
+
+def _create_accepts_temperature(create: Any) -> bool:
+    """True when this SDK still declares temperature on messages.create."""
+    try:
+        parameter = inspect.signature(create).parameters.get("temperature")
+    except (TypeError, ValueError):
+        return False
+    if parameter is None:
+        return False
+    return parameter.kind in {
+        inspect.Parameter.KEYWORD_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    }
+
+
+def _messages_api_version(client: Any) -> str:
+    """Version this client will send as anthropic-version.
+
+    SDK 2.5's constant is 2026-10-21. SDK 1.x sends 2023-06-01. A stub with no
+    headers falls back to the installed constant so the locked SDK still omits
+    sampling.
+    """
+    headers = getattr(client, "default_headers", None)
+    if callable(headers):
+        try:
+            headers = headers()
+        except Exception:
+            headers = None
+    if isinstance(headers, Mapping):
+        version = headers.get("anthropic-version")
+        if isinstance(version, str) and version:
+            return version
+    try:
+        from anthropic._constants import ANTHROPIC_API_VERSION
+    except ImportError:
+        return ""
+    return ANTHROPIC_API_VERSION if isinstance(ANTHROPIC_API_VERSION, str) else ""
+
+
+def _omits_sampling(model: str, client: Any) -> bool:
+    if _CLAUDE_5_MODEL.match(model.lower()):
+        return True
+    return _messages_api_version(client) == _SAMPLING_REJECTED_API_VERSION
 
 
 class ClaudeChatResponse(BaseModel):
@@ -154,10 +206,14 @@ class ClaudeClient:
                 "system": system_prompt or "",
                 "messages": formatted,
             }
-            # Claude 5 accepts only its default sampling configuration.
-            claude_5_prefixes = ("claude-sonnet-5", "claude-opus-5", "claude-fable-5")
-            if not self._model.lower().startswith(claude_5_prefixes):
-                params["temperature"] = self._config.llm.temperature
+            # Claude 5 and API 2026-10-21 reject sampling fields. Older APIs
+            # take temperature as a keyword, or via extra_body once the SDK drops it.
+            if not _omits_sampling(self._model, self._client):
+                temperature = self._config.llm.temperature
+                if _create_accepts_temperature(self._client.messages.create):
+                    params["temperature"] = temperature
+                else:
+                    params["extra_body"] = {"temperature": temperature}
             if tools:
                 params["tools"] = [
                     {

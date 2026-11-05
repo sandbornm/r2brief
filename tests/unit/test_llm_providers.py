@@ -1,8 +1,11 @@
 import inspect
+import typing
 from types import SimpleNamespace
 
 import pytest
+from anthropic._constants import ANTHROPIC_API_VERSION
 from anthropic.resources.messages import Messages as AnthropicMessages
+from anthropic.types.model import Model as AnthropicModel
 
 from r2b.config import AppConfig, LLMSettings
 from r2b.llm import FunctionTool, LLMResponse, LLMTransport, ToolCall
@@ -69,13 +72,30 @@ def test_claude_5_uses_default_sampling(monkeypatch):
     assert "temperature" not in (calls[0].get("extra_body") or {})
 
 
-def _claude(monkeypatch, messages_type, **llm):
+_SAMPLING_FIELDS = ("temperature", "top_p", "top_k")
+_MISSING = object()
+
+
+def _sent_sampling(params):
+    extra = params.get("extra_body") or {}
+    sent = {key: params[key] for key in _SAMPLING_FIELDS if key in params}
+    sent.update({key: extra[key] for key in _SAMPLING_FIELDS if key in extra})
+    return sent
+
+
+def _claude(monkeypatch, messages_type, *, api_version=None, **llm):
+    class _Client:
+        def __init__(self, *_args, **_kwargs):
+            self.messages = messages_type()
+
+        @property
+        def default_headers(self):
+            if not api_version:
+                return {}
+            return {"anthropic-version": api_version}
+
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setattr(
-        claude_module,
-        "Anthropic",
-        lambda **_: SimpleNamespace(messages=messages_type()),
-    )
+    monkeypatch.setattr(claude_module, "Anthropic", _Client)
     config = AppConfig(
         llm=LLMSettings(
             provider="anthropic",
@@ -113,6 +133,7 @@ def test_legacy_sdk_passes_temperature_keyword(monkeypatch):
     client = _claude(
         monkeypatch,
         Messages,
+        api_version="2023-06-01",
         model="claude-opus-4-5",
         temperature=0.4,
     )
@@ -122,11 +143,18 @@ def test_legacy_sdk_passes_temperature_keyword(monkeypatch):
     assert "extra_body" not in calls[0]
 
 
-def test_anthropic_2_sends_temperature_via_extra_body(monkeypatch):
-    """SDK 2.x has no temperature kwarg. Older models still sample through extra_body."""
+def _sdk_model_ids():
+    ids = []
+    for arg in typing.get_args(AnthropicModel):
+        ids.extend(item for item in typing.get_args(arg) if isinstance(item, str))
+    return ids
+
+
+def test_api_2026_10_21_rejects_sampling_fields(monkeypatch):
+    """Locked SDK 2.5 sends this version. temperature in the body is a 400."""
+    assert ANTHROPIC_API_VERSION == "2026-10-21"
     accepted = set(inspect.signature(AnthropicMessages.create).parameters)
     assert "temperature" not in accepted
-    assert "extra_body" in accepted
     calls = []
 
     class Messages:
@@ -135,19 +163,85 @@ def test_anthropic_2_sends_temperature_via_extra_body(monkeypatch):
             if unexpected:
                 name = unexpected[0]
                 raise TypeError(f"Messages.create() got an unexpected keyword argument {name!r}")
+            sent = _sent_sampling(params)
+            if sent:
+                raise RuntimeError(f"API 2026-10-21 rejects sampling fields: {sorted(sent)}")
+            calls.append(params)
+            return _message(params["model"])
+
+    for model in ("claude-opus-4-5", "claude-haiku-5-5", "claude-mythos-5"):
+        calls.clear()
+        client = _claude(monkeypatch, Messages, model=model, temperature=0.2)
+        result = client.generate([{"role": "user", "content": "summarize"}])
+        assert result.model == model
+        assert _sent_sampling(calls[0]) == {}
+
+
+def _is_claude_5_id(model: str) -> bool:
+    """Generation 5, not a 4.5 id such as claude-haiku-4-5."""
+    _family, _sep, rest = model.removeprefix("claude-").partition("-")
+    return rest == "5" or rest.startswith(("5-", "5."))
+
+
+def test_anthropic_1_uses_extra_body_only_for_pre_claude_5(monkeypatch):
+    calls = []
+
+    class Messages:
+        def create(self, **params):
+            if "temperature" in params:
+                raise TypeError("Messages.create() got an unexpected keyword argument 'temperature'")
             calls.append(params)
             return _message(params["model"])
 
     client = _claude(
         monkeypatch,
         Messages,
+        api_version="2023-06-01",
         model="claude-opus-4-5",
         temperature=0.2,
     )
-    result = client.generate([{"role": "user", "content": "summarize"}])
-    assert result.model == "claude-opus-4-5"
+    client.generate([{"role": "user", "content": "summarize"}])
     assert "temperature" not in calls[0]
     assert calls[0]["extra_body"] == {"temperature": 0.2}
+
+    for model in ("claude-haiku-5-5", "claude-mythos-5", "claude-sonnet-5"):
+        calls.clear()
+        client = _claude(
+            monkeypatch,
+            Messages,
+            api_version="2023-06-01",
+            model=model,
+            temperature=0.2,
+        )
+        client.generate([{"role": "user", "content": "summarize"}])
+        assert _sent_sampling(calls[0]) == {}, model
+
+
+def test_sdk_claude_5_ids_omit_sampling(monkeypatch):
+    ids = _sdk_model_ids()
+    assert "claude-haiku-5-5" in ids
+    assert "claude-mythos-5" in ids
+    calls = []
+
+    class Messages:
+        def create(self, *, model, max_tokens, messages, system=None, temperature=_MISSING, tools=None):
+            calls.append({"model": model, "temperature": temperature})
+            return _message(model)
+
+    for model in ids:
+        calls.clear()
+        client = _claude(
+            monkeypatch,
+            Messages,
+            api_version="2023-06-01",
+            model=model,
+            temperature=0.3,
+        )
+        client.generate([{"role": "user", "content": "summarize"}])
+        if _is_claude_5_id(model):
+            assert calls[0]["temperature"] is _MISSING, model
+        else:
+            assert calls[0]["temperature"] == 0.3, model
 
 
 class _Responses:

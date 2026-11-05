@@ -177,12 +177,6 @@ def test_api_2026_10_21_rejects_sampling_fields(monkeypatch):
         assert _sent_sampling(calls[0]) == {}
 
 
-def _is_claude_5_id(model: str) -> bool:
-    """Generation 5, not a 4.5 id such as claude-haiku-4-5."""
-    _family, _sep, rest = model.removeprefix("claude-").partition("-")
-    return rest == "5" or rest.startswith(("5-", "5."))
-
-
 def test_anthropic_1_uses_extra_body_only_for_pre_claude_5(monkeypatch):
     calls = []
 
@@ -238,10 +232,35 @@ def test_sdk_claude_5_ids_omit_sampling(monkeypatch):
             temperature=0.3,
         )
         client.generate([{"role": "user", "content": "summarize"}])
-        if _is_claude_5_id(model):
+        if claude_module._CLAUDE_5_MODEL.match(model.lower()):
             assert calls[0]["temperature"] is _MISSING, model
         else:
             assert calls[0]["temperature"] == 0.3, model
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
+)
+def test_claude_3_5_ids_are_not_claude_5(monkeypatch, model):
+    """3.5 ids are not generation 5. The second hyphen field starts with 5."""
+    assert claude_module._CLAUDE_5_MODEL.match(model) is None
+    calls = []
+
+    class Messages:
+        def create(self, *, model, max_tokens, messages, system=None, temperature=_MISSING, tools=None):
+            calls.append({"temperature": temperature})
+            return _message(model)
+
+    client = _claude(
+        monkeypatch,
+        Messages,
+        api_version="2023-06-01",
+        model=model,
+        temperature=0.3,
+    )
+    client.generate([{"role": "user", "content": "summarize"}])
+    assert calls[0]["temperature"] == 0.3
 
 
 class _Responses:

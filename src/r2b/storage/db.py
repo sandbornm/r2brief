@@ -207,7 +207,10 @@ class Database:
             )
 
     def store_proposed_annotations(self, session_id: str, rows: list[dict[str, Any]]) -> int:
-        """Insert or refresh LLM proposals. Stable ids so a retry does not fork rows."""
+        """Insert or refresh LLM proposals. Stable ids so a retry does not fork rows.
+
+        A later ``proposed`` write leaves an ``accepted`` or ``rejected`` row unchanged.
+        """
         if not rows:
             return 0
         now = datetime.now(timezone.utc).isoformat()
@@ -230,6 +233,8 @@ class Database:
                         tool = excluded.tool,
                         xref = excluded.xref,
                         updated_at = excluded.updated_at
+                    WHERE COALESCE(proposed_annotations.status, '') NOT IN ('accepted', 'rejected')
+                       OR excluded.status != 'proposed'
                     """,
                     (
                         ann_id,

@@ -1255,6 +1255,8 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                     tool = excluded.tool,
                     xref = excluded.xref,
                     updated_at = excluded.updated_at
+                WHERE COALESCE(function_names.status, '') NOT IN ('accepted', 'rejected')
+                   OR excluded.status != 'proposed'
                 """,
                 (
                     fn_id, session_id, address, original_name, display_name, reasoning, confidence,

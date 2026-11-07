@@ -26,11 +26,9 @@ interface DecompilerPanelProps {
   onAskClaude?: (question: string) => void;
 }
 
-// Simple syntax highlighting for C code
 const highlightCCode = (code: string, theme: Theme): string => {
   const isDark = theme.palette.mode === 'dark';
 
-  // Colors for syntax highlighting
   const colors = {
     keyword: isDark ? '#c678dd' : '#a626a4',
     type: isDark ? '#e5c07b' : '#c18401',
@@ -41,39 +39,31 @@ const highlightCCode = (code: string, theme: Theme): string => {
     operator: isDark ? '#56b6c2' : '#0184bc',
   };
 
-  // Keywords
   const keywords = ['if', 'else', 'while', 'for', 'return', 'break', 'continue', 'switch', 'case', 'default', 'do', 'goto', 'sizeof', 'typedef', 'struct', 'union', 'enum', 'const', 'static', 'extern', 'register', 'volatile'];
 
-  // Types
   const types = ['void', 'int', 'char', 'short', 'long', 'float', 'double', 'unsigned', 'signed', 'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t', 'int8_t', 'int16_t', 'int32_t', 'int64_t', 'size_t', 'bool', 'BOOL', 'DWORD', 'WORD', 'BYTE'];
 
   let result = code;
 
-  // Escape HTML
   result = result
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Comments (simple line and block comments)
   result = result.replace(/(\/\/[^\n]*)/g, `<span style="color:${colors.comment}">$1</span>`);
   result = result.replace(/(\/\*[\s\S]*?\*\/)/g, `<span style="color:${colors.comment}">$1</span>`);
 
-  // Strings
   result = result.replace(/("(?:[^"\\]|\\.)*")/g, `<span style="color:${colors.string}">$1</span>`);
   result = result.replace(/('(?:[^'\\]|\\.)*')/g, `<span style="color:${colors.string}">$1</span>`);
 
-  // Numbers (hex and decimal)
   result = result.replace(/\b(0x[0-9a-fA-F]+)\b/g, `<span style="color:${colors.number}">$1</span>`);
   result = result.replace(/\b(\d+)\b/g, `<span style="color:${colors.number}">$1</span>`);
 
-  // Keywords
   for (const kw of keywords) {
     const regex = new RegExp(`\\b(${kw})\\b`, 'g');
     result = result.replace(regex, `<span style="color:${colors.keyword};font-weight:bold">$1</span>`);
   }
 
-  // Types
   for (const t of types) {
     const regex = new RegExp(`\\b(${t})\\b`, 'g');
     result = result.replace(regex, `<span style="color:${colors.type}">$1</span>`);
@@ -118,7 +108,6 @@ const FunctionListItem: FC<{
 const TypesExplorer: FC<{ types: GhidraTypeInfo[] }> = ({ types }) => {
   const theme = useTheme();
 
-  // Group types by kind
   const structs = types.filter((t) => t.kind === 'struct');
   const enums = types.filter((t) => t.kind === 'enum');
   const others = types.filter((t) => t.kind !== 'struct' && t.kind !== 'enum');
@@ -229,7 +218,6 @@ const DecompilerPanel: FC<DecompilerPanelProps> = ({ data, onAskClaude }) => {
 
   return (
     <Box sx={{ height: '100%', display: 'flex' }}>
-      {/* Left sidebar: Function list */}
       <Paper
         variant="outlined"
         sx={{
@@ -259,11 +247,9 @@ const DecompilerPanel: FC<DecompilerPanelProps> = ({ data, onAskClaude }) => {
         </List>
       </Paper>
 
-      {/* Main area: Decompiled code */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {selectedFunc && (
           <>
-            {/* Function header */}
             <Box
               sx={{
                 p: 1,
@@ -297,7 +283,6 @@ const DecompilerPanel: FC<DecompilerPanelProps> = ({ data, onAskClaude }) => {
               </Stack>
             </Box>
 
-            {/* Code area */}
             <Box
               sx={{
                 flex: 1,
@@ -317,7 +302,6 @@ const DecompilerPanel: FC<DecompilerPanelProps> = ({ data, onAskClaude }) => {
         )}
       </Box>
 
-      {/* Right panel: Types explorer */}
       {data.types && data.types.length > 0 && (
         <Paper
           variant="outlined"

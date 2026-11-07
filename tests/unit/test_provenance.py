@@ -74,7 +74,7 @@ def test_provenance_is_ordered_portable_and_secret_free(tmp_path: Path) -> None:
         "radare2.quick",
         "radare2.deep",
     ]
-    assert actions[1]["status"] == "completed"  # deep status does not leak into quick
+    assert actions[1]["status"] == "completed"
     assert actions[2]["result_ref"] == "/deep_scan/radare2"
     assert len(actions[2]["output_sha256"]) == 64
     assert actions[-1]["adapter"] == "ghidra"

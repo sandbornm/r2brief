@@ -1,5 +1,3 @@
-"""Runtime requirements extraction for ELF binaries."""
-
 from __future__ import annotations
 
 import math
@@ -22,8 +20,8 @@ def _shannon_entropy(data: bytes) -> float:
 
 
 def get_runtime_requirements(binary: Path) -> dict[str, Any]:
-    try:  # Optional dependency
-        from elftools.elf.elffile import ELFFile  # type: ignore[import-untyped]
+    try:
+        from elftools.elf.elffile import ELFFile
     except ModuleNotFoundError as exc:
         return {"error": f"pyelftools not installed: {exc}"}
 
@@ -118,5 +116,5 @@ def get_runtime_requirements(binary: Path) -> dict[str, Any]:
                 },
                 "packer": packer,
             }
-    except Exception as exc:  # pragma: no cover - best effort
+    except Exception as exc:  # pragma: no cover
         return {"error": f"runtime requirements failed: {exc}"}

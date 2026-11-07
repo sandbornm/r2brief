@@ -1,5 +1,3 @@
-"""Small, typed public API for embedding r2brief."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,14 +19,6 @@ AnalysisProfile = Literal["triage", "standard", "exhaustive"]
 
 @dataclass(frozen=True, slots=True)
 class AnalysisOptions:
-    """Control one analysis without mutating global or on-disk state.
-
-    ``triage`` is the inexpensive default.  ``standard`` enables the regular
-    deep stage, while ``exhaustive`` also permits heavy analyzers explicitly
-    enabled in the supplied configuration.  Library calls do not create a
-    database, chat session, record, or trajectory unless the caller builds
-    those internal services itself.
-    """
 
     profile: AnalysisProfile = "triage"
     extract: bool = False
@@ -43,7 +33,6 @@ class AnalysisOptions:
 
 @dataclass(frozen=True, slots=True)
 class EvidenceRegion:
-    """Small, self-contained region context for humans, tools, or an optional LLM."""
 
     binary: str
     subject: Mapping[str, Any]
@@ -83,7 +72,6 @@ class EvidenceRegion:
         return dict(self.payload)
 
     def to_briefing(self) -> dict[str, Any]:
-        """Return the minimum versioned briefing needed to interpret this region."""
         region = self.to_dict()
         return {
             "schema_version": "r2b.briefing.v1",
@@ -102,13 +90,11 @@ class EvidenceRegion:
         }
 
     def ask(self, question: str, **kwargs: Any) -> LLMResponse:
-        """Ask about only this evidence capsule; execution controls remain host-owned."""
         return ask(self.to_briefing(), question, **kwargs)
 
 
 @dataclass(slots=True)
 class AnalysisReport:
-    """Typed handle over the stable public payload and internal result."""
 
     result: AnalysisResult
     payload: dict[str, Any]
@@ -144,7 +130,6 @@ class AnalysisReport:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a detached JSON-serializable payload."""
         return dict(self.payload)
 
     def ask(
@@ -152,11 +137,9 @@ class AnalysisReport:
         question: str,
         **kwargs: Any,
     ) -> LLMResponse:
-        """Ask a model about this report; see :func:`ask` for controls."""
         return ask(self, question, **kwargs)
 
     def review(self, **kwargs: Any) -> dict[str, Any]:
-        """Compare the immutable rule order with an optional model order."""
         return review(self, **kwargs)
 
 
@@ -168,12 +151,6 @@ def analyze(
     config_path: str | Path | None = None,
     environment: EnvironmentReport | None = None,
 ) -> AnalysisReport:
-    """Analyze ``binary`` without implicit persistence or an LLM call.
-
-    Pass either an already-loaded ``config`` or ``config_path``, not both.
-    Providing ``environment`` lets harnesses cache an environment probe across
-    several binaries.
-    """
     path = Path(binary).expanduser().resolve()
     if not path.is_file():
         raise FileNotFoundError(f"Binary path does not exist or is not a file: {path}")
@@ -209,7 +186,6 @@ def brief(
     config_path: str | Path | None = None,
     environment: EnvironmentReport | None = None,
 ) -> dict[str, Any]:
-    """Return the stable ``r2b.briefing.v1`` mapping for ``binary``."""
     return analyze(
         binary,
         options=options,
@@ -220,7 +196,6 @@ def brief(
 
 
 def verify(binary: str | Path, imports: list[str] | tuple[str, ...] | None = None) -> dict[str, Any]:
-    """Resolve first arguments at dangerous-import call sites with radare2."""
     from r2b.adapters.radare2 import Radare2Adapter
     from r2b.analysis.verify import DEFAULT_IMPORTS
 
@@ -245,13 +220,6 @@ def ask(
     allowed_tools: Collection[str] | None = None,
     max_tool_rounds: int | None = None,
 ) -> LLMResponse:
-    """Ask an optional LLM to interpret deterministic analysis evidence.
-
-    Tool execution remains host-owned: declaring a tool does not execute it.
-    A callback and explicit allowlist are both required, and the bridge caps
-    the number of rounds.  Pass a preconfigured ``bridge`` to reuse provider
-    state, or pass ``config``/``config_path`` and let this helper create one.
-    """
     from r2b.llm import ANALYST_SYSTEM, ChatMessage, LLMBridge
 
     if not question.strip():
@@ -293,13 +261,6 @@ def review(
     config: AppConfig | None = None,
     config_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Create a versioned rules/model review without changing the briefing.
-
-    With no ``width``, this returns the original ``r2b.review.v1`` document.
-    Set ``width`` to fan out independent lenses and return
-    ``r2b.review-set.v1``. Both include a deterministic evidence-maturity
-    screen. No review executes tools or changes briefing scores.
-    """
 
     if isinstance(analysis, AnalysisReport):
         briefing = analysis.briefing

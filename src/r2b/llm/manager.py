@@ -1,5 +1,3 @@
-"""Provider-neutral LLM facade with bounded, host-owned function tools."""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
@@ -26,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class LLMError(Exception):
-    """High-level error for LLM operations."""
+    pass
 
 
 Client = OpenAIClient | ClaudeClient | OllamaClient
@@ -65,7 +63,6 @@ def _portable_tool_messages(response: LLMResponse, results: Sequence[ToolResult]
 
 
 class LLMBridge:
-    """Select a provider and normalize text, metadata, usage, and tool calls."""
 
     DEFAULT_MODEL = "gemma3:4b"
     AVAILABLE_MODELS = [
@@ -106,12 +103,6 @@ class LLMBridge:
         allowed_tools: Collection[str] | None = None,
         max_tool_rounds: int | None = None,
     ) -> LLMResponse:
-        """Generate a normalized response and optionally run a bounded tool loop.
-
-        Tool execution requires all three controls: declared ``tools``, an
-        explicit executor, and an explicit ``allowed_tools`` collection. With
-        no executor, requested tool calls are returned to the host untouched.
-        """
         declared = {tool.name: tool for tool in tools}
         if len(declared) != len(tools):
             raise LLMError("Tool names must be unique")
@@ -156,7 +147,6 @@ class LLMBridge:
                     self._errors[provider] = error_msg
                     errors.append(f"{provider}: {error_msg}")
                     _LOGGER.warning("LLM provider %s failed: %s", provider, error_msg)
-                    # Never replay already-executed tools against a fallback.
                     if rounds:
                         raise LLMError(f"LLM request failed after tool execution. {provider}: {error_msg}") from exc
                     break
@@ -216,7 +206,6 @@ class LLMBridge:
         )
 
     def chat(self, messages: Iterable[ChatMessage] | Iterable[dict[str, Any]]) -> str:
-        """Compatibility wrapper returning only model text."""
         return self.generate(messages).text
 
     def summarize_analysis(self, summary: dict[str, object]) -> str:
@@ -308,7 +297,6 @@ class LLMBridge:
 
     @property
     def capabilities(self) -> ProviderCapabilities:
-        """Capability metadata for the configured primary provider."""
         return provider_spec(self._order[0] if self._order else None).capabilities
 
     def is_available(self) -> bool:
@@ -320,7 +308,6 @@ class LLMBridge:
             return static
         if model in list_ollama_models(self._config.llm.base_url):
             return ("ollama", model, f"{model} (local)")
-        # A custom model remains valid for the currently selected explicit provider.
         if model == self._config.llm.model and canonical_provider(self._config.llm.provider) in PROVIDERS:
             return (canonical_provider(self._config.llm.provider), model, model)
         return None

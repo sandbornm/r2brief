@@ -1,5 +1,3 @@
-"""Resource tree modelling inspired by OFRAK."""
-
 from __future__ import annotations
 
 import uuid
@@ -9,7 +7,6 @@ from typing import Iterable
 
 @dataclass(slots=True)
 class Resource:
-    """Generic node in the resource tree."""
 
     kind: str
     name: str

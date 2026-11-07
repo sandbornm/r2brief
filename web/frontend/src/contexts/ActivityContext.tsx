@@ -1,12 +1,3 @@
-/**
- * Activity tracking context for backend synchronization.
- *
- * This is a lightweight context that tracks user events and syncs them to the backend.
- * The primary user activity tracking for LLM context is handled by TrajectoryContext.
- * This context focuses on:
- * - Backend synchronization of events
- * - Simple event tracking for analytics
- */
 import { createContext, FC, ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ActivityEvent, ActivityEventType } from '../types';
 
@@ -142,9 +133,6 @@ export const ActivityProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   }, []);
 
-  // Memoize so consumers only re-render when activity state actually changes,
-  // and so effects/callbacks that depend on this value keep a stable identity
-  // between state updates instead of churning on every provider render.
   const value: ActivityContextValue = useMemo(
     () => ({
       ...state,

@@ -22,7 +22,6 @@ import {
 import { FC, memo, useState } from 'react';
 import { toolColors } from '../theme';
 
-// Validation error type
 interface ValidationError {
   message: string;
   location?: string;
@@ -30,7 +29,6 @@ interface ValidationError {
   suggestion?: string;
 }
 
-// Types matching backend models
 interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
@@ -74,7 +72,6 @@ const ScriptExecutionBlock: FC<ScriptExecutionBlockProps> = memo(function Script
 
   const toolColor = toolColors[tool as keyof typeof toolColors] || theme.palette.grey[500];
 
-  // Determine overall status
   const getStatus = () => {
     if (!validation?.valid) return 'invalid';
     if (!execution) return 'pending';
@@ -112,7 +109,6 @@ const ScriptExecutionBlock: FC<ScriptExecutionBlockProps> = memo(function Script
         borderLeft: `3px solid ${toolColor}`,
       }}
     >
-      {/* Header */}
       <Box
         sx={{
           px: 1.5,
@@ -180,7 +176,6 @@ const ScriptExecutionBlock: FC<ScriptExecutionBlockProps> = memo(function Script
         )}
       </Box>
 
-      {/* Validation Errors */}
       {validation && !validation.valid && validation.errors.length > 0 && (
         <Box sx={{ px: 1.5, py: 1, bgcolor: alpha(theme.palette.error.main, 0.08) }}>
           <Typography variant="caption" color="error" fontWeight={600}>
@@ -209,7 +204,6 @@ const ScriptExecutionBlock: FC<ScriptExecutionBlockProps> = memo(function Script
         </Box>
       )}
 
-      {/* Script (Expandable) */}
       <Accordion
         expanded={expanded}
         onChange={() => setExpanded(!expanded)}
@@ -253,7 +247,6 @@ const ScriptExecutionBlock: FC<ScriptExecutionBlockProps> = memo(function Script
         </AccordionDetails>
       </Accordion>
 
-      {/* Execution Output */}
       {execution && (
         <Box sx={{ px: 1.5, py: 1 }}>
           {execution.stdout && (

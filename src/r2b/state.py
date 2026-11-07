@@ -1,5 +1,3 @@
-"""Shared application state helpers for CLI and web entrypoints."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,21 +18,16 @@ class AppState:
     dao: TrajectoryDAO | None
     chat_dao: ChatDAO | None
     orchestrator: AnalysisOrchestrator
-    db: Database | None = None  # Direct database access for annotations, etc.
+    db: Database | None = None
 
 
 def build_state(config_path: Optional[Path], *, persist: bool = True) -> AppState:
-    """Construct an application state bundle.
-
-    Reuses CLI configuration loading logic so other interfaces (web UI,
-    tests) can spin up orchestrator instances with a single call.
-    """
 
     config = load_config(config_path)
     if not persist:
         config.analysis.enable_trajectory_recording = False
         config.output.save_artifacts = False
-    configure_logging(config.verbosity)  # type: ignore[arg-type]
+    configure_logging(config.verbosity)
 
     env = detect_environment(config)
 

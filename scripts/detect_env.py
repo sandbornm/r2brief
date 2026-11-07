@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Standalone environment check script."""
 
 from __future__ import annotations
 
@@ -7,7 +6,6 @@ import argparse
 from pathlib import Path
 import sys
 
-# Ensure local src/ is on sys.path when running via `uv run scripts/...`
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:

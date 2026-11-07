@@ -1,5 +1,3 @@
-"""Flask web frontend for r2b with progress streaming."""
-
 from __future__ import annotations
 
 import copy
@@ -19,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from flask import Flask, Response, jsonify, request, send_from_directory
-from flask_cors import CORS  # type: ignore[import-untyped]
+from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from ..analysis import AnalysisOrchestrator, AnalysisResult
@@ -117,7 +115,6 @@ def _format_size(size_bytes: int) -> str:
 
 
 def _execution_denial(state: AppState, setting: str) -> tuple[Any, int] | None:
-    """Require both an explicit capability gate and a per-request bearer token."""
     web = getattr(state.config, "web", None)
     if getattr(web, setting, False) is not True:
         return jsonify({
@@ -179,9 +176,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
     project_root = Path(__file__).resolve().parents[3]
     checkout_dist = project_root / "web" / "frontend" / "dist"
     packaged_dist = Path(__file__).resolve().parents[1] / "web_dist"
-    # A tracked placeholder keeps clean editable installs buildable even before
-    # the frontend job runs. Prefer packaged assets only when a real bundle is
-    # present; otherwise a contributor build in the checkout remains visible.
     dist_dir = packaged_dist if (packaged_dist / "index.html").is_file() else checkout_dist
 
     if dist_dir.exists():
@@ -200,9 +194,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
     def request_too_large(_error: RequestEntityTooLarge) -> Any:
         return jsonify({"error": f"File exceeds {_format_size(max_upload_bytes)} hard limit"}), 413
 
-    # This service can execute local analysis tools, so never opt every web
-    # origin into credentialed API access.  Same-origin production builds do
-    # not need CORS; the defaults below only cover the local Vite dev server.
     cors_value = os.getenv("R2B_CORS_ORIGINS") or os.getenv(
         "R2B_CORS_ORIGINS",
         "http://127.0.0.1:5173,http://localhost:5173",
@@ -210,7 +201,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
     cors_origins = [origin.strip() for origin in cors_value.split(",") if origin.strip()]
     CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 
-    # Set up debug logging for Flask
     setup_flask_debug(app)
 
     def _record_trajectory_action(session_id: str, action: str, payload: dict[str, Any]) -> None:
@@ -305,7 +295,7 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             from ..compilation import sniff_compiler_capabilities
 
             payload = sniff_compiler_capabilities()
-        except Exception as exc:  # pragma: no cover - defensive UI fallback
+        except Exception as exc:  # pragma: no cover
             payload = _compiler_probing_snapshot()
             payload.update({
                 "state": "error",
@@ -404,11 +394,11 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
     if dist_dir.exists():
 
         @app.get("/")
-        def index() -> Any:  # pragma: no cover - runtime integration
+        def index() -> Any:  # pragma: no cover
             return send_from_directory(dist_dir, "index.html")
 
         @app.get("/<path:path>")
-        def static_proxy(path: str) -> Any:  # pragma: no cover - runtime integration
+        def static_proxy(path: str) -> Any:  # pragma: no cover
             try:
                 return send_from_directory(dist_dir, path)
             except FileNotFoundError:
@@ -441,7 +431,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         }))
 
     def _get_tools_status(state: AppState, *, live: bool = False) -> dict[str, Any]:
-        """Get detailed status of all analysis tools."""
         import shutil
         import subprocess
 
@@ -449,7 +438,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         config = AppConfig() if mocked_state else state.config
         tools: dict[str, Any] = {}
         
-        # Check Python packages
         def check_import(module: str) -> bool:
             try:
                 __import__(module)
@@ -464,8 +452,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                     return path
             return None
         
-        # Firmware inventory is always available and gives generic firmware
-        # blobs a useful graph even when heavyweight analyzers are absent.
         binwalk_path = which_any("binwalk")
         tools["firmware"] = {
             "available": True,
@@ -515,7 +501,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "Security profile, strings analysis",
         }
 
-        # radare2/r2pipe
         r2_path = which_any("radare2", "r2")
         r2pipe_available = check_import("r2pipe")
         tools["radare2"] = {
@@ -528,7 +513,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "details": f"command={'yes' if r2_path else 'no'}; r2pipe={'yes' if r2pipe_available else 'no'}",
         }
 
-        # Ollama local model runtime
         ollama_cli_available = shutil.which("ollama") is not None
         ollama_service_available = False
         ollama_models: list[str] = []
@@ -561,7 +545,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "Local Gemma chat model runtime",
         }
         
-        # angr
         angr_available = check_import("angr")
         tools["angr"] = {
             "available": angr_available,
@@ -570,7 +553,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "CFG analysis, symbolic execution",
         }
         
-        # Capstone
         capstone_available = check_import("capstone")
         tools["capstone"] = {
             "available": capstone_available,
@@ -579,7 +561,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "Instruction-level disassembly",
         }
 
-        # python-magic
         magic_available = check_import("magic")
         tools["libmagic"] = {
             "available": magic_available,
@@ -588,7 +569,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "File type identification",
         }
         
-        # Frida
         frida_available = check_import("frida")
         tools["frida"] = {
             "available": frida_available,
@@ -597,7 +577,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "Dynamic instrumentation",
         }
         
-        # pyelftools (for DWARF)
         dwarf_available = check_import("elftools")
         tools["pyelftools"] = {
             "available": dwarf_available,
@@ -620,7 +599,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "Windows PE metadata, imports, resources, and sections",
         }
 
-        # GEF/GDB (requires Docker image)
         docker_available = shutil.which("docker") is not None
         gef_image_available = False
         if docker_available and not mocked_state and live:
@@ -642,7 +620,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             "description": "Dynamic execution tracing with GDB",
         }
 
-        # Ghidra
         ghidra_env = state.env.ghidra
         ghidra_headless_ready = False if mocked_state else (ghidra_env.is_ready if ghidra_env else False)
         ghidra_bridge_ready = False if mocked_state else (ghidra_env.bridge_ready if ghidra_env else False)
@@ -661,7 +638,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.get("/api/models")
     def list_models() -> Any:
-        """List available Claude models."""
         return jsonify({
             "models": llm_bridge.available_models,
             "current": llm_bridge.model,
@@ -669,7 +645,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.post("/api/models")
     def set_model() -> Any:
-        """Set the active Claude model."""
         body = request.get_json(silent=True) or {}
         model = body.get("model", "").strip()
         
@@ -909,7 +884,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             history = chat_dao.list_messages(session.session_id)
             analysis_attachment = _extract_latest_analysis(history)
             
-            # Fetch recent activity context
             activity_context = _get_activity_context(state.db, session.session_id) if state.db else None
             
             investigation_graph = _build_investigation_graph_for_session(
@@ -975,15 +949,10 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         response_payload["message"] = _message_to_dict(user_message)
         return jsonify(response_payload)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Annotation endpoints
-    # ──────────────────────────────────────────────────────────────────────────
-    
     @app.get("/api/chats/<session_id>/annotations")
     def list_annotations(session_id: str) -> Any:
-        """List all annotations for a session."""
         if not state.db:
-            return jsonify({"annotations": []})  # No database configured
+            return jsonify({"annotations": []})
             
         session = chat_dao.get_session(session_id)
         if not session:
@@ -1014,7 +983,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.post("/api/chats/<session_id>/annotations")
     def upsert_annotation(session_id: str) -> Any:
-        """Create or update an annotation for a session."""
         if not state.db:
             return jsonify({"error": "database not configured"}), 503
             
@@ -1034,7 +1002,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         
         with state.db.connect() as conn:
             if note:
-                # Upsert annotation
                 annotation_id = f"{session_id}-{address}"
                 conn.execute(
                     """
@@ -1054,7 +1021,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                     "updatedAt": now,
                 })
             else:
-                # Delete annotation if note is empty
                 conn.execute(
                     "DELETE FROM annotations WHERE session_id = ? AND address = ?",
                     (session_id, address),
@@ -1063,7 +1029,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.delete("/api/chats/<session_id>/annotations/<address>")
     def delete_annotation(session_id: str, address: str) -> Any:
-        """Delete an annotation."""
         if not state.db:
             return jsonify({"error": "database not configured"}), 503
             
@@ -1079,13 +1044,8 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         
         return jsonify({"deleted": True, "address": address})
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Activity tracking endpoints for context engineering
-    # ──────────────────────────────────────────────────────────────────────────
-    
     @app.post("/api/chats/<session_id>/activities")
     def track_activities(session_id: str) -> Any:
-        """Record user activity events for session trajectory and LLM context."""
         if not state.db:
             return jsonify({"error": "database not configured"}), 503
             
@@ -1120,7 +1080,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.get("/api/chats/<session_id>/activities")
     def list_activities(session_id: str) -> Any:
-        """Get recent activity events for a session."""
         if not state.db:
             return jsonify({"activities": []})
             
@@ -1161,13 +1120,8 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         
         return jsonify({"activities": activities})
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Function naming endpoints
-    # ──────────────────────────────────────────────────────────────────────────
-
     @app.get("/api/chats/<session_id>/function-names")
     def list_function_names(session_id: str) -> Any:
-        """List all custom function names for a session."""
         if not state.db:
             return jsonify({"function_names": []})
 
@@ -1209,7 +1163,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.post("/api/chats/<session_id>/function-names")
     def upsert_function_name(session_id: str) -> Any:
-        """Create or update a function name for a session."""
         if not state.db:
             return jsonify({"error": "database not configured"}), 503
 
@@ -1223,7 +1176,7 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         display_name = body.get("displayName", "").strip()
         reasoning = body.get("reasoning", "")
         confidence = body.get("confidence")
-        source = body.get("source", "user")  # "user" or "llm"
+        source = body.get("source", "user")
         status = body.get("status") or ("proposed" if source == "llm" else "accepted")
         artifact_id = body.get("artifactId") or body.get("artifact_id")
         tool = body.get("tool")
@@ -1280,7 +1233,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.delete("/api/chats/<session_id>/function-names/<address>")
     def delete_function_name(session_id: str, address: str) -> Any:
-        """Delete a function name."""
         if not state.db:
             return jsonify({"error": "database not configured"}), 503
 
@@ -1364,10 +1316,9 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.post("/api/functions/suggest-names")
     def suggest_function_names() -> Any:
-        """Use LLM to suggest names for functions with generic names."""
         body = request.get_json(silent=True) or {}
         session_id = body.get("session_id")
-        functions = body.get("functions", [])  # List of function dicts with address, name, blocks
+        functions = body.get("functions", [])
 
         debug.function_name_suggest(session_id or "unknown", len(functions))
 
@@ -1381,7 +1332,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         if not functions:
             return jsonify({"error": "functions list is required"}), 400
 
-        # Filter to only functions with generic names
         import re
         generic_pattern = re.compile(r"^(sub_|fcn\.|func_|FUN_)[0-9a-fA-F]+$", re.IGNORECASE)
         generic_functions = [
@@ -1392,10 +1342,8 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         if not generic_functions:
             return jsonify({"suggestions": [], "message": "No generic function names found"})
 
-        # Limit to first 10 functions to avoid too large LLM request
         generic_functions = generic_functions[:10]
 
-        # Build LLM prompt
         prompt_parts = [
             "Analyze these assembly functions and suggest meaningful names based on their behavior.",
             "Names are PROPOSALS, not facts. Original names stay canonical until a human accepts.",
@@ -1416,10 +1364,10 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             prompt_parts.append(f"\n## Function: {func.get('name', '?')} at {func.get('address', '?')}")
             blocks = func.get("blocks", [])
             if blocks:
-                for i, block in enumerate(blocks[:3]):  # First 3 blocks
+                for i, block in enumerate(blocks[:3]):
                     prompt_parts.append(f"### Block {i + 1} at {block.get('offset', '?')}:")
                     disasm = block.get("disassembly", [])
-                    for instr in disasm[:10]:  # First 10 instructions per block
+                    for instr in disasm[:10]:
                         addr = instr.get("addr", "")
                         opcode = instr.get("opcode", "")
                         prompt_parts.append(f"  {addr}  {opcode}")
@@ -1428,7 +1376,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
         prompt = "\n".join(prompt_parts)
 
-        # Call LLM
         try:
             llm_messages = [
                 LLMChatMessage(
@@ -1443,14 +1390,11 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             ]
             response = llm_bridge.chat(llm_messages)
 
-            # Parse JSON response
-            # Try to extract JSON from the response (it might have markdown code blocks)
             json_match = re.search(r"\{[\s\S]*\}", response)
             if json_match:
                 result = json.loads(json_match.group())
                 suggestions = result.get("suggestions", [])
 
-                # Map confidence strings to floats
                 confidence_map = {"high": 0.9, "medium": 0.7, "low": 0.5}
                 for s in suggestions:
                     conf = s.get("confidence", "medium")
@@ -1476,13 +1420,11 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
 
-    # Ensure uploads directory exists
     uploads_dir = Path(state.config.output.artifacts_dir).expanduser() / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     @app.post("/api/upload")
     def upload_binary() -> Any:
-        """Handle binary file uploads and return the server path."""
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
 
@@ -1490,14 +1432,12 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         if not file.filename:
             return jsonify({"error": "No filename provided"}), 400
 
-        # Sanitize filename and save
         from werkzeug.utils import secure_filename
         filename = secure_filename(file.filename)
         if not filename:
             filename = f"binary_{uuid.uuid4().hex[:8]}"
 
         save_path = uploads_dir / filename
-        # Add suffix if file exists
         counter = 1
         original_stem = save_path.stem
         while save_path.exists():
@@ -1536,8 +1476,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         enable_frida = bool(body.get("enable_frida", state.config.analysis.enable_frida))
         require_elf = body.get("require_elf")
         if analysis_profile == "exhaustive":
-            # Exhaustive broadens static/symbolic work. Native execution
-            # remains an explicit request or a deliberate config choice.
             if "enable_angr" not in body:
                 enable_angr = True
             if "enable_ghidra" not in body:
@@ -1568,7 +1506,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         session = chat_dao.get_or_create_session(str(path), title=path.name)
         debug.session_create(session.session_id, str(path))
         
-        # Store user goal in session metadata
         if user_goal:
             chat_dao.append_message(
                 session.session_id,
@@ -1591,7 +1528,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         def _worker() -> None:
             job.put("job_started", {"binary": str(path), "session_id": job.session_id})
             try:
-                # Override config settings based on frontend request
                 request_config = state.config.model_copy(deep=True)
                 request_config.analysis.enable_angr = enable_angr
                 request_config.analysis.enable_ghidra = enable_ghidra
@@ -1601,7 +1537,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                     request_config.analysis.require_elf = bool(require_elf)
                 
                 orchestrator = AnalysisOrchestrator(request_config, state.env, trajectory_dao=state.dao)
-                # Create custom analysis plan respecting frontend settings
                 plan = orchestrator.create_plan(quick_only=quick_only, profile=analysis_profile)
                 plan.run_angr = enable_angr and plan.deep
                 cache_key = _analysis_result_cache_key(path, plan, request_config)
@@ -1670,7 +1605,7 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                         "trajectory_id": result.trajectory_id,
                     },
                 )
-            except Exception as exc:  # pragma: no cover - defensive
+            except Exception as exc:  # pragma: no cover
                 job.error = str(exc)
                 job.status = "failed"
                 error_payload = {"error": str(exc)}
@@ -1721,19 +1656,13 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
         return Response(_event_stream(), mimetype="text/event-stream")
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Compilation endpoints
-    # ──────────────────────────────────────────────────────────────────────────
-
     @app.get("/api/compilers")
     def list_compilers() -> Any:
-        """List compiler capabilities and background probe status."""
         snapshot, meta = _get_compiler_status_cached(live=_live_status_requested())
         return jsonify(_serialize({**snapshot, "meta": meta}))
 
     @app.post("/api/compilers/preview")
     def preview_compile_command() -> Any:
-        """Preview the compilation command that would run."""
         try:
             from ..compilation import preview_compile_with_capabilities
 
@@ -1762,16 +1691,15 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.post("/api/compile")
     def compile_source() -> Any:
-        """Compile C source or assemble ASM source."""
         body = request.get_json(silent=True) or {}
         source_code = body.get("source", "").strip()
         source_path = body.get("source_path", "").strip()
         architecture = body.get("architecture", "arm64")
-        source_type = body.get("type", "c")  # "c" or "asm"
+        source_type = body.get("type", "c")
         optimization = body.get("optimization", "-O0")
         output_name = body.get("output_name", "")
-        freestanding = body.get("freestanding", False)  # No libc mode
-        emit_asm = body.get("emit_asm", True)  # Also generate .s file
+        freestanding = body.get("freestanding", False)
+        emit_asm = body.get("emit_asm", True)
 
         if not source_code and not source_path:
             return jsonify({"error": "Either 'source' or 'source_path' required"}), 400
@@ -1779,7 +1707,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         try:
             from ..compilation import compile_c_source, assemble_source, compile_to_asm
 
-            # Determine source
             if source_path:
                 source = Path(source_path)
                 if not source.exists():
@@ -1787,32 +1714,25 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             else:
                 source = source_code
 
-            # Determine output path
             output = None
             if output_name:
-                # Strip extension if provided, we'll add the right one
                 base_name = output_name.rsplit('.', 1)[0] if '.' in output_name else output_name
                 output = uploads_dir / base_name
 
-            # Build extra flags for freestanding mode
-            # Use -nostartfiles to avoid crt1.o conflict when code defines _start
             extra_flags = []
             if freestanding:
                 extra_flags = ["-ffreestanding", "-nostartfiles", "-nodefaultlibs", "-static"]
 
-            # First, generate assembly if requested
             asm_output = None
             asm_path = None
             if emit_asm and source_type == "c":
                 asm_result = compile_to_asm(source, architecture, optimization, extra_flags)
                 if asm_result.success and asm_result.assembly:
                     asm_output = asm_result.assembly
-                    # Save .s file
                     asm_filename = (output.stem if output else "output") + ".s"
                     asm_path = uploads_dir / asm_filename
                     asm_path.write_text(asm_output)
 
-            # Compile or assemble
             if source_type == "asm":
                 result = assemble_source(source, architecture, output)
             else:
@@ -1832,7 +1752,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                 response["output_path"] = str(result.output_path)
                 response["output_name"] = result.output_path.name
 
-            # Include assembly output
             if asm_output:
                 response["assembly"] = asm_output
                 if asm_path:
@@ -1846,10 +1765,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.post("/api/compile/modified-asm")
     def compile_modified_asm() -> Any:
-        """Compile modified assembly back to binary.
-
-        This endpoint allows re-assembling modified disassembly output.
-        """
         body = request.get_json(silent=True) or {}
         asm_source = body.get("asm", "").strip()
         body.get("original_binary", "").strip()
@@ -1861,7 +1776,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         try:
             from ..compilation import assemble_source
 
-            # Create output in uploads directory
             import hashlib
             hash_suffix = hashlib.md5(asm_source.encode()).hexdigest()[:8]
             output_name = f"modified_{hash_suffix}.o"
@@ -1888,10 +1802,8 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.get("/api/compile/download/<path:filename>")
     def download_compiled(filename: str) -> Any:
-        """Download a compiled binary file."""
         from werkzeug.utils import secure_filename
         
-        # Security: ensure filename is safe
         safe_name = secure_filename(filename)
         if not safe_name:
             return jsonify({"error": "Invalid filename"}), 400
@@ -1900,7 +1812,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         if not file_path.exists():
             return jsonify({"error": "File not found"}), 404
         
-        # Serve the file for download
         return send_from_directory(
             uploads_dir,
             safe_name,
@@ -1910,11 +1821,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
     @app.get("/api/compile/listing/<path:filename>")
     def get_binary_listing(filename: str) -> Any:
-        """Get objdump-style disassembly listing for a compiled binary.
-        
-        Returns structured listing with address, bytes, and instruction for each line.
-        This is the typical binary view in tools like Ghidra, OFRAK, and angr.
-        """
         import subprocess
         from werkzeug.utils import secure_filename
         
@@ -1926,16 +1832,12 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         if not file_path.exists():
             return jsonify({"error": "File not found"}), 404
         
-        # Determine architecture and pick appropriate objdump
-        # Try to detect from filename or use default
         arch = "aarch64" if "arm64" in filename.lower() or "aarch64" in filename.lower() else "arm"
         
-        # Try Docker objdump first (for cross-arch), then native
         listing_lines: list[dict[str, Any]] = []
         raw_output = ""
         
         try:
-            # Use Docker container for cross-arch objdump
             objdump_cmd = "aarch64-linux-gnu-objdump" if arch == "aarch64" else "arm-linux-gnueabihf-objdump"
             docker_cmd = [
                 "docker", "run", "--rm",
@@ -1949,14 +1851,12 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             raw_output = result.stdout
             
             if result.returncode != 0:
-                # Fallback to native objdump
                 native_result = subprocess.run(
                     ["objdump", "-d", "-w", str(file_path)],
                     capture_output=True, text=True, timeout=30
                 )
                 raw_output = native_result.stdout
         except Exception:
-            # Try native objdump as last resort
             try:
                 native_result = subprocess.run(
                     ["objdump", "-d", "-w", str(file_path)],
@@ -1966,14 +1866,12 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             except Exception as e:
                 return jsonify({"error": f"Failed to disassemble: {e}"}), 500
         
-        # Parse objdump output into structured format
         current_section = ""
         current_function = ""
         
         for line in raw_output.split("\n"):
             line = line.rstrip()
             
-            # Section header (e.g., "Disassembly of section .text:")
             if line.startswith("Disassembly of section"):
                 current_section = line.split()[-1].rstrip(":")
                 listing_lines.append({
@@ -1982,7 +1880,6 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                 })
                 continue
             
-            # Function header (e.g., "0000000000400078 <_start>:")
             if "<" in line and ">:" in line and not line.startswith(" "):
                 parts = line.split()
                 if parts:
@@ -1996,26 +1893,20 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                     })
                 continue
             
-            # Instruction line (e.g., "  400078:	d2800020 	mov	x0, #0x1")
             if ":" in line and line.strip() and line[0] in " \t":
                 parts = line.split(":", 1)
                 if len(parts) == 2:
                     addr = parts[0].strip()
                     rest = parts[1].strip()
                     
-                    # Split bytes from instruction
-                    # Format: "d2800020 	mov	x0, #0x1"
                     tokens = rest.split(None, 1)
                     if tokens:
-                        # First token(s) are hex bytes, rest is instruction
                         bytes_part = ""
                         instr_part = ""
                         
-                        # Collect hex bytes until we hit a non-hex token
                         words = rest.split()
                         i = 0
                         for i, word in enumerate(words):
-                            # Check if word is hex (bytes)
                             if all(c in "0123456789abcdef" for c in word.lower()) and len(word) in [2, 4, 8]:
                                 bytes_part += word + " "
                             else:
@@ -2034,20 +1925,15 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         return jsonify({
             "filename": safe_name,
             "listing": listing_lines,
-            "raw": raw_output[:50000] if len(raw_output) > 50000 else raw_output,  # Limit raw output
+            "raw": raw_output[:50000] if len(raw_output) > 50000 else raw_output,
         })
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Ghidra Scripting endpoints
-    # ──────────────────────────────────────────────────────────────────────────
 
     @app.post("/api/ghidra/generate-script")
     def generate_ghidra_script() -> Any:
-        """Generate a Ghidra script based on task description using LLM."""
         data = request.get_json() or {}
         session_id = data.get("session_id")
         task_description = data.get("task_description", "")
-        language = data.get("language", "python")  # python or java
+        language = data.get("language", "python")
         data.get("binary_path")
 
         if not session_id:
@@ -2057,11 +1943,9 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         if language not in ("python", "java"):
             return jsonify({"error": "language must be 'python' or 'java'"}), 400
 
-        # Build context for script generation
         history = chat_dao.list_messages(session_id, limit=10)
         analysis = _extract_latest_analysis(history)
 
-        # Build prompt for LLM
         script_template = _get_ghidra_script_template(language)
         binary_info = ""
         if analysis:
@@ -2091,7 +1975,6 @@ Requirements:
 Generate ONLY the script code, no explanations before or after. The script should start immediately with the code."""
 
         try:
-            # Use LLM to generate script
             llm_messages = [
                 LLMChatMessage(role="system", content="You are a Ghidra scripting expert. Generate clean, well-documented scripts."),
                 LLMChatMessage(role="user", content=prompt),
@@ -2100,17 +1983,14 @@ Generate ONLY the script code, no explanations before or after. The script shoul
             response = llm_bridge.chat(llm_messages)
             script = response.strip()
 
-            # Clean up script (remove markdown code blocks if present)
             if script.startswith("```"):
                 lines = script.split("\n")
-                # Remove first and last line if they're code block markers
                 if lines[0].startswith("```"):
                     lines = lines[1:]
                 if lines and lines[-1].strip() == "```":
                     lines = lines[:-1]
                 script = "\n".join(lines)
 
-            # Record this task in trajectory
             _record_trajectory_action(
                 session_id,
                 "ghidra_scripting.script_generation",
@@ -2135,7 +2015,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
 
     @app.post("/api/ghidra/execute-script")
     def execute_ghidra_script() -> Any:
-        """Execute a Ghidra script via bridge or headless mode."""
         denial = _execution_denial(state, "enable_script_execution")
         if denial is not None:
             return denial
@@ -2152,14 +2031,11 @@ Generate ONLY the script code, no explanations before or after. The script shoul
             return jsonify({"error": "script is required"}), 400
 
         try:
-            # Try to execute via bridge if available
             if state.config.ghidra.use_bridge and state.env.ghidra.bridge_connected:
                 output = _execute_script_via_bridge(script, language, state)
             else:
-                # Fall back to headless execution
                 output = _execute_script_headless(script, language, binary_path, state)
 
-            # Record execution in trajectory
             _record_trajectory_action(
                 session_id,
                 "ghidra_scripting.script_execution",
@@ -2172,7 +2048,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                 },
             )
 
-            # Store in chat for history
             chat_dao.append_message(
                 session_id,
                 "system",
@@ -2181,7 +2056,7 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                     "type": "ghidra_script_result",
                     "task": task_description,
                     "language": language,
-                    "output": output[:5000],  # Limit stored output
+                    "output": output[:5000],
                 }],
             )
 
@@ -2196,7 +2071,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
         except Exception as exc:
             debug.log("ghidra_execute_error", str(exc))
 
-            # Record failure
             _record_trajectory_action(
                 session_id,
                 "ghidra_scripting.script_execution",
@@ -2212,7 +2086,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
 
     @app.get("/api/ghidra/status")
     def ghidra_status() -> Any:
-        """Get Ghidra integration status."""
         ghidra_env = state.env.ghidra
         return jsonify({
             "available": ghidra_env.is_ready or ghidra_env.bridge_available,
@@ -2225,32 +2098,13 @@ Generate ONLY the script code, no explanations before or after. The script shoul
             "notes": ghidra_env.notes,
         })
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Unified Tool Execution endpoints
-    # ──────────────────────────────────────────────────────────────────────────
-
     @app.post("/api/tools/execute")
     def execute_tool_script() -> Any:
-        """Execute a script using the unified tool execution system.
-
-        Request JSON:
-            tool: Tool name (ghidra, radare2, angr, binwalk, gdb)
-            script: Script content to execute
-            language: Script language (python, r2, shell)
-            session_id: Optional session for trajectory tracking
-            timeout_ms: Optional execution timeout in milliseconds
-
-        Returns:
-            validation: Validation result with errors/warnings
-            execution: Execution result with status, stdout, stderr
-            result: Parsed output data
-        """
         denial = _execution_denial(state, "enable_script_execution")
         if denial is not None:
             return denial
         data = request.get_json() or {}
 
-        # Validate required fields
         tool_name = data.get("tool")
         script = data.get("script", "")
         language = data.get("language", "python")
@@ -2262,7 +2116,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
         if not script.strip():
             return jsonify({"error": "script is required"}), 400
 
-        # Validate tool name
         try:
             tool = ToolName(tool_name)
         except ValueError:
@@ -2271,7 +2124,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                 "error": f"Invalid tool: {tool_name}. Valid tools: {valid_tools}"
             }), 400
 
-        # Validate language
         try:
             lang = ScriptLanguage(language)
         except ValueError:
@@ -2280,7 +2132,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                 "error": f"Invalid language: {language}. Valid languages: {valid_langs}"
             }), 400
 
-        # First, validate the script (always do this, even if tool unavailable)
         validation = ScriptValidator.validate(script, lang, tool)
 
         if not validation.valid:
@@ -2291,7 +2142,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                 "error": validation.error_summary,
             }), 400
 
-        # Get the appropriate executor
         executor = None
         if tool == ToolName.GHIDRA:
             if state.config.ghidra.use_bridge and hasattr(state, 'ghidra_client') and state.ghidra_client:
@@ -2304,7 +2154,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                     "error": "Ghidra bridge not configured or not connected",
                 }), 503
         elif tool == ToolName.RADARE2:
-            # Radare2 executor needs an r2pipe instance
             executor = Radare2Executor(r2pipe=None)
         else:
             return jsonify({
@@ -2314,7 +2163,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                 "error": f"Executor not yet implemented for {tool.value}",
             }), 501
 
-        # Execute the script
         try:
             output = executor.execute(
                 script=script,
@@ -2351,16 +2199,8 @@ Generate ONLY the script code, no explanations before or after. The script shoul
 
     @app.get("/api/tools/status")
     def get_tools_status() -> Any:
-        """Get availability status for all supported analysis tools.
-
-        Returns:
-            tools: Dict of tool name -> status (available, description, etc.)
-            available_count: Number of available tools
-            total_count: Total number of supported tools
-        """
         tools, tools_meta = _get_tools_status_cached(state, live=_live_status_requested())
 
-        # Calculate summary
         available_count = sum(1 for t in tools.values() if t["available"])
         total_count = len(tools)
         scorecard = {
@@ -2383,7 +2223,6 @@ Generate ONLY the script code, no explanations before or after. The script shoul
 
 
 def _get_ghidra_script_template(language: str) -> str:
-    """Get a template/guidelines for Ghidra script generation."""
     if language == "python":
         return """
 Python Script Guidelines:
@@ -2434,7 +2273,6 @@ public class AnalysisScript extends GhidraScript {
 
 
 def _execute_script_via_bridge(script: str, language: str, state: AppState) -> str:
-    """Execute script via Ghidra bridge connection."""
     try:
         from ..adapters.ghidra_bridge_client import GhidraBridgeClient
 
@@ -2447,18 +2285,13 @@ def _execute_script_via_bridge(script: str, language: str, state: AppState) -> s
         if not client.connect():
             raise RuntimeError("Failed to connect to Ghidra bridge")
 
-        # For Python scripts, we can execute directly via the bridge
         if language == "python":
-            # Execute via bridge's remote execution
             bridge = client._bridge
             if bridge is None:
                 raise RuntimeError("Bridge not initialized")
 
-            # Execute the script remotely
             try:
-                # Escape single quotes in the script
                 escaped_script = script.replace("'", "\\'")
-                # Use bridge to run script with output capture
                 remote_code = f"""
 import io
 import sys
@@ -2476,7 +2309,6 @@ _output.getvalue()
             except Exception as e:
                 return f"Script execution error: {str(e)}"
         else:
-            # For Java, we'd need to compile and run via Ghidra's script manager
             raise NotImplementedError("Java script execution via bridge not yet supported")
 
     except ImportError:
@@ -2487,7 +2319,6 @@ _output.getvalue()
 
 
 def _execute_script_headless(script: str, language: str, binary_path: str | None, state: AppState) -> str:
-    """Execute script via Ghidra headless analyzer."""
     import subprocess
     import tempfile
 
@@ -2497,14 +2328,12 @@ def _execute_script_headless(script: str, language: str, binary_path: str | None
     if not binary_path:
         raise RuntimeError("binary_path required for headless execution")
 
-    # Write script to temp file
     ext = ".py" if language == "python" else ".java"
     with tempfile.NamedTemporaryFile(mode='w', suffix=ext, delete=False) as f:
         f.write(script)
         script_path = f.name
 
     try:
-        # Build headless command
         headless_path = state.env.ghidra.headless_path
         project_dir = Path(state.config.ghidra.project_dir).expanduser()
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -2515,7 +2344,7 @@ def _execute_script_headless(script: str, language: str, binary_path: str | None
             "r2b_scripting",
             "-import", binary_path,
             "-postScript", script_path,
-            "-deleteProject",  # Clean up after
+            "-deleteProject",
         ]
 
         result = subprocess.run(
@@ -2532,7 +2361,6 @@ def _execute_script_headless(script: str, language: str, binary_path: str | None
         return output
 
     finally:
-        # Clean up temp script
         import os
         try:
             os.unlink(script_path)
@@ -2572,7 +2400,6 @@ def _extract_latest_analysis(messages: list[StoredChatMessage]) -> dict[str, Any
 
 
 def _extract_user_goal(history: list[StoredChatMessage]) -> str | None:
-    """Extract user's stated goal from session history."""
     for message in history:
         for attachment in message.attachments or []:
             if isinstance(attachment, dict) and attachment.get("type") == "user_goal":
@@ -3359,7 +3186,6 @@ def _get_activity_events(db: Any, session_id: str, limit: int = 100) -> list[dic
 
 
 def _get_activity_context(db: Any, session_id: str, limit: int = 25) -> list[dict[str, Any]] | None:
-    """Fetch recent user activity events for LLM context."""
     if not db:
         return None
     
@@ -3388,13 +3214,12 @@ def _get_activity_context(db: Any, session_id: str, limit: int = 25) -> list[dic
                 "created_at": row["created_at"],
             })
         
-        return list(reversed(activities))  # Chronological order
+        return list(reversed(activities))
     except Exception:
         return None
 
 
 def _format_activity_context(activities: list[dict[str, Any]] | None) -> str | None:
-    """Format activity events into a readable context string for the LLM."""
     if not activities:
         return None
     
@@ -3402,7 +3227,6 @@ def _format_activity_context(activities: list[dict[str, Any]] | None) -> str | N
     lines.append("(Use this to understand what the user has been exploring)")
     lines.append("")
     
-    # Summarize patterns
     tab_visits: dict[str, int] = {}
     functions_viewed = []
     addresses_viewed = []
@@ -3430,7 +3254,6 @@ def _format_activity_context(activities: list[dict[str, Any]] | None) -> str | N
         elif event_type == "ask_claude":
             questions_asked += 1
     
-    # Build summary
     if tab_visits:
         most_visited = sorted(tab_visits.items(), key=lambda x: -x[1])[:3]
         tabs_str = ", ".join(f"{t}({c}x)" for t, c in most_visited)
@@ -3448,7 +3271,6 @@ def _format_activity_context(activities: list[dict[str, Any]] | None) -> str | N
     if questions_asked > 0:
         lines.append(f"- Asked {questions_asked} question(s) this session")
     
-    # Show last 5 events as timeline
     recent_events = activities[-5:]
     if recent_events:
         lines.append("")
@@ -3463,7 +3285,6 @@ def _format_activity_context(activities: list[dict[str, Any]] | None) -> str | N
 
 
 def _describe_activity_event(event_type: str, data: dict[str, Any]) -> str:
-    """Generate human-readable description of an activity event."""
     if event_type == "tab_switch":
         return f"Switched to {data.get('to_tab', '?')} tab"
     elif event_type == "function_view":
@@ -3612,12 +3433,6 @@ def _build_llm_messages(
     investigation_graph: dict[str, Any] | None = None,
     prebuilt_context: str | None = None,
 ) -> list[LLMChatMessage]:
-    """Build focused LLM messages.
-
-    Compact mode is the default for local models: it uses graph summaries,
-    selected evidence, and recent journey context instead of dumping raw
-    adapter payloads on every turn.
-    """
     
     user_goal = _extract_user_goal(history)
     
@@ -3656,7 +3471,6 @@ def _build_llm_messages(
         )
         system_parts.append(ctx)
     else:
-        # Even without attachment, look for analysis in history
         for msg in history:
             if msg.role == "system":
                 for att in (msg.attachments or []):
@@ -3669,7 +3483,6 @@ def _build_llm_messages(
                         system_parts.append(ctx)
                         break
     
-    # Include activity context for better situational awareness
     if activity_context and not prebuilt_context:
         activity_str = _format_activity_context(activity_context)
         if activity_str:
@@ -3680,7 +3493,6 @@ def _build_llm_messages(
     system_prompt = _clamp_text(system_prompt, max_chars)
     messages: list[LLMChatMessage] = [LLMChatMessage(role="system", content=system_prompt)]
 
-    # Add conversation history - keep recent exchanges for context continuity.
     user_messages = [m for m in history if m.role in ("user", "assistant")]
     history_limit = 10 if compact_context else 15
     for item in user_messages[-history_limit:]:
@@ -3861,20 +3673,11 @@ def _clamp_text(text: str, max_chars: int) -> str:
 
 
 def _build_analysis_context(analysis: dict[str, Any]) -> str:
-    """Build a compact analysis context for the LLM including actual disassembly.
-
-    This context is critical for:
-    1. Providing the LLM with binary details to answer questions
-    2. Recording trajectories of analysis for learning
-    3. Supporting educational use cases (explaining representation levels)
-    """
     quick = analysis.get("quick_scan") or {}
     deep = analysis.get("deep_scan") or {}
 
     lines = ["## Analysis Results"]
 
-    # Tool Attribution - document which tools contributed to the analysis
-    # This helps the LLM explain what information comes from where
     tools_used = []
     tool_descriptions = {
         "autoprofile": "AutoProfile (security features, strings, risk analysis)",
@@ -3902,7 +3705,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
             lines.append(f"  - {tool}")
         lines.append("")
     
-    # Binary info
     r2_quick = quick.get("radare2", {}) if isinstance(quick, dict) else {}
     arch_info = "unknown"
     if isinstance(r2_quick, dict):
@@ -3917,7 +3719,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                 arch = bin_meta.get('arch', '?')
                 bits = bin_meta.get('bits', '?')
                 arch_info = f"{arch}/{bits}-bit"
-                # Provide clearer arch description for ARM Thumb
                 if arch == "arm" and bits == 16:
                     arch_info = "ARM32 (Thumb mode, 16-bit instructions)"
                 elif arch == "arm" and bits == 32:
@@ -3929,7 +3730,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                 if bin_meta.get('compiler'):
                     lines.append(f"Compiler: {bin_meta.get('compiler')}")
     
-    # Counts
     r2_deep = deep.get("radare2", {}) if isinstance(deep, dict) else {}
     functions = r2_deep.get("functions", []) if isinstance(r2_deep, dict) else []
     func_count = len(functions) if isinstance(functions, list) else 0
@@ -3944,7 +3744,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
     lines.append(f"Imports: {import_count}")
     lines.append(f"Strings: {string_count}")
     
-    # Top functions with addresses
     if isinstance(functions, list) and functions:
         lines.append("\nTop functions:")
         for fn in functions[:8]:
@@ -3955,7 +3754,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                 addr_str = f"0x{offset:x}" if isinstance(offset, int) else "?"
                 lines.append(f"  - {name} @ {addr_str} ({size} bytes)")
     
-    # Top imports
     if isinstance(imports, list) and imports:
         lines.append("\nKey imports:")
         for imp in imports[:10]:
@@ -3963,17 +3761,14 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                 name = imp.get("name", "?")
                 lines.append(f"  - {name}")
     
-    # Entry point disassembly - THIS IS CRITICAL for answering ASM questions
     entry_disasm = r2_deep.get("entry_disassembly") if isinstance(r2_deep, dict) else None
     if isinstance(entry_disasm, str) and entry_disasm.strip():
-        # Limit to reasonable size but include enough for context
         disasm_lines = entry_disasm.strip().split('\n')[:80]
         lines.append("\n## Entry Point Disassembly")
         lines.append("```asm")
         lines.extend(disasm_lines)
         lines.append("```")
     
-    # Also include general disassembly if entry is not available
     if not entry_disasm:
         general_disasm = r2_deep.get("disassembly") if isinstance(r2_deep, dict) else None
         if isinstance(general_disasm, str) and general_disasm.strip():
@@ -3983,11 +3778,10 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
             lines.extend(disasm_lines)
             lines.append("```")
     
-    # Include function CFG snippets for richer context
     func_cfgs = r2_deep.get("function_cfgs", []) if isinstance(r2_deep, dict) else []
     if isinstance(func_cfgs, list) and func_cfgs:
         lines.append("\n## Function Details")
-        for cfg in func_cfgs[:5]:  # Top 5 functions with CFG
+        for cfg in func_cfgs[:5]:
             if isinstance(cfg, dict):
                 name = cfg.get("name", "unknown")
                 offset = cfg.get("offset", "?")
@@ -3995,9 +3789,8 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                 lines.append(f"\n### {name} @ {offset}")
                 lines.append(f"Blocks: {block_count}")
                 
-                # Include block disassembly
                 blocks = cfg.get("blocks", [])
-                for block in blocks[:3]:  # First 3 blocks per function
+                for block in blocks[:3]:
                     if isinstance(block, dict):
                         block_offset = block.get("offset", "?")
                         block_disasm = block.get("disassembly", [])
@@ -4011,7 +3804,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                                     lines.append(f"  {addr}  {opcode}")
                             lines.append("```")
     
-    # Sample strings
     if isinstance(strings, list) and strings:
         interesting = []
         for s in strings[:50]:
@@ -4024,7 +3816,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
             for s in interesting[:8]:
                 lines.append(f"  - {s}")
     
-    # DWARF debug information (if available)
     dwarf_data = deep.get("dwarf", {}) if isinstance(deep, dict) else {}
     if isinstance(dwarf_data, dict) and dwarf_data.get("has_dwarf"):
         lines.append("\n## DWARF Debug Information")
@@ -4060,7 +3851,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
             for sf in source_files[:5]:
                 lines.append(f"  - {sf}")
 
-    # Ghidra decompilation (if available via bridge)
     ghidra_data = deep.get("ghidra", {}) if isinstance(deep, dict) else {}
     if isinstance(ghidra_data, dict) and ghidra_data.get("mode") == "bridge":
         lines.append("\n## Ghidra Decompilation")
@@ -4068,7 +3858,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
         lines.append(f"Decompiled: {ghidra_data.get('decompiled_count', 0)}")
         lines.append(f"Types: {ghidra_data.get('type_count', 0)}")
 
-        # Top decompiled functions with C code
         decompiled = ghidra_data.get("decompiled", [])
         if isinstance(decompiled, list) and decompiled:
             lines.append("\nDecompiled functions:")
@@ -4082,7 +3871,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                     if sig:
                         lines.append(f"Signature: `{sig}`")
                     if c_code:
-                        # Truncate long decompiled code
                         c_lines = c_code.strip().split('\n')[:30]
                         lines.append("```c")
                         lines.extend(c_lines)
@@ -4090,7 +3878,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                             lines.append("// ... truncated ...")
                         lines.append("```")
 
-        # Key data structures (structs)
         types = ghidra_data.get("types", [])
         if isinstance(types, list) and types:
             struct_types = [t for t in types if isinstance(t, dict) and t.get("kind") == "struct"]
@@ -4109,7 +3896,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                                 moffset = m.get("offset", 0)
                                 lines.append(f"  +{moffset}: {mtype} {mname}")
 
-        # Cross-reference summary
         xref_map = ghidra_data.get("xref_map", {})
         if isinstance(xref_map, dict) and xref_map:
             lines.append("\nCross-references (key functions):")
@@ -4128,7 +3914,6 @@ def _build_analysis_context(analysis: dict[str, Any]) -> str:
                             if callees:
                                 lines.append(f"  Calls: {', '.join(str(c) for c in callees)}")
 
-    # Issues/notes
     issues = analysis.get("issues", [])
     if issues:
         lines.append(f"\nIssues: {', '.join(str(i) for i in issues[:3])}")
@@ -4155,8 +3940,7 @@ def _format_message_for_llm(message: StoredChatMessage) -> str:
 
 
 def _extract_snippets(deep_scan: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Extract code snippets from deep scan results for session persistence."""
-    return extract_code_snippets(deep_scan)  # Limit total snippets
+    return extract_code_snippets(deep_scan)
 
 
 def _render_analysis_summary(analysis: dict[str, Any]) -> str:

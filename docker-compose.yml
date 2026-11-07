@@ -45,7 +45,6 @@ services:
     restart: unless-stopped
     volumes:
       - compile-volume:/compile
-    # Keep container running for exec-based compilation
     command: ["tail", "-f", "/dev/null"]
     user: compiler
     security_opt:

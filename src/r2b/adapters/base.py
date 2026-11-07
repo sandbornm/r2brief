@@ -1,5 +1,3 @@
-"""Adapter interfaces for analysis backends."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,11 +18,10 @@ class AnalyzerAdapter(Protocol):
 
 
 class AdapterUnavailable(RuntimeError):
-    """Raised when an adapter is invoked but unavailable."""
+    pass
 
 
 class AdapterRegistry:
-    """Maintain the list of available adapters."""
 
     def __init__(self, adapters: list[AnalyzerAdapter]):
         self._adapters = adapters

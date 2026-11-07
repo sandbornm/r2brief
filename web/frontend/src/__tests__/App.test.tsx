@@ -102,8 +102,6 @@ const setupFetch = () => {
 describe('App session loading', () => {
   beforeEach(() => {
     localStorage.clear();
-    // Analysis results are cached in sessionStorage; clear it so each test
-    // starts from a cold cache and its fetch assertions are deterministic.
     sessionStorage.clear();
     fetchMock.mockReset();
     setupFetch();
@@ -202,7 +200,6 @@ describe('App session loading', () => {
     });
     await user.click(screen.getByText('sample.elf'));
 
-    // Returning to session-1 should hit the client cache, not fetch /analysis again.
     const session1AnalysisFetches = requestUrls().filter(
       (url) => url === '/api/chats/session-1/analysis',
     ).length;

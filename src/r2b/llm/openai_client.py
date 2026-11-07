@@ -1,5 +1,3 @@
-"""OpenAI SDK client with explicit provider identity and transport selection."""
-
 from __future__ import annotations
 
 import json
@@ -26,13 +24,13 @@ from .credentials import (
 )
 from .providers import canonical_provider, resolve_transport
 
-try:  # pragma: no cover - import guard
+try:  # pragma: no cover
     from openai import OpenAI, APIError, AuthenticationError, RateLimitError
 except ModuleNotFoundError:  # pragma: no cover
     OpenAI = None  # type: ignore
     APIError = Exception  # type: ignore
     AuthenticationError = Exception  # type: ignore
-    RateLimitError = Exception  # type: ignore
+    RateLimitError = Exception
 
 _LOGGER = logging.getLogger(__name__)
 _CHAT_TEMPLATE_STOPS = ("<|endoftext|>", "<|im_start|>", "<|im_end|>")
@@ -44,7 +42,7 @@ class ChatMessage(BaseModel):
 
 
 class OpenAIError(Exception):
-    """Wrapper for OpenAI-SDK transport errors with clean messages."""
+    pass
 
 
 def _truncate_template_leak(content: str) -> str:
@@ -143,7 +141,6 @@ def _chat_tools(tools: Sequence[FunctionTool]) -> list[dict[str, Any]]:
 
 
 class OpenAIClient:
-    """One SDK, explicit provider identity, and an explicit wire transport."""
 
     def __init__(
         self,
@@ -182,8 +179,6 @@ class OpenAIClient:
             else config.llm.fallback_model
         ) or "gpt-5.6-luna"
         self._transport = resolve_transport(self._provider, config.llm.transport)
-        # A custom OpenAI-provider endpoint is assumed to be a local gateway
-        # unless the user explicitly chooses a transport.
         if (
             self._provider == "openai"
             and self._base_url
@@ -198,8 +193,6 @@ class OpenAIClient:
         return self._provider == "kimi" or self._model.lower().startswith("kimi-")
 
     def _rejects_temperature(self) -> bool:
-        # kimi-k3 pins temperature server-side (only 1.0). Sending the overlay
-        # default 0.1/0.2 is HTTP 400; omit and let the host apply the pin.
         if self._is_kimi_model():
             return True
         return self._model.lower().startswith(("o1", "o3", "o4", "gpt-5"))
@@ -386,7 +379,6 @@ class OpenAIClient:
         messages: Iterable[ChatMessage] | Iterable[dict[str, Any]],
         **kwargs: Any,
     ) -> str:
-        """Compatibility wrapper returning only response text."""
         return self.generate(messages, **kwargs).text
 
     def summarize_analysis(self, summary: dict[str, Any]) -> str:

@@ -1,5 +1,3 @@
-"""CLI harness contract: --json on stdout, --ask optional, empty ask → exit 2."""
-
 from __future__ import annotations
 
 import json

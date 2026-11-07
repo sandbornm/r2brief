@@ -1,5 +1,3 @@
-"""Progress rendering utilities."""
-
 from __future__ import annotations
 
 from contextlib import contextmanager

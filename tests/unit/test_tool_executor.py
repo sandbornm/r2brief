@@ -1,5 +1,3 @@
-"""Tests for tool executor."""
-
 from unittest.mock import MagicMock, patch
 
 from r2b.tools.executor import (
@@ -19,10 +17,8 @@ from r2b.tools.models import (
 
 
 class TestExecutionContext:
-    """Test ExecutionContext dataclass."""
 
     def test_default_timeout(self):
-        """ExecutionContext has 30000ms default timeout."""
         ctx = ExecutionContext(
             script="print('hello')",
             language=ScriptLanguage.PYTHON,
@@ -31,7 +27,6 @@ class TestExecutionContext:
         assert ctx.timeout_ms == 30000
 
     def test_all_fields(self):
-        """ExecutionContext stores all fields correctly."""
         validation = ValidationResult(valid=True)
         ctx = ExecutionContext(
             script="print('hello')",
@@ -48,17 +43,14 @@ class TestExecutionContext:
 
 
 class TestExecutionOutput:
-    """Test ExecutionOutput dataclass."""
 
     def test_default_result_is_empty_dict(self):
-        """ExecutionOutput defaults result to empty dict."""
         output = ExecutionOutput()
         assert output.result == {}
         assert output.validation is None
         assert output.execution is None
 
     def test_to_trajectory_entry(self):
-        """ExecutionOutput.to_trajectory_entry creates valid entry."""
         validation = ValidationResult(valid=True)
         execution = ExecutionResult(
             status=ExecutionStatus.SUCCESS,
@@ -90,13 +82,10 @@ class TestExecutionOutput:
 
 
 class TestToolExecutor:
-    """Test base ToolExecutor."""
 
     def test_validate_before_execute(self):
-        """Executor validates script before execution."""
         executor = ToolExecutor()
 
-        # Invalid Python script
         script = "def broken("
         result = executor.execute(
             script=script,
@@ -106,10 +95,9 @@ class TestToolExecutor:
 
         assert result.validation is not None
         assert not result.validation.valid
-        assert result.execution is None  # Not executed
+        assert result.execution is None
 
     def test_valid_script_executes(self):
-        """Valid script proceeds to execution."""
         executor = ToolExecutor()
 
         with patch.object(executor, '_do_execute') as mock_exec:
@@ -127,7 +115,6 @@ class TestToolExecutor:
             assert result.execution.status == ExecutionStatus.SUCCESS
 
     def test_exception_during_execution(self):
-        """Execution exceptions are captured with status ERROR."""
         executor = ToolExecutor()
 
         with patch.object(executor, '_do_execute') as mock_exec:
@@ -147,7 +134,6 @@ class TestToolExecutor:
             assert "Connection failed" in result.execution.stderr
 
     def test_timeout_error_handling(self):
-        """TimeoutError is captured with TIMEOUT status."""
         executor = ToolExecutor()
 
         with patch.object(executor, '_do_execute') as mock_exec:
@@ -164,7 +150,6 @@ class TestToolExecutor:
             assert "timed out" in result.execution.stderr.lower()
 
     def test_parse_output_called(self):
-        """_parse_output is called after successful execution."""
         executor = ToolExecutor()
 
         with patch.object(executor, '_do_execute') as mock_exec:
@@ -176,12 +161,10 @@ class TestToolExecutor:
                 tool=ToolName.GHIDRA,
             )
 
-            # Default _parse_output returns raw_output and raw_stderr
             assert result.result["raw_output"] == "stdout"
             assert result.result["raw_stderr"] == "stderr"
 
     def test_pre_execute_check_can_short_circuit(self):
-        """_pre_execute_check can return early before execution."""
 
         class ShortCircuitExecutor(ToolExecutor):
             def _pre_execute_check(self, validation):
@@ -207,10 +190,8 @@ class TestToolExecutor:
 
 
 class TestGhidraExecutor:
-    """Test Ghidra-specific executor."""
 
     def test_requires_connection(self):
-        """Ghidra executor requires bridge connection."""
         mock_client = MagicMock()
         mock_client.is_connected.return_value = False
 
@@ -225,7 +206,6 @@ class TestGhidraExecutor:
         assert result.execution.status == ExecutionStatus.CONNECTION_LOST
 
     def test_executes_with_connection(self):
-        """Ghidra executor runs script when connected."""
         mock_client = MagicMock()
         mock_client.is_connected.return_value = True
         mock_client.execute_script.return_value = {"output": "test", "error": None}
@@ -242,7 +222,6 @@ class TestGhidraExecutor:
         assert result.execution.stdout == "test"
 
     def test_handles_execution_error(self):
-        """Ghidra executor captures bridge errors."""
         mock_client = MagicMock()
         mock_client.is_connected.return_value = True
         mock_client.execute_script.return_value = {
@@ -262,29 +241,24 @@ class TestGhidraExecutor:
         assert "NameError" in result.execution.stderr
 
     def test_validation_still_checked_when_disconnected(self):
-        """Validation runs even if connection check fails."""
         mock_client = MagicMock()
         mock_client.is_connected.return_value = False
 
         executor = GhidraExecutor(client=mock_client)
         result = executor.execute(
-            script="def broken(",  # Invalid syntax
+            script="def broken(",
             language=ScriptLanguage.PYTHON,
             tool=ToolName.GHIDRA,
         )
 
-        # Validation still ran
         assert result.validation is not None
-        # But we get connection lost status, not validation failure
         assert result.execution is not None
         assert result.execution.status == ExecutionStatus.CONNECTION_LOST
 
 
 class TestRadare2Executor:
-    """Test radare2-specific executor."""
 
     def test_r2pipe_not_initialized(self):
-        """Returns error when r2pipe is None."""
         executor = Radare2Executor(r2pipe=None)
 
         result = executor.execute(
@@ -298,7 +272,6 @@ class TestRadare2Executor:
         assert "not initialized" in result.execution.stderr.lower()
 
     def test_executes_commands(self):
-        """Executes r2 commands via r2pipe."""
         mock_r2 = MagicMock()
         mock_r2.cmd.side_effect = ["Analysis complete", "func1\nfunc2\nfunc3"]
 
@@ -318,7 +291,6 @@ class TestRadare2Executor:
         mock_r2.cmd.assert_any_call("afl")
 
     def test_skips_empty_lines(self):
-        """Empty lines in script are skipped."""
         mock_r2 = MagicMock()
         mock_r2.cmd.return_value = "output"
 
@@ -332,11 +304,9 @@ class TestRadare2Executor:
 
         assert result.execution is not None
         assert result.execution.status == ExecutionStatus.SUCCESS
-        # Only 2 calls, not 4 (empty lines skipped)
         assert mock_r2.cmd.call_count == 2
 
     def test_r2_property_getter_setter(self):
-        """r2pipe can be set via property."""
         executor = Radare2Executor()
         assert executor.r2 is None
 
@@ -345,7 +315,6 @@ class TestRadare2Executor:
         assert executor.r2 is mock_r2
 
     def test_handles_r2pipe_exception(self):
-        """Exceptions from r2pipe are captured."""
         mock_r2 = MagicMock()
         mock_r2.cmd.side_effect = Exception("Connection closed")
 

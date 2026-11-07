@@ -1,9 +1,3 @@
-"""Checkout vs wheel path helpers.
-
-The published wheel is CLI-only. A git checkout should still `uv sync` and
-run. Config ships inside the package so `r2b setup` works without the repo.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +6,6 @@ _PKG_DIR = Path(__file__).resolve().parent
 
 
 def find_checkout_root(start: Path | None = None, *, include_cwd: bool = True) -> Path | None:
-    """Return the repo root if this is an editable checkout, else None."""
     seen: set[Path] = set()
     candidates: list[Path] = []
     here = (start or Path(__file__)).resolve()
@@ -32,7 +25,6 @@ def find_checkout_root(start: Path | None = None, *, include_cwd: bool = True) -
 
 
 def shipped_config_dir() -> Path:
-    """config/ in a checkout, or r2b/share/ baked into the wheel."""
     checkout = find_checkout_root(include_cwd=False)
     if checkout is not None:
         return checkout / "config"

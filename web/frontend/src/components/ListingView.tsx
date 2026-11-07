@@ -124,7 +124,6 @@ export default function ListingView({ binaryName, height = '100%' }: ListingView
     );
   }
 
-  // Count instructions for stats
   const instructionCount = listing.listing.filter((l) => l.type === 'instruction').length;
   const functionCount = listing.listing.filter((l) => l.type === 'function').length;
 
@@ -138,7 +137,6 @@ export default function ListingView({ binaryName, height = '100%' }: ListingView
         bgcolor: '#1a1a1a',
       }}
     >
-      {/* Stats bar */}
       <Box
         sx={{
           px: 1,
@@ -165,7 +163,6 @@ export default function ListingView({ binaryName, height = '100%' }: ListingView
         />
       </Box>
 
-      {/* Listing content */}
       <Box
         sx={{
           flex: 1,
@@ -221,24 +218,22 @@ export default function ListingView({ binaryName, height = '100%' }: ListingView
           }
 
           if (line.type === 'instruction') {
-            // Parse instruction to highlight different parts
             const instr = line.instruction || '';
             const parts = instr.split(/\s+/);
             const mnemonic = parts[0] || '';
             const operands = parts.slice(1).join(' ');
 
-            // Color based on instruction type
-            let mnemonicColor = '#569cd6'; // default blue for most instructions
+            let mnemonicColor = '#569cd6';
             if (/^b\.?/.test(mnemonic) || mnemonic === 'ret' || mnemonic === 'bl' || mnemonic === 'blr') {
-              mnemonicColor = '#c586c0'; // purple for branches
+              mnemonicColor = '#c586c0';
             } else if (/^ldr|^str|^ldp|^stp|^push|^pop/.test(mnemonic)) {
-              mnemonicColor = '#4ec9b0'; // teal for memory ops
+              mnemonicColor = '#4ec9b0';
             } else if (/^mov|^mvn|^add|^sub|^mul|^div|^and|^orr|^eor|^lsl|^lsr|^asr/.test(mnemonic)) {
-              mnemonicColor = '#9cdcfe'; // light blue for arithmetic
+              mnemonicColor = '#9cdcfe';
             } else if (/^cmp|^tst|^cmn/.test(mnemonic)) {
-              mnemonicColor = '#ce9178'; // orange for comparisons
+              mnemonicColor = '#ce9178';
             } else if (/^svc|^nop|^udf/.test(mnemonic)) {
-              mnemonicColor = '#d16969'; // red for syscalls/special
+              mnemonicColor = '#d16969';
             }
 
             return (
@@ -251,7 +246,6 @@ export default function ListingView({ binaryName, height = '100%' }: ListingView
                   '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
                 }}
               >
-                {/* Address */}
                 <Box
                   sx={{
                     width: 90,
@@ -263,7 +257,6 @@ export default function ListingView({ binaryName, height = '100%' }: ListingView
                   {line.address}
                 </Box>
 
-                {/* Bytes */}
                 <Box
                   sx={{
                     width: 100,
@@ -275,7 +268,6 @@ export default function ListingView({ binaryName, height = '100%' }: ListingView
                   {line.bytes}
                 </Box>
 
-                {/* Mnemonic */}
                 <Box
                   sx={{
                     width: 60,
@@ -287,15 +279,11 @@ export default function ListingView({ binaryName, height = '100%' }: ListingView
                   {mnemonic}
                 </Box>
 
-                {/* Operands */}
                 <Box sx={{ color: '#d4d4d4', flex: 1 }}>
                   {operands.split(',').map((op, i, arr) => {
                     const trimmed = op.trim();
-                    // Highlight registers
                     const isReg = /^[xwrsp]\d+$|^sp$|^lr$|^pc$|^fp$/i.test(trimmed);
-                    // Highlight immediates
                     const isImm = /^#/.test(trimmed) || /^0x/.test(trimmed);
-                    // Highlight memory references
                     const isMem = /^\[/.test(trimmed);
 
                     let color = '#d4d4d4';

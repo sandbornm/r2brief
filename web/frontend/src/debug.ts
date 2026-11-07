@@ -1,22 +1,11 @@
-/**
- * Debug logging system for r2b frontend
- *
- * Provides structured logging for user activity tracking and debugging.
- * Enabled by default, can be toggled via localStorage or environment variable.
- */
-
-// Check if debug mode is enabled (default: true)
 const isDebugEnabled = (): boolean => {
-  // Check localStorage override first
   const storedValue = localStorage.getItem('r2b_debug');
   if (storedValue !== null) {
     return storedValue === 'true';
   }
-  // Default to enabled
   return true;
 };
 
-// Log levels
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
@@ -27,27 +16,23 @@ interface LogEntry {
   data?: unknown;
 }
 
-// Color coding for different categories
 const categoryColors: Record<string, string> = {
-  activity: '#22c55e',    // green - user activity
-  api: '#3b82f6',         // blue - API calls
-  cfg: '#f59e0b',         // amber - CFG viewer
-  chat: '#8b5cf6',        // purple - chat interactions
-  session: '#ec4899',     // pink - session management
-  error: '#ef4444',       // red - errors
-  system: '#6b7280',      // gray - system events
+  activity: '#22c55e',
+  api: '#3b82f6',
+  cfg: '#f59e0b',
+  chat: '#8b5cf6',
+  session: '#ec4899',
+  error: '#ef4444',
+  system: '#6b7280',
 };
 
-// Log storage for debugging and export
 const logHistory: LogEntry[] = [];
 const MAX_LOG_HISTORY = 1000;
 
-// Format timestamp
 const formatTimestamp = (): string => {
   return new Date().toISOString();
 };
 
-// Core logging function
 const log = (level: LogLevel, category: string, message: string, data?: unknown): void => {
   if (!isDebugEnabled()) return;
 
@@ -59,13 +44,11 @@ const log = (level: LogLevel, category: string, message: string, data?: unknown)
     data,
   };
 
-  // Store in history
   logHistory.push(entry);
   if (logHistory.length > MAX_LOG_HISTORY) {
     logHistory.shift();
   }
 
-  // Console output with styling
   const color = categoryColors[category] || '#6b7280';
   const levelEmoji = {
     debug: '🔍',
@@ -87,9 +70,7 @@ const log = (level: LogLevel, category: string, message: string, data?: unknown)
   }
 };
 
-// Public API
 export const debug = {
-  // Enable/disable debug mode
   enable: () => {
     localStorage.setItem('r2b_debug', 'true');
     console.log('%c[r2b] Debug mode ENABLED', 'color: #22c55e; font-weight: bold;');
@@ -102,7 +83,6 @@ export const debug = {
 
   isEnabled: isDebugEnabled,
 
-  // Activity logging (user interactions)
   activity: {
     tabSwitch: (from: string, to: string) => {
       log('info', 'activity', `Tab switch: ${from} → ${to}`, { from, to });
@@ -124,7 +104,6 @@ export const debug = {
     },
   },
 
-  // API call logging
   api: {
     request: (method: string, url: string, body?: unknown) => {
       log('info', 'api', `${method} ${url}`, { method, url, body });
@@ -138,7 +117,6 @@ export const debug = {
     },
   },
 
-  // CFG viewer logging
   cfg: {
     functionSelect: (functionName: string, offset: string) => {
       log('info', 'cfg', `Selected function: ${functionName}`, { functionName, offset });
@@ -166,7 +144,6 @@ export const debug = {
     },
   },
 
-  // Chat logging
   chat: {
     send: (sessionId: string, messagePreview: string) => {
       log('info', 'chat', `Sending message to ${sessionId}`, { sessionId, preview: messagePreview.slice(0, 100) });
@@ -179,7 +156,6 @@ export const debug = {
     },
   },
 
-  // Session management logging
   session: {
     create: (sessionId: string, binaryPath: string) => {
       log('info', 'session', `Created session: ${sessionId}`, { sessionId, binaryPath });
@@ -195,7 +171,6 @@ export const debug = {
     },
   },
 
-  // System logging
   system: {
     init: () => {
       log('info', 'system', 'r2b frontend initialized');
@@ -211,15 +186,12 @@ export const debug = {
     },
   },
 
-  // Direct logging methods
   log: (message: string, data?: unknown) => log('info', 'system', message, data),
   warn: (message: string, data?: unknown) => log('warn', 'system', message, data),
   error: (message: string, data?: unknown) => log('error', 'error', message, data),
 
-  // Export log history
   getHistory: () => [...logHistory],
 
-  // Export to JSON
   exportLogs: () => {
     const json = JSON.stringify(logHistory, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
@@ -232,7 +204,6 @@ export const debug = {
     log('info', 'system', 'Logs exported');
   },
 
-  // Clear log history
   clear: () => {
     logHistory.length = 0;
     console.clear();
@@ -240,7 +211,6 @@ export const debug = {
   },
 };
 
-// Expose to window for console access
 if (typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).r2bDebug = debug;
 }

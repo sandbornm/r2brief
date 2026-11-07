@@ -1,8 +1,5 @@
 # syntax=docker/dockerfile:1.6
 
-################################################################################
-# Frontend build stage
-################################################################################
 FROM node:20-bullseye-slim AS frontend-builder
 WORKDIR /frontend
 
@@ -11,9 +8,6 @@ RUN npm ci
 COPY web/frontend/ .
 RUN npm run build
 
-################################################################################
-# Backend stage with ARM cross-compilers
-################################################################################
 FROM python:3.11-slim AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -32,7 +26,6 @@ RUN apt-get update && \
         curl \
         bubblewrap \
         squashfs-tools \
-        # ARM cross-compilation toolchains
         gcc-arm-linux-gnueabihf \
         libc6-dev-armhf-cross \
         gcc-aarch64-linux-gnu \
@@ -54,7 +47,6 @@ COPY ghidra ./ghidra
 COPY web ./web
 COPY --from=frontend-builder /frontend/dist ./web/frontend/dist
 
-# Create compile output directory
 RUN mkdir -p /app/artifacts/compiled && chmod 777 /app/artifacts/compiled
 
 EXPOSE 5050

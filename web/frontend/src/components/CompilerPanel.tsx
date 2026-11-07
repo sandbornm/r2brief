@@ -40,7 +40,6 @@ import type {
 
 const API_BASE = '';
 
-// Freestanding examples that work without libc
 const HELLO_EXAMPLE = `// ARM64 Hello World - Freestanding (no libc)
 // Uses direct syscalls to write and exit
 
@@ -184,7 +183,6 @@ interface CompilerPanelProps {
   analysis?: AnalysisResultPayload | null;
 }
 
-// Tooltip descriptions for each option
 const TOOLTIPS = {
   architecture: {
     arm32: 'ARM 32-bit (armhf) - Common in embedded systems, Raspberry Pi 1/Zero, older Android',
@@ -271,7 +269,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
     }
   }, []);
 
-  // Fetch available compilers on mount; the backend may refresh this in the background.
   useEffect(() => {
     fetchCompilers().catch(console.error);
   }, [fetchCompilers]);
@@ -284,7 +281,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
     return () => window.clearTimeout(timer);
   }, [compilerSnapshot?.state, compilerSnapshot?.meta?.probing, fetchCompilers]);
 
-  // Fetch command preview when options change
   useEffect(() => {
     const fetchPreview = async () => {
       try {
@@ -329,7 +325,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
       const data: CompileResult = await response.json();
       setResult(data);
       
-      // Auto-show asm panel if success
       if (data.success && data.assembly) {
         setActivePanels((prev) => prev.includes('asm') ? prev : [...prev, 'asm']);
       }
@@ -415,7 +410,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
     </Tooltip>
   ), []);
 
-  // Docker status chip
   const dockerStatusChip = useMemo(() => {
     if (isDockerCompiler || (architecture.startsWith('arm') && !currentCompiler)) {
       if (!dockerAvailable) {
@@ -432,7 +426,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
     return <Chip size="small" label="No compiler" color="warning" variant="outlined" />;
   }, [architecture, currentCompiler, dockerAvailable, dockerImageExists, isDockerCompiler]);
 
-  // Toggle panel visibility
   const handlePanelToggle = useCallback((id: string) => {
     setActivePanels((prev) =>
       prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
@@ -443,7 +436,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
     setActivePanels((prev) => prev.filter((p) => p !== id));
   }, []);
 
-  // Panel configurations
   const panelConfigs: PanelConfig[] = useMemo(() => [
     {
       id: 'source',
@@ -486,7 +478,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
     },
   ], [code, result?.assembly, result?.output_name]);
 
-  // Panel selector items
   const panelItems = useMemo(() => [
     { id: 'source', title: 'Source', icon: <CodeIcon sx={{ fontSize: 14 }} /> },
     { id: 'asm', title: 'Assembly', icon: <MemoryIcon sx={{ fontSize: 14 }} /> },
@@ -495,7 +486,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Toolbar Row 1: Settings */}
       <Paper variant="outlined" sx={{ p: 1, mb: 1, flexShrink: 0 }}>
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
           <Tooltip
@@ -579,7 +569,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
 
           <Box sx={{ flexGrow: 1 }} />
 
-          {/* Example buttons */}
           <Stack direction="row" spacing={0.5}>
             <Tooltip describeChild title="Hello World using ARM syscalls - great starting point">
               <Chip label="Hello" size="small" onClick={() => loadExample('hello')} clickable />
@@ -619,13 +608,10 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
         </Alert>
       )}
 
-      {/* Toolbar Row 2: Panel selector + Actions */}
       <Paper variant="outlined" sx={{ p: 1, mb: 1, flexShrink: 0 }}>
         <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
-          {/* Panel toggles */}
           <PanelSelector panels={panelItems} activePanels={activePanels} onToggle={handlePanelToggle} />
 
-          {/* Compile button + status */}
           <Stack direction="row" spacing={1} alignItems="center">
             {result && (
               <Chip 
@@ -636,7 +622,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
               />
             )}
 
-            {/* Download buttons */}
             {result?.success && result.output_name && (
               <Tooltip describeChild title="Download compiled ELF binary">
                 <Button
@@ -730,7 +715,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
         </Stack>
       </Paper>
 
-      {/* Compiler output message (if error) */}
       {result && !result.success && (
         <Alert 
           severity="error" 
@@ -747,7 +731,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
         </Alert>
       )}
 
-      {/* Main content: Resizable panels */}
       <Box sx={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
         <PanelLayout
           panels={panelConfigs}
@@ -757,7 +740,6 @@ export default function CompilerPanel({ onBinaryCompiled, onAnalyzeAndChat, anal
         />
       </Box>
 
-      {/* Docker setup instructions */}
       {(!dockerAvailable || !dockerImageExists) && architecture.startsWith('arm') && !result && (
         <Alert severity="info" sx={{ mt: 1.5, flexShrink: 0 }}>
           <Typography variant="body2" fontWeight={500}>

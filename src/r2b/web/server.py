@@ -1,5 +1,3 @@
-"""WSGI/CLI helpers to run the r2b web app."""
-
 from __future__ import annotations
 
 import os
@@ -10,7 +8,6 @@ _WEB_EXTRA_HINT = "r2b-web needs extra 'web'. Install with: uv sync --extra web"
 
 
 def run(config_path: Optional[str] = None) -> None:
-    """Start the development web server."""
 
     try:
         from werkzeug.serving import run_simple

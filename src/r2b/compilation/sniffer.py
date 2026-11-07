@@ -1,5 +1,3 @@
-"""Lightweight compiler capability probing for the web UI."""
-
 from __future__ import annotations
 
 import shutil
@@ -36,12 +34,11 @@ ARCH_CANDIDATES: dict[str, list[str]] = {
 
 
 def sniff_compiler_capabilities() -> dict[str, Any]:
-    """Return a no-compile snapshot of compiler and helper availability."""
 
     errors: list[str] = []
     try:
         compilers = detect_compilers()
-    except Exception as exc:  # pragma: no cover - defensive UI fallback
+    except Exception as exc:  # pragma: no cover
         compilers = {"arm32": [], "arm64": [], "x86": [], "x86_64": []}
         errors.append(str(exc))
 
@@ -110,12 +107,11 @@ def preview_compile_with_capabilities(
     freestanding: bool = False,
     output_name: str = "output",
 ) -> dict[str, Any]:
-    """Preserve the existing command preview while adding support diagnostics."""
 
     try:
         preview = dict(
             get_compile_command_preview(
-                architecture=architecture,  # type: ignore[arg-type]
+                architecture=architecture,
                 optimization=optimization,
                 freestanding=freestanding,
                 output_name=output_name or "output",

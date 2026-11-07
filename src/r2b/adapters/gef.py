@@ -1,9 +1,3 @@
-"""GEF/GDB dynamic analysis adapter.
-
-This adapter runs ARM binaries in an isolated Docker container with GDB/GEF
-for dynamic analysis and execution tracing.
-"""
-
 from __future__ import annotations
 
 import json
@@ -26,7 +20,6 @@ DEFAULT_MAX_INSTRUCTIONS = 10000
 
 @dataclass
 class RegisterSnapshot:
-    """Snapshot of CPU registers at a point in execution."""
 
     pc: int
     sp: int
@@ -42,7 +35,6 @@ class RegisterSnapshot:
 
 @dataclass
 class MemoryRegion:
-    """Memory region information."""
 
     start: str
     end: str
@@ -64,7 +56,6 @@ class MemoryRegion:
 
 @dataclass
 class ExecutionTrace:
-    """Results of dynamic execution analysis."""
 
     entry_point: str | None = None
     register_snapshots: list[RegisterSnapshot] = field(default_factory=list)
@@ -86,14 +77,6 @@ class ExecutionTrace:
 
 @dataclass(slots=True)
 class GEFAdapter:
-    """Dynamic analysis adapter using GDB/GEF in Docker container.
-
-    This adapter provides sandboxed execution of ARM binaries with:
-    - Network isolation (--network=none)
-    - Read-only root filesystem (--read-only)
-    - Resource limits (memory, CPU)
-    - No privilege escalation (--security-opt=no-new-privileges)
-    """
 
     name: str = "gef"
     image: str = DEFAULT_IMAGE
@@ -103,14 +86,11 @@ class GEFAdapter:
     cpu_limit: float = 1.0
 
     def is_available(self) -> bool:
-        """Check if Docker is available and the GEF image exists."""
-        # Check for Docker
         docker = shutil.which("docker")
         if not docker:
             _LOGGER.debug("Docker not found in PATH")
             return False
 
-        # Check if image exists
         try:
             result = subprocess.run(
                 ["docker", "image", "inspect", self.image],
@@ -129,7 +109,6 @@ class GEFAdapter:
             return False
 
     def quick_scan(self, binary: Path, **kwargs: Any) -> dict[str, Any]:
-        """Quick scan - returns availability status and config info."""
         return {
             "mode": "gef",
             "available": self.is_available(),
@@ -145,16 +124,6 @@ class GEFAdapter:
         max_instructions: int | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Perform dynamic analysis using GDB/GEF in Docker container.
-
-        Args:
-            binary: Path to the binary to analyze.
-            resource_tree: Optional resource tree for context.
-            max_instructions: Override max instruction count.
-
-        Returns:
-            Analysis results with execution trace data.
-        """
         if not self.is_available():
             raise AdapterUnavailable(
                 f"GEF adapter unavailable - ensure Docker is installed and "
@@ -167,7 +136,6 @@ class GEFAdapter:
 
         max_instr = max_instructions or self.max_instructions
 
-        # Create temporary output directory
         with tempfile.TemporaryDirectory() as output_dir:
             try:
                 result = self._run_container(binary, output_dir, max_instr)
@@ -186,21 +154,19 @@ class GEFAdapter:
         output_dir: str,
         max_instructions: int,
     ) -> dict[str, Any]:
-        """Run the GEF analysis container."""
         _LOGGER.info("Starting GEF dynamic analysis: %s", binary)
 
-        # Build Docker command with security constraints
         cmd = [
             "docker", "run",
-            "--rm",  # Remove container after execution
-            "--network=none",  # No network access
-            "--read-only",  # Read-only root filesystem
-            f"--memory={self.memory_limit}",  # Memory limit
-            f"--cpus={self.cpu_limit}",  # CPU limit
-            "--security-opt=no-new-privileges",  # Prevent privilege escalation
-            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",  # Writable tmp
-            "-v", f"{binary}:/binary:ro",  # Mount binary read-only
-            "-v", f"{output_dir}:/output:rw",  # Mount output directory
+            "--rm",
+            "--network=none",
+            "--read-only",
+            f"--memory={self.memory_limit}",
+            f"--cpus={self.cpu_limit}",
+            "--security-opt=no-new-privileges",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+            "-v", f"{binary}:/binary:ro",
+            "-v", f"{output_dir}:/output:rw",
             self.image,
             "/binary",
             "--output=/output",
@@ -217,13 +183,11 @@ class GEFAdapter:
                 timeout=self.timeout,
             )
 
-            # Read output file
             output_file = Path(output_dir) / "output.json"
             if output_file.exists():
                 with open(output_file) as f:
                     data = json.load(f)
 
-                # Parse into structured data
                 trace = self._parse_trace(data)
 
                 return {
@@ -254,7 +218,6 @@ class GEFAdapter:
             }
 
     def _parse_trace(self, data: dict[str, Any]) -> ExecutionTrace:
-        """Parse raw output into ExecutionTrace."""
         trace = ExecutionTrace(
             entry_point=data.get("entry_point"),
             instruction_count=data.get("instruction_count", 0),
@@ -262,7 +225,6 @@ class GEFAdapter:
             error=data.get("error"),
         )
 
-        # Parse register snapshots
         for snap in data.get("register_snapshots", []):
             if isinstance(snap, dict):
                 trace.register_snapshots.append(
@@ -273,7 +235,6 @@ class GEFAdapter:
                     )
                 )
 
-        # Parse memory maps
         for region in data.get("memory_maps", []):
             if isinstance(region, dict):
                 trace.memory_maps.append(
@@ -290,17 +251,7 @@ class GEFAdapter:
         return trace
 
     def build_image(self, dockerfile_path: Path | None = None) -> bool:
-        """Build the GEF Docker image.
-
-        Args:
-            dockerfile_path: Path to Dockerfile.gef. If not provided,
-                            looks in the project root.
-
-        Returns:
-            True if build succeeded, False otherwise.
-        """
         if dockerfile_path is None:
-            # Try to find Dockerfile.gef in common locations
             candidates = [
                 Path("Dockerfile.gef"),
                 Path(__file__).parent.parent.parent.parent / "Dockerfile.gef",
@@ -326,7 +277,7 @@ class GEFAdapter:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=600,  # 10 minute timeout for build
+                timeout=600,
             )
 
             if result.returncode == 0:

@@ -1,10 +1,3 @@
-/**
- * TrajectoryPanel - A collapsible panel showing the user's analysis journey.
- *
- * Helps users orient themselves by showing what they've explored and done
- * during their current analysis session.
- */
-
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExploreIcon from '@mui/icons-material/Explore';
@@ -35,18 +28,16 @@ interface TrajectoryPanelProps {
   compact?: boolean;
 }
 
-// Map depth levels to progress values
 const DEPTH_PROGRESS: Record<string, number> = {
   overview: 20,
   investigating: 55,
   deep_dive: 90,
 };
 
-// Map depth levels to colors
 const DEPTH_COLORS: Record<string, string> = {
-  overview: '#64B5F6', // Light blue
-  investigating: '#FFB74D', // Orange
-  deep_dive: '#81C784', // Green
+  overview: '#64B5F6',
+  investigating: '#FFB74D',
+  deep_dive: '#81C784',
 };
 
 const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = false }) => {
@@ -61,7 +52,6 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
   const depthProgress = DEPTH_PROGRESS[snapshot.depth_level] || 20;
   const depthColor = DEPTH_COLORS[snapshot.depth_level] || theme.palette.primary.main;
 
-  // Format duration
   const formatDuration = (seconds: number): string => {
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
@@ -70,7 +60,6 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
     return `${hours}h ${mins}m`;
   };
 
-  // Get icon for action type
   const getActionIcon = (action: string) => {
     if (action.includes('viewed') || action.includes('browsed')) {
       return <ExploreIcon sx={{ fontSize: 12 }} />;
@@ -87,7 +76,6 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
     return <TimelineIcon sx={{ fontSize: 12 }} />;
   };
 
-  // Compact header (always visible)
   const Header = (
     <Box
       onClick={() => setExpanded(!expanded)}
@@ -143,11 +131,9 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
     </Box>
   );
 
-  // Expanded content
   const ExpandedContent = (
     <Collapse in={expanded}>
       <Box sx={{ px: compact ? 0.75 : 1, pb: compact ? 0.75 : 1 }}>
-        {/* Depth Progress */}
         <Box sx={{ mb: 1.5 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
             <Typography variant="caption" color="text.secondary">
@@ -183,7 +169,6 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
           </Stack>
         </Box>
 
-        {/* Current State */}
         <Paper
           variant="outlined"
           sx={{
@@ -228,7 +213,6 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
           </Stack>
         </Paper>
 
-        {/* Recent Actions Timeline */}
         {snapshot.recent_actions.length > 0 && (
           <Box sx={{ mb: 1.5 }}>
             <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
@@ -266,7 +250,6 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
           </Box>
         )}
 
-        {/* Functions Explored */}
         {snapshot.functions_explored.length > 0 && (
           <Box sx={{ mb: 1.5 }}>
             <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
@@ -292,7 +275,6 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
           </Box>
         )}
 
-        {/* Questions Asked */}
         {snapshot.questions.length > 0 && (
           <Box>
             <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
@@ -318,7 +300,6 @@ const TrajectoryPanel: FC<TrajectoryPanelProps> = memo(({ snapshot, compact = fa
           </Box>
         )}
 
-        {/* Session Stats */}
         <Box
           sx={{
             mt: 1.5,

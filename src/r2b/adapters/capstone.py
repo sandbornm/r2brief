@@ -1,5 +1,3 @@
-"""Capstone disassembly adapter."""
-
 from __future__ import annotations
 
 import logging
@@ -20,7 +18,7 @@ class CapstoneAdapter:
 
     def is_available(self) -> bool:
         try:
-            import capstone  # type: ignore[import-untyped]  # noqa: F401
+            import capstone  # noqa: F401
         except ModuleNotFoundError:
             return False
         return True
@@ -28,9 +26,9 @@ class CapstoneAdapter:
     def _capstone(self) -> types.ModuleType:
         try:
             import capstone
-        except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        except ModuleNotFoundError as exc:  # pragma: no cover
             raise AdapterUnavailable("capstone module is not installed") from exc
-        return capstone  # type: ignore[no-any-return]
+        return capstone
 
     def quick_scan(
         self,

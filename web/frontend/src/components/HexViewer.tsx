@@ -8,12 +8,10 @@ interface HexViewerProps {
   height?: string;
 }
 
-// Convert a byte to printable ASCII or '.'
 function toPrintableChar(byte: number): string {
   return byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : '.';
 }
 
-// Format a number as a hex string with padding
 function toHex(n: number, pad: number): string {
   return n.toString(16).padStart(pad, '0');
 }
@@ -35,7 +33,6 @@ export default function HexViewer({
       const hex = rowBytes.map((b) => toHex(b, 2));
       const ascii = rowBytes.map(toPrintableChar).join('');
 
-      // Pad hex array if row is incomplete
       while (hex.length < bytesPerRow) {
         hex.push('  ');
       }
@@ -78,7 +75,6 @@ export default function HexViewer({
         p: 1,
       }}
     >
-      {/* Header */}
       <Box
         sx={{
           display: 'flex',
@@ -104,7 +100,6 @@ export default function HexViewer({
         <Box sx={{ width: bytesPerRow * 8 + 16, textAlign: 'center' }}>ASCII</Box>
       </Box>
 
-      {/* Data rows */}
       {rows.map((row, idx) => (
         <Box
           key={idx}
@@ -113,12 +108,10 @@ export default function HexViewer({
             '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
           }}
         >
-          {/* Address */}
           <Box sx={{ width: 80, flexShrink: 0, color: '#6a9955' }}>
             {toHex(row.address, 8)}
           </Box>
 
-          {/* Hex bytes */}
           <Box sx={{ flex: 1 }}>
             {row.hex.map((byte, i) => {
               const value = parseInt(byte, 16);
@@ -148,7 +141,6 @@ export default function HexViewer({
             })}
           </Box>
 
-          {/* ASCII */}
           <Box
             sx={{
               width: bytesPerRow * 8 + 16,
@@ -172,7 +164,6 @@ export default function HexViewer({
         </Box>
       ))}
 
-      {/* Footer with stats */}
       <Box
         sx={{
           mt: 1,

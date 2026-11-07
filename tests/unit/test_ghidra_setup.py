@@ -1,5 +1,3 @@
-"""Unit tests for Ghidra setup helpers."""
-
 from __future__ import annotations
 
 import io
@@ -107,7 +105,7 @@ def test_resolve_ghidra_release_url_from_mocked_metadata(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    def fake_urlopen(request, timeout):  # noqa: ANN001
+    def fake_urlopen(request, timeout):
         assert "Ghidra_11.4.2_build" in request.full_url
         assert timeout == 15
         return FakeResponse()

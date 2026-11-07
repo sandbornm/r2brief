@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CompilerPanel from '../components/CompilerPanel';
 
-// Mock fetch for API calls
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
@@ -10,7 +9,6 @@ describe('CompilerPanel', () => {
   beforeEach(() => {
     mockFetch.mockReset();
 
-    // Mock compilers endpoint
     mockFetch.mockImplementation((url: string) => {
       if (url.includes('/api/compilers') && !url.includes('/preview') && !url.includes('/download')) {
         return Promise.resolve({
@@ -92,7 +90,6 @@ describe('CompilerPanel', () => {
 
     await user.click(screen.getByText('Hello'));
 
-    // The code editor should contain the hello example (check for characteristic content)
     await waitFor(() => {
       expect(screen.getByText(/hello from arm64/i)).toBeInTheDocument();
     });
@@ -104,15 +101,12 @@ describe('CompilerPanel', () => {
 
     render(<CompilerPanel onBinaryCompiled={handleBinaryCompiled} />);
 
-    // Wait for initial API calls
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    // Click compile
     await user.click(screen.getByRole('button', { name: /compile/i }));
 
-    // Wait for compile to complete
     await waitFor(() => {
       expect(screen.getByText('Success')).toBeInTheDocument();
     });
@@ -123,7 +117,6 @@ describe('CompilerPanel', () => {
   it('shows error on compile failure', async () => {
     const user = userEvent.setup();
 
-    // Override mock for compile to return failure
     mockFetch.mockImplementation((url: string) => {
       if (url.includes('/api/compilers') && !url.includes('/preview')) {
         return Promise.resolve({
@@ -189,7 +182,6 @@ describe('CompilerPanel', () => {
       expect(screen.getByText('Success')).toBeInTheDocument();
     });
 
-    // Should have download buttons for ELF and assembly
     expect(screen.getByRole('button', { name: /elf/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /\.s/i })).toBeInTheDocument();
   });
@@ -219,7 +211,6 @@ describe('CompilerPanel', () => {
   it('disables compile button while compiling', async () => {
     const user = userEvent.setup();
 
-    // Make compile take longer
     mockFetch.mockImplementation((url: string) => {
       if (url.includes('/api/compilers') && !url.includes('/preview')) {
         return Promise.resolve({
@@ -239,7 +230,6 @@ describe('CompilerPanel', () => {
         });
       }
       if (url.includes('/api/compile')) {
-        // Stay pending so the button remains in the Compiling state.
         return new Promise(() => undefined);
       }
       return Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
@@ -254,7 +244,6 @@ describe('CompilerPanel', () => {
     const compileButton = screen.getByRole('button', { name: /compile/i });
     await user.click(compileButton);
 
-    // Button should show "Compiling..." while in progress
     expect(screen.getByRole('button', { name: /compiling/i })).toBeDisabled();
   });
 });

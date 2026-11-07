@@ -1,9 +1,3 @@
-"""Auto-profiling adapter for quick binary characterization.
-
-Runs file, strings, readelf, checksec, and binwalk to profile a binary.
-Identifies security features, interesting patterns, and risk indicators.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -16,12 +10,11 @@ from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
-# Pattern categories for string analysis
 NETWORK_PATTERNS = [
     r"socket", r"connect", r"listen", r"bind", r"accept",
     r"send", r"recv", r"http", r"https", r"ftp", r"ssh",
-    r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",  # IP addresses
-    r"://",  # URLs
+    r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",
+    r"://",
 ]
 
 CRYPTO_PATTERNS = [
@@ -49,11 +42,10 @@ SUSPICIOUS_PATTERNS = [
 
 @dataclass
 class SecurityFeatures:
-    """Security features detected via checksec or readelf."""
-    relro: str = "unknown"  # no, partial, full
+    relro: str = "unknown"
     stack_canary: bool | None = None
-    nx: bool | None = None  # No Execute
-    pie: bool | None = None  # Position Independent Executable
+    nx: bool | None = None
+    pie: bool | None = None
     fortify: bool | None = None
     rpath: bool | None = None
     runpath: bool | None = None
@@ -72,8 +64,6 @@ class SecurityFeatures:
 
 @dataclass
 class BinaryProfile:
-    """Complete profile of a binary."""
-    # Basic info
     file_type: str = ""
     architecture: str = ""
     bits: int | None = None
@@ -81,10 +71,8 @@ class BinaryProfile:
     is_stripped: bool | None = None
     has_debug_info: bool | None = None
 
-    # Security
     security: SecurityFeatures = field(default_factory=SecurityFeatures)
 
-    # Strings analysis
     total_strings: int = 0
     network_strings: list[str] = field(default_factory=list)
     crypto_strings: list[str] = field(default_factory=list)
@@ -92,13 +80,11 @@ class BinaryProfile:
     dangerous_functions: list[str] = field(default_factory=list)
     suspicious_strings: list[str] = field(default_factory=list)
 
-    # Binwalk findings
     embedded_files: list[dict[str, Any]] = field(default_factory=list)
     has_compressed_data: bool = False
     has_encrypted_data: bool = False
 
-    # Risk indicators
-    risk_level: str = "low"  # low, medium, high
+    risk_level: str = "low"
     risk_factors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -111,7 +97,7 @@ class BinaryProfile:
             "has_debug_info": self.has_debug_info,
             "security": self.security.to_dict(),
             "total_strings": self.total_strings,
-            "network_strings": self.network_strings[:20],  # Limit for API
+            "network_strings": self.network_strings[:20],
             "crypto_strings": self.crypto_strings[:20],
             "file_io_strings": self.file_io_strings[:20],
             "dangerous_functions": self.dangerous_functions[:20],
@@ -126,30 +112,25 @@ class BinaryProfile:
 
 @dataclass(slots=True)
 class AutoProfileAdapter:
-    """Quick binary profiling using standard Unix tools."""
 
     name: str = "autoprofile"
     timeout: int = 30
 
     def is_available(self) -> bool:
-        """Check if at least 'file' command is available."""
         return shutil.which("file") is not None
 
     def quick_scan(self, binary: Path, **kwargs: Any) -> dict[str, Any]:
-        """Run quick profiling tools and return results."""
         if not binary.exists():
             return {"error": f"Binary not found: {binary}"}
 
         profile = BinaryProfile()
 
-        # Run tools in parallel-ish manner
         self._run_file(binary, profile)
         self._run_strings(binary, profile)
         self._run_readelf(binary, profile)
         self._run_checksec(binary, profile)
         self._run_binwalk(binary, profile)
 
-        # Calculate risk level
         self._calculate_risk(profile)
 
         return {
@@ -160,11 +141,9 @@ class AutoProfileAdapter:
     def deep_scan(
         self, binary: Path, *, resource_tree: Any | None = None, **kwargs: Any
     ) -> dict[str, Any]:
-        """Deep scan is same as quick scan for autoprofile."""
         return self.quick_scan(binary, **kwargs)
 
     def _run_cmd(self, cmd: list[str], timeout: int | None = None) -> tuple[str, str, int]:
-        """Run a command and return (stdout, stderr, returncode)."""
         timeout = timeout or self.timeout
         try:
             result = subprocess.run(
@@ -184,12 +163,10 @@ class AutoProfileAdapter:
             return "", str(e), -1
 
     def _run_file(self, binary: Path, profile: BinaryProfile) -> None:
-        """Run 'file' command to identify binary type."""
         stdout, stderr, rc = self._run_cmd(["file", "-b", str(binary)])
         if rc == 0 and stdout:
             profile.file_type = stdout.strip()
 
-            # Parse architecture from file output
             lower = stdout.lower()
             if "arm" in lower or "aarch64" in lower:
                 profile.architecture = "arm64" if "aarch64" in lower or "64-bit" in lower else "arm32"
@@ -200,24 +177,20 @@ class AutoProfileAdapter:
             elif "mips" in lower:
                 profile.architecture = "mips64" if "64-bit" in lower else "mips32"
 
-            # Parse bits
             if "64-bit" in lower:
                 profile.bits = 64
             elif "32-bit" in lower:
                 profile.bits = 32
 
-            # Parse endianness
             if "lsb" in lower or "little" in lower:
                 profile.endian = "little"
             elif "msb" in lower or "big" in lower:
                 profile.endian = "big"
 
-            # Check if stripped
             profile.is_stripped = "stripped" in lower and "not stripped" not in lower
             profile.has_debug_info = "with debug" in lower or "not stripped" in lower
 
     def _run_strings(self, binary: Path, profile: BinaryProfile) -> None:
-        """Run 'strings' command and categorize findings."""
         stdout, stderr, rc = self._run_cmd(["strings", "-n", "4", str(binary)])
         if rc != 0:
             return
@@ -225,11 +198,9 @@ class AutoProfileAdapter:
         all_strings = stdout.splitlines()
         profile.total_strings = len(all_strings)
 
-        # Categorize strings
         for s in all_strings:
             s_lower = s.lower()
 
-            # Check each category
             for pattern in NETWORK_PATTERNS:
                 if re.search(pattern, s_lower):
                     if s not in profile.network_strings:
@@ -261,55 +232,44 @@ class AutoProfileAdapter:
                     break
 
     def _run_readelf(self, binary: Path, profile: BinaryProfile) -> None:
-        """Run readelf to check for security features and debug info."""
         if not shutil.which("readelf"):
             return
 
-        # Check for debug sections
         stdout, stderr, rc = self._run_cmd(["readelf", "-S", str(binary)])
         if rc == 0:
             if ".debug_info" in stdout or ".debug_line" in stdout:
                 profile.has_debug_info = True
 
-        # Check dynamic section for security features
         stdout, stderr, rc = self._run_cmd(["readelf", "-d", str(binary)])
         if rc == 0:
             lower = stdout.lower()
 
-            # RELRO check
             if "bind_now" in lower:
                 profile.security.relro = "full"
             elif "relro" in stdout.lower():
-                # Check for RELRO in program headers
                 stdout_ph, _, _ = self._run_cmd(["readelf", "-l", str(binary)])
                 if "gnu_relro" in stdout_ph.lower():
                     profile.security.relro = "partial"
 
-            # RPATH/RUNPATH check
             profile.security.rpath = "rpath" in lower
             profile.security.runpath = "runpath" in lower
 
-        # Check for FORTIFY
         stdout, stderr, rc = self._run_cmd(["readelf", "-s", str(binary)])
         if rc == 0:
             profile.security.fortify = "_chk@" in stdout
 
     def _run_checksec(self, binary: Path, profile: BinaryProfile) -> None:
-        """Run checksec if available to get security features."""
         checksec = shutil.which("checksec") or shutil.which("checksec.sh")
         if not checksec:
-            # Try to infer from readelf output we already have
             return
 
         stdout, stderr, rc = self._run_cmd([checksec, "--file", str(binary)])
         if rc != 0:
-            # Try alternative checksec syntax
             stdout, stderr, rc = self._run_cmd([checksec, str(binary)])
 
         if rc == 0 and stdout:
             lower = stdout.lower()
 
-            # Parse checksec output
             if "full relro" in lower:
                 profile.security.relro = "full"
             elif "partial relro" in lower:
@@ -323,7 +283,6 @@ class AutoProfileAdapter:
             profile.security.fortify = "fortify" in lower and "no fortify" not in lower
 
     def _run_binwalk(self, binary: Path, profile: BinaryProfile) -> None:
-        """Run binwalk to detect embedded files and data."""
         if not shutil.which("binwalk"):
             return
 
@@ -332,11 +291,10 @@ class AutoProfileAdapter:
             return
 
         lines = stdout.strip().splitlines()
-        for line in lines[3:]:  # Skip header
+        for line in lines[3:]:
             if not line.strip():
                 continue
 
-            # Parse binwalk output: DECIMAL HEXADECIMAL DESCRIPTION
             parts = line.split(None, 2)
             if len(parts) >= 3:
                 try:
@@ -357,11 +315,9 @@ class AutoProfileAdapter:
                     continue
 
     def _calculate_risk(self, profile: BinaryProfile) -> None:
-        """Calculate risk level based on findings."""
         risk_score = 0
         factors = []
 
-        # Security feature checks
         if profile.security.relro == "none":
             risk_score += 1
             factors.append("No RELRO protection")
@@ -375,7 +331,6 @@ class AutoProfileAdapter:
             risk_score += 1
             factors.append("Not position independent")
 
-        # Dangerous functions
         if len(profile.dangerous_functions) > 5:
             risk_score += 2
             factors.append(f"{len(profile.dangerous_functions)} potentially dangerous functions")
@@ -383,17 +338,14 @@ class AutoProfileAdapter:
             risk_score += 1
             factors.append(f"{len(profile.dangerous_functions)} potentially dangerous function(s)")
 
-        # Suspicious strings
         if len(profile.suspicious_strings) > 0:
             risk_score += 2
             factors.append(f"{len(profile.suspicious_strings)} suspicious string(s) found")
 
-        # Network activity indicators
         if len(profile.network_strings) > 10:
             risk_score += 1
             factors.append("Significant network-related strings")
 
-        # RPATH/RUNPATH (can be hijacked)
         if profile.security.rpath:
             risk_score += 1
             factors.append("RPATH set (potential DLL hijacking)")
@@ -401,12 +353,10 @@ class AutoProfileAdapter:
             risk_score += 1
             factors.append("RUNPATH set (potential DLL hijacking)")
 
-        # Encrypted/compressed content
         if profile.has_encrypted_data:
             risk_score += 1
             factors.append("Contains encrypted data sections")
 
-        # Determine risk level
         if risk_score >= 5:
             profile.risk_level = "high"
         elif risk_score >= 2:

@@ -1,5 +1,3 @@
-"""Logging helpers for r2b."""
-
 from __future__ import annotations
 
 import logging
@@ -15,7 +13,6 @@ _LEVEL_BY_VERBOSITY: dict[Verbosity, int] = {
 
 
 def configure_logging(verbosity: Verbosity = "normal") -> None:
-    """Configure root logging for the CLI session."""
 
     level = _LEVEL_BY_VERBOSITY.get(verbosity, logging.INFO)
     logging.basicConfig(

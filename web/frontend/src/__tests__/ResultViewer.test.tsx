@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import ResultViewer from '../components/ResultViewer';
 import type { AnalysisResultPayload } from '../types';
 
-// Mock the subcomponents that have complex dependencies
 vi.mock('../components/CFGViewer', () => ({
   default: ({ onAskAboutCFG }: { onAskAboutCFG?: () => void }) => (
     <div data-testid="cfg-viewer">
@@ -200,7 +199,6 @@ describe('ResultViewer', () => {
 
     await user.click(screen.getByRole('tab', { name: /analysis/i }));
 
-    // Strings should be visible in the analysis view
     expect(screen.getByText('Hello World')).toBeInTheDocument();
     expect(screen.getByText('Test String')).toBeInTheDocument();
   });
@@ -220,7 +218,6 @@ describe('ResultViewer', () => {
 
     await user.click(screen.getByRole('tab', { name: /analysis/i }));
 
-    // CFG is accessible from analysis tab
     expect(screen.getByTestId('cfg-viewer')).toBeInTheDocument();
   });
 
@@ -230,7 +227,6 @@ describe('ResultViewer', () => {
 
     await user.click(screen.getByRole('tab', { name: /code/i }));
 
-    // DWARF panel should be accessible from code tab
     expect(screen.getByTestId('dwarf-panel')).toBeInTheDocument();
   });
 

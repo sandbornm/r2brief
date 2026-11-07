@@ -1,11 +1,3 @@
-"""Rank important binary regions and emit Qwen-sized snippet asks.
-
-The live analysis dump is an adapter-shaped bag. This module is the
-orchestrator that turns that bag into a small number of concrete regions,
-each with a compact dis/asm (or inventory) excerpt and a four-bullet ask
-whose answers should sum to a next action.
-"""
-
 from __future__ import annotations
 
 import re
@@ -307,7 +299,6 @@ def build_briefing(
     max_regions: int = MAX_REGIONS,
     record_id: str | None = None,
 ) -> dict[str, Any]:
-    """Build a ranked briefing from an AnalysisResult or public analysis dict."""
     analysis = _as_analysis_dict(source)
     binary = str(analysis.get("binary") or "unknown")
     name = Path(binary).name
@@ -358,7 +349,6 @@ def build_briefing(
         payload["provenance"] = provenance
         _link_region_evidence(payload, provenance)
     payload["handoff"] = build_handoff(payload, record_id=record_id)
-    # Supplemental tool evidence does not change the fixed region point table.
     triage_tools = {}
     statuses = _dict(analysis.get("tool_status"))
     for name, stage in (("die", quick), ("capa", deep)):
@@ -380,7 +370,6 @@ def build_briefing(
 
 
 def _link_region_evidence(briefing: dict[str, Any], provenance: dict[str, Any]) -> None:
-    """Attach compact provenance pointers to each region's evidence capsule."""
     actions = [item for item in _list(provenance.get("actions")) if isinstance(item, dict)]
     aliases = {"r2": "radare2"}
     for region in _list(briefing.get("regions")):
@@ -406,7 +395,6 @@ def build_handoff(
     *,
     record_id: str | None = None,
 ) -> dict[str, Any]:
-    """Compact, deterministic view for a planner. No model, no ask templates."""
     binary = str(briefing.get("binary") or "")
     quoted = shlex.quote(binary) if binary else "BIN"
     subject = _dict(briefing.get("subject"))
@@ -629,7 +617,6 @@ def render_briefing_markdown(
 
 
 def extract_code_snippets(deep_scan: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Flatten adapter snippet bags into a stable list for session persistence."""
     snippets: list[dict[str, Any]] = []
     if not isinstance(deep_scan, dict):
         return snippets
@@ -1569,7 +1556,6 @@ def _basename(symbol: str) -> str:
 
 
 def _r2_import_name(symbol: str) -> str:
-    """Preserve the importer-visible symbol spelling used by radare2 flags."""
     return re.sub(r"^(sym\.imp\.|imp\.|sym\.)", "", symbol).split("@", 1)[0]
 
 

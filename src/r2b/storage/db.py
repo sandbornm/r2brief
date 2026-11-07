@@ -1,5 +1,3 @@
-"""SQLite database helpers."""
-
 from __future__ import annotations
 
 import hashlib
@@ -25,7 +23,6 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, decl: str)
 
 
 class Database:
-    """Thin wrapper around sqlite3 for app needs."""
 
     def __init__(self, path: Path) -> None:
         self._path = path.expanduser()
@@ -96,7 +93,6 @@ class Database:
                 """
             )
             
-            # Annotations for disassembly lines
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS annotations (
@@ -113,7 +109,6 @@ class Database:
                 """
             )
             
-            # User activity events for context tracking
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS activity_events (
@@ -127,7 +122,6 @@ class Database:
                 """
             )
             
-            # Index for efficient activity lookups
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_activity_session_time
@@ -135,7 +129,6 @@ class Database:
                 """
             )
 
-            # Function names for LLM-suggested or human-overridden function names
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS function_names (
@@ -155,7 +148,6 @@ class Database:
                 """
             )
 
-            # Index for efficient function name lookups
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_function_names_session
@@ -207,7 +199,6 @@ class Database:
             )
 
     def store_proposed_annotations(self, session_id: str, rows: list[dict[str, Any]]) -> int:
-        """Insert or refresh LLM proposals. Stable ids so a retry does not fork rows."""
         if not rows:
             return 0
         now = datetime.now(timezone.utc).isoformat()

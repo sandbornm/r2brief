@@ -1,10 +1,3 @@
-"""Single public AnalysisResult contract for SSE, chat attachments, and GET.
-
-Live Flask used to serialize the dataclass with ``asdict`` (SSE) and a
-hand-built attachment bag (chat). Those drifted. Every HTTP/CLI consumer
-should go through ``analysis_result_to_public_dict``.
-"""
-
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -27,7 +20,6 @@ def analysis_result_to_public_dict(
     include_briefing: bool = True,
     record: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Stable analysis payload shared by SSE, attachments, GET, and CLI JSON."""
     payload = analysis_result_core_dict(result)
     if session_id:
         payload["session_id"] = session_id
@@ -44,7 +36,6 @@ def analysis_result_to_public_dict(
 
 
 def analysis_result_core_dict(result: AnalysisResult) -> dict[str, Any]:
-    """Core fields only. Omits resource_tree (internal, not part of the UI contract)."""
     plan = asdict(result.plan) if result.plan is not None else {}
     binary_format = result.quick_scan.get("binary_format", {}) if isinstance(result.quick_scan, dict) else {}
     provenance = result.provenance or build_analysis_provenance(result)
@@ -68,7 +59,6 @@ def analysis_result_core_dict(result: AnalysisResult) -> dict[str, Any]:
 
 
 def ensure_analysis_briefing(analysis: dict[str, Any]) -> dict[str, Any]:
-    """Return a briefing, computing one if an older attachment omitted it."""
     existing = analysis.get("briefing")
     if isinstance(existing, dict) and existing.get("regions") is not None:
         return existing

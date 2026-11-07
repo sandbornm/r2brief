@@ -1,5 +1,3 @@
-"""Unit tests for the static import verifier (analysis/verify.py)."""
-
 from __future__ import annotations
 
 from r2b.analysis.verify import (
@@ -77,7 +75,6 @@ class TestResolveArgument:
             "           0x0040d874      09f82003       jalr t9",
         ]
         site = resolve_argument(lines, len(lines) - 1, ("a0",))
-        # Stack-relative address -> not a rodata constant.
         assert not site.is_constant
 
     def test_lui_without_string_comment_unresolved_pair(self):
@@ -86,7 +83,6 @@ class TestResolveArgument:
             "           0x0040ecd0      0c10092c       jal sym.imp.popen",
         ]
         site = resolve_argument(lines, len(lines) - 1, ("a0",))
-        # No comment anywhere -> cannot claim constant.
         assert site.argument in ("<dynamic>", "<unresolved>")
         assert not site.is_constant
 
@@ -263,7 +259,6 @@ class TestVerifyImports:
         assert verify_imports({}, arch="mips") == []
 
     def test_call_line_not_counted_twice(self):
-        # Two distinct call sites, second one dynamic.
         xref_lines = {
             "system": [
                 "           0x0040c358      24a5b260       addiu a1, a1, -0x4da0       ; \"tplink_arp_fast_update disable\"",

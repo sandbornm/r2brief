@@ -1,5 +1,3 @@
-"""Integration tests for the Flask API."""
-
 from __future__ import annotations
 
 import io
@@ -10,26 +8,23 @@ from unittest.mock import patch
 
 import pytest
 
-# Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
 def minimal_elf(tmp_path: Path) -> Path:
-    """Create a minimal ELF file for testing."""
     elf_path = tmp_path / "test_binary.elf"
-    # Minimal 64-bit ELF header
     elf_bytes = (
-        b'\x7fELF'                      # Magic
-        b'\x02'                          # 64-bit
-        b'\x01'                          # Little endian
-        b'\x01'                          # ELF version
-        b'\x00'                          # OS/ABI
-        + b'\x00' * 8                    # Padding
-        + b'\x02\x00'                    # Type: executable
-        + b'\x3e\x00'                    # Machine: x86-64
-        + b'\x01\x00\x00\x00'           # Version
-        + b'\x00' * 48                   # Rest of header
+        b'\x7fELF'
+        b'\x02'
+        b'\x01'
+        b'\x01'
+        b'\x00'
+        + b'\x00' * 8
+        + b'\x02\x00'
+        + b'\x3e\x00'
+        + b'\x01\x00\x00\x00'
+        + b'\x00' * 48
     )
     elf_path.write_bytes(elf_bytes)
     return elf_path
@@ -37,12 +32,9 @@ def minimal_elf(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def app_client(tmp_path: Path):
-    """Create a test client for the Flask app."""
-    # Create a temporary config with test database
     from r2b.web.app import create_app
 
     with patch.dict('os.environ', {'R2B_WEB_DEBUG': 'false'}):
-        # Patch the config used by build_state to keep database/artifacts isolated.
         with patch('r2b.state.load_config') as mock_config:
             from r2b.config import AppConfig, StorageSettings, AnalysisSettings, OutputSettings
 
@@ -69,10 +61,8 @@ def app_client(tmp_path: Path):
 
 
 class TestHealthEndpoint:
-    """Tests for /api/health endpoint."""
 
     def test_health_returns_ok(self, app_client):
-        """Test health endpoint returns OK status."""
         response = app_client.get('/api/health')
 
         assert response.status_code == 200
@@ -83,7 +73,6 @@ class TestHealthEndpoint:
         assert data['features']['show_compiler'] is False
 
     def test_health_includes_model_info(self, app_client):
-        """Test health includes model information."""
         response = app_client.get('/api/health')
         data = response.get_json()
 
@@ -92,10 +81,8 @@ class TestHealthEndpoint:
 
 
 class TestModelsEndpoint:
-    """Tests for /api/models endpoint."""
 
     def test_list_models(self, app_client):
-        """Test listing available models."""
         response = app_client.get('/api/models')
 
         assert response.status_code == 200
@@ -104,7 +91,6 @@ class TestModelsEndpoint:
         assert 'current' in data
 
     def test_set_model_requires_model_param(self, app_client):
-        """Test set model requires model parameter."""
         response = app_client.post(
             '/api/models',
             json={},
@@ -117,10 +103,8 @@ class TestModelsEndpoint:
 
 
 class TestEnvironmentEndpoint:
-    """Tests for /api/environment endpoint."""
 
     def test_environment_returns_report(self, app_client):
-        """Test environment endpoint returns tool status."""
         response = app_client.get('/api/environment')
 
         assert response.status_code == 200
@@ -130,10 +114,8 @@ class TestEnvironmentEndpoint:
 
 
 class TestChatsEndpoint:
-    """Tests for /api/chats endpoints."""
 
     def test_list_chats_empty(self, app_client):
-        """Test listing chats when empty."""
         response = app_client.get('/api/chats')
 
         assert response.status_code == 200
@@ -141,7 +123,6 @@ class TestChatsEndpoint:
         assert isinstance(data, list)
 
     def test_list_chats_with_limit(self, app_client):
-        """Test listing chats with limit parameter."""
         response = app_client.get('/api/chats?limit=5')
 
         assert response.status_code == 200
@@ -149,7 +130,6 @@ class TestChatsEndpoint:
         assert isinstance(data, list)
 
     def test_chat_detail_not_found(self, app_client):
-        """Test getting non-existent chat session."""
         response = app_client.get('/api/chats/nonexistent-session-id')
 
         assert response.status_code == 404
@@ -164,13 +144,11 @@ class TestChatsEndpoint:
         assert response.status_code == 404
 
     def test_chat_analysis_not_found(self, app_client):
-        """Test getting latest analysis for a non-existent chat session."""
         response = app_client.get('/api/chats/nonexistent-session-id/analysis')
 
         assert response.status_code == 404
 
     def test_chat_analysis_without_attachment_returns_not_found(self, app_client, tmp_path):
-        """Test latest analysis endpoint returns 404 when the session has no analysis."""
         from r2b.storage.chat import ChatDAO
         from r2b.storage.db import Database
 
@@ -183,7 +161,6 @@ class TestChatsEndpoint:
         assert response.status_code == 404
 
     def test_chat_analysis_returns_latest_analysis(self, app_client, tmp_path):
-        """Test latest analysis endpoint returns the newest analysis attachment only."""
         from r2b.storage.chat import ChatDAO
         from r2b.storage.db import Database
 
@@ -269,13 +246,11 @@ class TestChatsEndpoint:
         assert "Briefing:" in markdown.get_data(as_text=True)
 
     def test_delete_chat_not_found(self, app_client):
-        """Test deleting non-existent chat session."""
         response = app_client.delete('/api/chats/nonexistent-session-id')
 
         assert response.status_code == 404
 
     def test_chat_bundle_exports_json_and_markdown(self, app_client, minimal_elf):
-        """Test compact analysis bundle export for an existing chat session."""
         carved_dir = minimal_elf.parent / "artifacts" / "firmware" / "fixture"
         carved_dir.mkdir(parents=True)
         carved_file = carved_dir / "rootfs.bin"
@@ -294,9 +269,6 @@ class TestChatsEndpoint:
             content_type='application/json',
         )
         session_id = analyze_response.get_json()['session_id']
-        # /api/analyze appends its own analysis_result message from a background
-        # thread. Wait for it so the synthetic attachment below is the latest one;
-        # otherwise the worker can land between bundle requests and replace it.
         deadline = time.monotonic() + 30
         while app_client.get(f'/api/chats/{session_id}/bundle?format=manifest').status_code != 200:
             assert time.monotonic() < deadline, "analysis job never recorded a result"
@@ -391,10 +363,8 @@ class TestChatsEndpoint:
 
 
 class TestAnalyzeEndpoint:
-    """Tests for /api/analyze endpoint."""
 
     def test_analyze_requires_binary(self, app_client):
-        """Test analyze endpoint requires binary path."""
         response = app_client.post(
             '/api/analyze',
             json={},
@@ -407,7 +377,6 @@ class TestAnalyzeEndpoint:
         assert 'binary' in data['error'].lower()
 
     def test_analyze_binary_not_found(self, app_client):
-        """Test analyze with non-existent binary."""
         response = app_client.post(
             '/api/analyze',
             json={'binary': '/nonexistent/path/to/binary'},
@@ -460,7 +429,6 @@ class TestAnalyzeEndpoint:
         assert 'enable_native_execution' in response.get_json()['error']
 
     def test_analyze_returns_job_id(self, app_client, minimal_elf):
-        """Test analyze returns job ID for valid binary."""
         response = app_client.post(
             '/api/analyze',
             json={'binary': str(minimal_elf)},
@@ -474,10 +442,8 @@ class TestAnalyzeEndpoint:
 
 
 class TestUploadEndpoint:
-    """Tests for /api/upload endpoint."""
 
     def test_upload_requires_file(self, app_client):
-        """Test upload requires file parameter."""
         response = app_client.post('/api/upload')
 
         assert response.status_code == 400
@@ -485,7 +451,6 @@ class TestUploadEndpoint:
         assert 'error' in data
 
     def test_upload_file(self, app_client, minimal_elf):
-        """Test uploading a file."""
         with open(minimal_elf, 'rb') as f:
             response = app_client.post(
                 '/api/upload',
@@ -501,7 +466,6 @@ class TestUploadEndpoint:
         assert 'max_size_bytes' in data
 
     def test_upload_rejects_file_over_limit(self, app_client, tmp_path):
-        """Test oversized uploads return JSON error."""
         app_client.application.config['MAX_CONTENT_LENGTH'] = 8
         oversized = tmp_path / "oversized.bin"
         oversized.write_bytes(b"A" * 64)
@@ -519,10 +483,8 @@ class TestUploadEndpoint:
 
 
 class TestChatMessagesEndpoint:
-    """Tests for /api/chats/<session_id>/messages endpoint."""
 
     def test_post_message_to_invalid_session(self, app_client):
-        """Test posting message to non-existent session."""
         response = app_client.post(
             '/api/chats/nonexistent-session/messages',
             json={'content': 'test message'},
@@ -532,8 +494,6 @@ class TestChatMessagesEndpoint:
         assert response.status_code == 404
 
     def test_post_message_requires_content(self, app_client, minimal_elf):
-        """Test posting message requires content or attachments."""
-        # First create a session via analyze
         analyze_response = app_client.post(
             '/api/analyze',
             json={'binary': str(minimal_elf)},
@@ -541,7 +501,6 @@ class TestChatMessagesEndpoint:
         )
         session_id = analyze_response.get_json()['session_id']
 
-        # Try to post empty message
         response = app_client.post(
             f'/api/chats/{session_id}/messages',
             json={'content': ''},
@@ -551,7 +510,6 @@ class TestChatMessagesEndpoint:
         assert response.status_code == 400
 
     def test_llm_error_returns_service_unavailable(self, app_client, minimal_elf):
-        """Test LLM failures return JSON 503 instead of bubbling as 500."""
         from r2b.llm import LLMError
 
         analyze_response = app_client.post(
@@ -575,17 +533,13 @@ class TestChatMessagesEndpoint:
 
 
 class TestAnnotationsEndpoint:
-    """Tests for /api/chats/<session_id>/annotations endpoints."""
 
     def test_list_annotations_invalid_session(self, app_client):
-        """Test listing annotations for non-existent session."""
         response = app_client.get('/api/chats/nonexistent/annotations')
 
         assert response.status_code == 404
 
     def test_create_annotation_requires_address(self, app_client, minimal_elf):
-        """Test creating annotation requires address."""
-        # Create a session
         analyze_response = app_client.post(
             '/api/analyze',
             json={'binary': str(minimal_elf)},
@@ -603,11 +557,8 @@ class TestAnnotationsEndpoint:
 
 
 class TestJobStreamEndpoint:
-    """Tests for /api/jobs/<job_id>/stream endpoint."""
 
     def test_stream_invalid_job(self, app_client):
-        """Test streaming non-existent job returns 404."""
         response = app_client.get('/api/jobs/nonexistent-job-id/stream')
 
-        # Note: This returns a tuple (Response, status_code) for error
         assert response.status_code == 404

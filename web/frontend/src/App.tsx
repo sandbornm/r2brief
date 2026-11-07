@@ -466,7 +466,6 @@ const AppContent = () => {
       });
 
       source.onerror = () => {
-        // Browsers fire error when the server closes a finished SSE stream.
         if (source.readyState === EventSource.CLOSED) {
           closeSource();
           return;
@@ -638,7 +637,6 @@ const AppContent = () => {
           if (analysis.analysis_graph?.nodes?.length) {
             setActiveTab('map');
           }
-          // Cache the analysis result for faster switching
           if (analysis.session_id) {
             setInCache(CacheKeys.analysisResult(analysis.session_id), analysis);
             restoredAnalysisSessionIdRef.current = analysis.session_id;
@@ -777,7 +775,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
         }),
       });
       
-      // Check if response is JSON before parsing
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         console.error('Auto-ask: Server returned non-JSON response');
@@ -815,10 +812,8 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
     setFileName(session.title ?? session.binary_path.split('/').pop() ?? null);
     lastSyncedSessionIdRef.current = session.session_id;
 
-    // Start trajectory for this session
     trajectory.startTrajectory(session.session_id);
 
-    // Try to load cached analysis result for faster switching
     const cachedResult = getFromCache<AnalysisResultPayload>(
       CacheKeys.analysisResult(session.session_id)
     );
@@ -837,9 +832,7 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
       debug.api.response(`/api/chats/${sessionId}`, response.status);
       if (response.ok) {
         debug.session.delete(sessionId);
-        // Remove from local state
         setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
-        // If we deleted the active session, select the next one
         if (activeSessionId === sessionId) {
           const remaining = sessions.filter((s) => s.session_id !== sessionId);
           if (remaining.length > 0) {
@@ -863,14 +856,12 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
     setSendingMessage(true);
     setChatError(null);
 
-    // Track the question being asked
     if (options.callLLM) {
       const topic = content.length > 50 ? content.slice(0, 50) + '...' : content;
       activity.trackEvent('ask_claude', { topic, content_length: content.length });
       trajectoryActions.askQuestion(content);
     }
 
-    // Sync activity context to backend before sending (best effort)
     activity.syncToBackend(activeSessionId).catch(() => {});
     
     const optimisticId = `pending-${Date.now()}`;
@@ -892,7 +883,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
         body: JSON.stringify({ content, call_llm: options.callLLM }),
       });
       
-      // Check if response is JSON before parsing
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         setMessages((prev) => prev.filter((msg) => msg.message_id !== optimisticId));
@@ -926,7 +916,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
       debug.chat.error(activeSessionId, error instanceof Error ? error.message : 'Unknown error');
       console.error(error);
       const errorMsg = error instanceof Error ? error.message : 'Failed';
-      // Provide better error message for common issues
       if (errorMsg.includes('Unexpected token') || errorMsg.includes('JSON')) {
         setChatError('Cannot connect to backend. Start it with: uv run r2b-web');
       } else {
@@ -943,18 +932,15 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
     if (value === 'compiler' && !showCompiler) return;
     debug.activity.tabSwitch(activeTab, value);
     setActiveTab(value);
-    // Track tab switch for activity context
     activity.setCurrentTab(value);
     trajectory.setCurrentView(value);
   };
 
-  // Extract disassembly from analysis result for address hover citations
   const disassemblyContext = useMemo(() => {
     if (!result) return undefined;
     const deep = result.deep_scan?.radare2 as Record<string, unknown> | undefined;
     if (!deep) return undefined;
     
-    // Prefer entry_disassembly, fall back to general disassembly
     const entryDisasm = deep.entry_disassembly;
     if (typeof entryDisasm === 'string' && entryDisasm.trim()) {
       return entryDisasm;
@@ -968,13 +954,9 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
     return undefined;
   }, [result]);
 
-  // Handle navigation to a specific address (from citation click)
   const handleNavigateToAddress = useCallback((address: string) => {
-    // Track the navigation event
     activity.trackEvent('address_hover', { address, source: 'citation' });
-    // Switch to results tab to show disassembly
     setActiveTab('results');
-    // Could add scrolling to the address in disassembly view in the future
   }, [activity]);
 
   const handleAskAboutGraphNode = useCallback((node: ExplorerGraphNode, mode: 'findings' | 'journey') => {
@@ -1075,7 +1057,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
     lastSyncedSessionIdRef.current = null;
   }, []);
 
-  // Handle "Analyze & Chat" - analyze the compiled binary and auto-ask the selected model
   const handleAnalyzeAndChat = useCallback(async (path: string, filename: string) => {
     setBinaryPath(path);
     setFileName(filename);
@@ -1205,7 +1186,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
         color: 'text.primary',
       }}
     >
-      {/* Header */}
       <Box
         component="header"
         sx={{
@@ -1320,9 +1300,7 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
         </Suspense>
       )}
 
-      {/* Main */}
       <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* Sidebar */}
         <Box
           component="aside"
           sx={{
@@ -1370,7 +1348,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
           )}
         </Box>
 
-        {/* Main panel */}
         <Box
           sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
           onDragOver={handleDragOver}
@@ -1386,10 +1363,8 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
             accept="*/*"
           />
 
-          {/* No file selected - show welcome screen with tabs */}
           {!fileName && !result ? (
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              {/* Tabs for empty state */}
               <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
                 <Tabs value={visibleActiveTab} onChange={handleTabChange}>
                   {showCompiler && (
@@ -1405,7 +1380,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
                     <CompilerPanel onBinaryCompiled={handleBinaryCompiled} onAnalyzeAndChat={handleAnalyzeAndChat} />
                   </Suspense>
                 ) : (
-                  /* Drop zone */
                   <Box
                     onClick={() => fileInputRef.current?.click()}
                     sx={{
@@ -1440,7 +1414,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
             </Box>
           ) : (
             <>
-              {/* File selected - show controls */}
               <Box
                 component="form"
                 onSubmit={handleAnalyze}
@@ -1476,7 +1449,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
                     </Button>
                   </Stack>
 
-                  {/* User goal input */}
                   <TextField
                     size="small"
                     inputRef={goalInputRef}
@@ -1503,7 +1475,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
                 </Stack>
               </Box>
 
-              {/* Tabs */}
               <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
                 <Tabs value={visibleActiveTab} onChange={handleTabChange}>
                   <Tab value="results" label="Results" />
@@ -1516,14 +1487,12 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
                 </Tabs>
               </Box>
 
-              {/* Trajectory Panel - Collapsible analysis progress tracker */}
               {trajectory.snapshot && activeSessionId && (
                 <Box sx={{ px: 2, pt: 1 }}>
                   <TrajectoryPanel snapshot={trajectory.snapshot} compact />
                 </Box>
               )}
 
-              {/* Content */}
               <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
                 {activeTab === 'results' && (
                   <>
@@ -1603,7 +1572,6 @@ In 2-3 sentences: what is it and what does it do? I'm ${funcCount > 0 ? 'seeing 
   );
 };
 
-// Wrap AppContent with providers for activity and trajectory tracking
 const App = () => {
   return (
     <ActivityProvider>

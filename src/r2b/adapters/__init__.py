@@ -1,5 +1,3 @@
-"""Analysis adapter implementations."""
-
 from .angr import AngrAdapter
 from .autoprofile import AutoProfileAdapter
 from .binary_format import BinaryFormatAdapter

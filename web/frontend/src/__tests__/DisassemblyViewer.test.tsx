@@ -11,7 +11,6 @@ describe('DisassemblyViewer', () => {
   it('renders disassembly content', () => {
     render(<DisassemblyViewer disassembly={sampleDisassembly} />);
 
-    // Check that addresses are rendered
     expect(screen.getByText(/0x00001000/)).toBeInTheDocument();
     expect(screen.getByText(/0x00001004/)).toBeInTheDocument();
   });
@@ -24,7 +23,6 @@ describe('DisassemblyViewer', () => {
   it('shows instruction tooltip on hover', async () => {
     render(<DisassemblyViewer disassembly={sampleDisassembly} arch="arm32" />);
 
-    // Verify mov instruction is in the document
     const movInstruction = screen.getByText('mov');
     expect(movInstruction).toBeInTheDocument();
   });
@@ -54,8 +52,6 @@ describe('DisassemblyViewer', () => {
       />
     );
 
-    // The annotation functionality is triggered via selection, which is complex to test
-    // Just verify the component renders without error
     expect(screen.getByText(/entry point disassembly/i)).toBeInTheDocument();
   });
 
@@ -65,7 +61,6 @@ describe('DisassemblyViewer', () => {
 
     render(<DisassemblyViewer disassembly={sampleDisassembly} />);
 
-    // Find and click copy button
     const copyButton = screen.getByRole('button', { name: /copy all/i });
     await user.click(copyButton);
 
@@ -76,7 +71,6 @@ describe('DisassemblyViewer', () => {
   it('shows ARM reference link for ARM architecture', () => {
     render(<DisassemblyViewer disassembly={sampleDisassembly} arch="arm32" />);
 
-    // Should have a link to ARM reference manual
     const refButton = screen.getByRole('button', { name: /arm reference manual/i });
     expect(refButton).toBeInTheDocument();
   });

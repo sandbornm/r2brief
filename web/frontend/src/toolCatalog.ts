@@ -11,9 +11,6 @@ export interface ToolCatalogEntry {
   aliases?: string[];
 }
 
-// This is intentionally an integration catalog, not an environment inventory.
-// A detected executable belongs here only when r2b schedules it and records its
-// output as evidence. Probe-only helpers remain available from `r2b env --json`.
 export const TOOL_CATALOG: ToolCatalogEntry[] = [
   {
     key: 'firmware',

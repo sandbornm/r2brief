@@ -61,7 +61,7 @@ def test_ensure_elf_validation(tmp_path: Path):
 
     elf = tmp_path / 'sample.elf'
     elf.write_bytes(b'\x7fELF' + b'\x00' * 8)
-    orchestrator._ensure_elf(elf)  # should not raise
+    orchestrator._ensure_elf(elf)
 
 
 def test_radare2_quick_inventory_is_not_reported_as_failed_depth(tmp_path: Path):

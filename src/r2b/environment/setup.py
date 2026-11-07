@@ -1,12 +1,3 @@
-"""Host sniff → recommended install flavor.
-
-Flavors (hackable: add a toml under config/flavors/ and a branch here)::
-
-    core  Pi / 8 GB / omp box. r2 + file. No Ghidra, no angr.
-    lab   Workstation. r2 extras. Extractors optional. Ghidra only if x86_64.
-    full  16 GB+ x86_64. analyzers extra, Ghidra, extract, optional web.
-"""
-
 from __future__ import annotations
 
 import os
@@ -216,8 +207,6 @@ def _commands(
             brew.append("libmagic")
         cmds.append("brew install " + " ".join(brew))
     elif facts.os == "linux" and need_core:
-        # Optional extractors are reported as notes. Do not make a working
-        # core install fail because a distro does not package binwalk3.
         cmds.append("sudo apt-get install -y radare2 file libmagic-dev")
     cmds.append(f"uv sync --extra {extra}")
     cmds.append("uv run r2b env --json")

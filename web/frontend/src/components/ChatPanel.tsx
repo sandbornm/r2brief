@@ -42,7 +42,6 @@ interface ChatPanelProps {
   error?: string | null;
   disassembly?: string;
   onNavigateToAddress?: (address: string) => void;
-  // Trajectory context for LLM
   trajectoryContext?: string;
 }
 
@@ -91,7 +90,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
     (a) => a.type === 'analysis_result'
   ) as ChatAttachment | undefined;
 
-  // System message for analysis completion
   if (message.role === 'system' && analysisAttachment) {
     return (
       <Paper
@@ -130,7 +128,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
     );
   }
 
-  // Other system messages
   if (message.role === 'system') {
     return (
       <Box sx={{ textAlign: 'center', py: 2 }}>
@@ -154,7 +151,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
         },
       }}
     >
-      {/* Assistant avatar */}
       {!isUser && (
         <Box
           sx={{
@@ -173,7 +169,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
         </Box>
       )}
 
-      {/* Message bubble */}
       <Paper
         elevation={0}
         sx={{
@@ -192,7 +187,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
         }}
       >
         <Stack spacing={1.5}>
-          {/* Header */}
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography
               variant="caption"
@@ -225,7 +219,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
             )}
           </Stack>
 
-          {/* Content */}
           {isAssistant ? (
             <Box sx={{ '& > *:first-of-type': { mt: 0 }, '& > *:last-child': { mb: 0 } }}>
               <MarkdownRenderer
@@ -248,7 +241,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
             </Typography>
           )}
 
-          {/* Script execution blocks */}
           {attachments
             .filter((a): a is ScriptExecutionAttachment => a.type === 'script_execution')
             .map((attachment, i) => (
@@ -264,7 +256,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
               />
             ))}
 
-          {/* Provider badge + claim grounding */}
           {message.attachments
             .filter((a) => a.type === 'llm_response_meta')
             .map((a, i) => {
@@ -316,7 +307,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
         </Stack>
       </Paper>
 
-      {/* User avatar */}
       {isUser && (
         <Box
           sx={{
@@ -338,7 +328,6 @@ const MessageBubble: FC<MessageBubbleProps> = memo(function MessageBubble({ mess
   );
 });
 
-// Trajectory context panel
 const TrajectoryPanel: FC<{ context?: string }> = memo(function TrajectoryPanel({ context }) {
   const theme = useTheme();
 
@@ -390,7 +379,6 @@ const TrajectoryPanel: FC<{ context?: string }> = memo(function TrajectoryPanel(
   );
 });
 
-// Suggested questions
 const SUGGESTED_QUESTIONS = [
   { label: 'Overview', question: 'What does this binary do?' },
   { label: 'Security', question: 'Are there any security concerns?' },
@@ -449,8 +437,6 @@ export const ChatPanel: FC<ChatPanelProps> = memo(({
     const sent = await onSend(content, { callLLM });
     if (sent) setContent('');
   };
-  // Filter visible messages (before the early return: hook count must not
-  // depend on whether a session is active)
   const visibleMessages = useMemo(() =>
     messages.filter(msg => {
       if (msg.role === 'system') {
@@ -466,7 +452,6 @@ export const ChatPanel: FC<ChatPanelProps> = memo(({
     setContent(question);
   };
 
-  // No session state
   if (!session) {
     return (
       <Box
@@ -493,10 +478,8 @@ export const ChatPanel: FC<ChatPanelProps> = memo(({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Trajectory context panel */}
       {trajectoryContext && <TrajectoryPanel context={trajectoryContext} />}
 
-      {/* Messages area */}
       <Box
         ref={scrollContainerRef}
         onScroll={handleScroll}
@@ -508,7 +491,6 @@ export const ChatPanel: FC<ChatPanelProps> = memo(({
         }}
       >
         <Stack spacing={2.5} sx={{ py: 1 }}>
-          {/* Empty state with suggestions */}
           {visibleMessages.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -542,7 +524,6 @@ export const ChatPanel: FC<ChatPanelProps> = memo(({
             </Box>
           )}
 
-          {/* Messages */}
           {visibleMessages.map((msg, index) => (
             <MessageBubble
               key={msg.message_id}
@@ -556,14 +537,12 @@ export const ChatPanel: FC<ChatPanelProps> = memo(({
         </Stack>
       </Box>
 
-      {/* Error alert */}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
 
-      {/* Input area */}
       <Paper
         component="form"
         onSubmit={handleSubmit}

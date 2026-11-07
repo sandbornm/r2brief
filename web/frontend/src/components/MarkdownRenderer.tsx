@@ -7,9 +7,7 @@ import CitedAddress from './CitedAddress';
 
 interface MarkdownRendererProps {
   content: string;
-  // Disassembly context for address hover citations
   disassembly?: string;
-  // Callback when user clicks to navigate to an address
   onNavigateToAddress?: (address: string) => void;
 }
 
@@ -18,7 +16,6 @@ const CodeBlock: FC<{ children: string; className?: string }> = ({ children, cla
   const isDark = theme.palette.mode === 'dark';
   const [copied, setCopied] = useState(false);
   
-  // Extract language from className (e.g., "language-python" -> "python")
   const language = className?.replace('language-', '') || '';
   const isArm = language === 'asm' || language === 'arm' || language === 'armasm';
   
@@ -30,7 +27,6 @@ const CodeBlock: FC<{ children: string; className?: string }> = ({ children, cla
   
   return (
     <Box sx={{ position: 'relative', my: 1.5 }}>
-      {/* Language badge */}
       {language && (
         <Typography
           variant="caption"
@@ -52,7 +48,6 @@ const CodeBlock: FC<{ children: string; className?: string }> = ({ children, cla
         </Typography>
       )}
       
-      {/* Copy button */}
       <Tooltip title={copied ? 'Copied!' : 'Copy'}>
         <IconButton
           size="small"
@@ -116,10 +111,8 @@ const InlineCode: FC<{ children: React.ReactNode }> = ({ children }) => {
   );
 };
 
-// Regex to match hex addresses (0x followed by hex digits)
 const ADDRESS_REGEX = /\b(0x[0-9a-fA-F]{4,16})\b/g;
 
-// Parse text and wrap addresses with CitedAddress components
 interface TextWithCitationsProps {
   text: string;
   disassembly?: string;
@@ -133,16 +126,13 @@ const TextWithCitations: FC<TextWithCitationsProps> = ({ text, disassembly, onNa
     let match: RegExpExecArray | null;
     let key = 0;
     
-    // Reset regex state
     ADDRESS_REGEX.lastIndex = 0;
     
     while ((match = ADDRESS_REGEX.exec(text)) !== null) {
-      // Add text before the match
       if (match.index > lastIndex) {
         result.push(text.slice(lastIndex, match.index));
       }
       
-      // Add the cited address component
       result.push(
         <CitedAddress
           key={key++}
@@ -155,7 +145,6 @@ const TextWithCitations: FC<TextWithCitationsProps> = ({ text, disassembly, onNa
       lastIndex = match.index + match[0].length;
     }
     
-    // Add remaining text
     if (lastIndex < text.length) {
       result.push(text.slice(lastIndex));
     }
@@ -173,7 +162,6 @@ const MarkdownRenderer: FC<MarkdownRendererProps> = ({
 }) => {
   const theme = useTheme();
   
-  // Custom text renderer that wraps addresses with CitedAddress
   const renderTextWithCitations = (text: string): ReactNode => {
     if (!disassembly || !ADDRESS_REGEX.test(text)) {
       return text;
@@ -264,14 +252,11 @@ const MarkdownRenderer: FC<MarkdownRendererProps> = ({
             const isInline = !className && typeof children === 'string' && !children.includes('\n');
             
             if (isInline) {
-              // Check if the inline code is an address
               const text = String(children);
               if (disassembly && ADDRESS_REGEX.test(text)) {
-                // Reset regex state after test
                 ADDRESS_REGEX.lastIndex = 0;
                 const match = text.match(ADDRESS_REGEX);
                 if (match && match[0] === text) {
-                  // The entire inline code is an address
                   return (
                     <CitedAddress
                       address={text}
@@ -291,12 +276,9 @@ const MarkdownRenderer: FC<MarkdownRendererProps> = ({
             );
           },
           pre({ children }) {
-            // Just pass through - code block handles styling
             return <>{children}</>;
           },
-          // Custom text renderer to catch addresses in paragraph text
           p({ children }) {
-            // Process children to find text nodes with addresses
             const processChild = (child: ReactNode): ReactNode => {
               if (typeof child === 'string') {
                 return renderTextWithCitations(child);

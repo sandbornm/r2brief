@@ -1,9 +1,3 @@
-/**
- * CitedAddress component - renders address references with assembly hover.
- * 
- * When the LLM mentions an address like 0x1234, this component shows
- * the relevant assembly context on hover.
- */
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {
@@ -23,26 +17,20 @@ import type { CodeCitation } from '../types';
 
 interface CitedAddressProps {
   address: string;
-  // Full disassembly text to search for context
   disassembly?: string;
-  // Pre-computed citation if available
   citation?: CodeCitation;
-  // Function to navigate to address in disassembly viewer
   onNavigate?: (address: string) => void;
 }
 
-// Parse disassembly to find context around an address
 function findAddressContext(disassembly: string, targetAddress: string, contextLines: number = 5): CodeCitation | null {
   if (!disassembly) return null;
   
   const lines = disassembly.split('\n');
   const normalizedTarget = targetAddress.toLowerCase().replace(/^0x/, '');
   
-  // Find the line containing this address
   let targetIndex = -1;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].toLowerCase();
-    // Match address at start of instruction line
     const addrMatch = line.match(/0x([0-9a-f]+)/);
     if (addrMatch) {
       const lineAddr = addrMatch[1];
@@ -55,20 +43,16 @@ function findAddressContext(disassembly: string, targetAddress: string, contextL
   
   if (targetIndex === -1) return null;
   
-  // Extract context lines
   const start = Math.max(0, targetIndex - contextLines);
   const end = Math.min(lines.length, targetIndex + contextLines + 1);
   const contextLinesList = lines.slice(start, end);
   
-  // Parse the target line for instruction details
   const targetLine = lines[targetIndex];
   const instrMatch = targetLine.match(/0x([0-9a-f]+)\s+([0-9a-f]+)?\s*(\w+(?:\.\w+)?)\s*(.*)/i);
   
-  // Try to find function name from nearby labels
   let functionName: string | undefined;
   for (let i = targetIndex; i >= Math.max(0, targetIndex - 50); i--) {
     const line = lines[i];
-    // Look for function label patterns
     const funcMatch = line.match(/;--\s*(\w+):|<(\w+)>:|^(\w+):$/);
     if (funcMatch) {
       functionName = funcMatch[1] || funcMatch[2] || funcMatch[3];
@@ -85,12 +69,10 @@ function findAddressContext(disassembly: string, targetAddress: string, contextL
   };
 }
 
-// Syntax highlight a disassembly line
 const HighlightedLine: FC<{ line: string; isTarget?: boolean }> = ({ line, isTarget }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   
-  // Colors for syntax highlighting
   const colors = {
     address: isDark ? '#6a9fb5' : '#0550ae',
     bytes: isDark ? '#555' : '#999',
@@ -100,12 +82,10 @@ const HighlightedLine: FC<{ line: string; isTarget?: boolean }> = ({ line, isTar
     comment: isDark ? '#5a5a5a' : '#a0a0a0',
   };
   
-  // Simple regex-based highlighting
   const parts: JSX.Element[] = [];
   let remaining = line;
   let key = 0;
   
-  // Match address
   const addrMatch = remaining.match(/^(\s*[│├└─]*\s*)(0x[0-9a-f]+)/i);
   if (addrMatch) {
     parts.push(<span key={key++}>{addrMatch[1]}</span>);
@@ -113,7 +93,6 @@ const HighlightedLine: FC<{ line: string; isTarget?: boolean }> = ({ line, isTar
     remaining = remaining.slice(addrMatch[0].length);
   }
   
-  // Match bytes (hex sequence)
   const bytesMatch = remaining.match(/^(\s+)([0-9a-f]{2,})/i);
   if (bytesMatch) {
     parts.push(<span key={key++}>{bytesMatch[1]}</span>);
@@ -121,7 +100,6 @@ const HighlightedLine: FC<{ line: string; isTarget?: boolean }> = ({ line, isTar
     remaining = remaining.slice(bytesMatch[0].length);
   }
   
-  // Match mnemonic
   const mnemonicMatch = remaining.match(/^(\s+)(\w+(?:\.\w+)?)/);
   if (mnemonicMatch) {
     parts.push(<span key={key++}>{mnemonicMatch[1]}</span>);
@@ -129,7 +107,6 @@ const HighlightedLine: FC<{ line: string; isTarget?: boolean }> = ({ line, isTar
     remaining = remaining.slice(mnemonicMatch[0].length);
   }
   
-  // Highlight operands
   if (remaining) {
     const tokens = remaining.split(/(\s+|,|\[|\])/);
     for (const token of tokens) {
@@ -175,7 +152,6 @@ export const CitedAddress: FC<CitedAddressProps> = ({
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   
-  // Compute citation from disassembly if not provided
   const citation = useMemo(() => {
     if (precomputedCitation) return precomputedCitation;
     if (!disassembly) return null;
@@ -195,7 +171,6 @@ export const CitedAddress: FC<CitedAddressProps> = ({
     setOpen(false);
   }, [address, onNavigate]);
   
-  // Determine which line is the target in context
   const targetLineIndex = useMemo(() => {
     if (!citation?.context_lines) return -1;
     const normalizedAddr = address.toLowerCase().replace(/^0x/, '');
@@ -255,7 +230,6 @@ export const CitedAddress: FC<CitedAddressProps> = ({
                 border: `1px solid ${isDark ? '#30363d' : '#d0d7de'}`,
               }}
             >
-              {/* Header */}
               <Box
                 sx={{
                   px: 1.5,
@@ -300,7 +274,6 @@ export const CitedAddress: FC<CitedAddressProps> = ({
                 )}
               </Box>
               
-              {/* Context code */}
               {citation?.context_lines && citation.context_lines.length > 0 && (
                 <Box
                   sx={{
@@ -325,7 +298,6 @@ export const CitedAddress: FC<CitedAddressProps> = ({
                 </Box>
               )}
               
-              {/* Footer hint */}
               <Box
                 sx={{
                   px: 1.5,

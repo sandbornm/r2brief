@@ -1,5 +1,3 @@
-"""Chat session persistence helpers."""
-
 from __future__ import annotations
 
 import json
@@ -11,12 +9,10 @@ from .models import AttachmentType, ChatMessage, ChatSession
 
 
 class ChatDAO:
-    """Manage persisted chat sessions and messages for analysis transcripts."""
 
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    # Session management -------------------------------------------------
     def get_or_create_session(
         self,
         binary_path: str,
@@ -113,21 +109,17 @@ class ChatDAO:
         return [self._row_to_session(row) for row in rows]
 
     def delete_session(self, session_id: str) -> bool:
-        """Delete a session and all its messages."""
         with self._db.connect() as conn:
-            # Delete messages first
             conn.execute(
                 "DELETE FROM chat_messages WHERE session_id = ?",
                 (session_id,),
             )
-            # Delete session
             result = conn.execute(
                 "DELETE FROM chat_sessions WHERE session_id = ?",
                 (session_id,),
             )
             return result.rowcount > 0
 
-    # Message management -------------------------------------------------
     def append_message(
         self,
         session_id: str,
@@ -183,7 +175,6 @@ class ChatDAO:
             ).fetchall()
         return [self._row_to_message(row) for row in rows]
 
-    # Internal helpers ---------------------------------------------------
     @staticmethod
     def _row_to_session(row: Any) -> ChatSession:
         session = ChatSession(

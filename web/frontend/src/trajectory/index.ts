@@ -1,6 +1,3 @@
-/**
- * Trajectory tracking module - exports for easy importing
- */
 export {
   createSnapshot,
   createTrajectory,

@@ -1,11 +1,6 @@
-/**
- * Simple result caching utilities for frontend performance.
- * Caches analysis results to avoid re-fetching when switching between sessions.
- */
-
 const CACHE_PREFIX = 'r2b-cache-';
-const MAX_CACHE_SIZE = 10; // Max number of sessions to cache
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes TTL
+const MAX_CACHE_SIZE = 10;
+const CACHE_TTL_MS = 30 * 60 * 1000;
 
 interface CacheEntry<T> {
   data: T;
@@ -17,9 +12,6 @@ interface CacheIndex {
   lastUpdated: number;
 }
 
-/**
- * Get the cache index (list of cached keys)
- */
 function getCacheIndex(): CacheIndex {
   try {
     const indexStr = sessionStorage.getItem(`${CACHE_PREFIX}index`);
@@ -32,9 +24,6 @@ function getCacheIndex(): CacheIndex {
   return { keys: [], lastUpdated: Date.now() };
 }
 
-/**
- * Update the cache index
- */
 function setCacheIndex(index: CacheIndex): void {
   try {
     sessionStorage.setItem(`${CACHE_PREFIX}index`, JSON.stringify(index));
@@ -43,9 +32,6 @@ function setCacheIndex(index: CacheIndex): void {
   }
 }
 
-/**
- * Evict oldest entries if cache is full
- */
 function evictIfNeeded(index: CacheIndex): void {
   while (index.keys.length >= MAX_CACHE_SIZE) {
     const oldestKey = index.keys.shift();
@@ -55,9 +41,6 @@ function evictIfNeeded(index: CacheIndex): void {
   }
 }
 
-/**
- * Get a cached value
- */
 export function getFromCache<T>(key: string): T | null {
   try {
     const entryStr = sessionStorage.getItem(`${CACHE_PREFIX}${key}`);
@@ -65,7 +48,6 @@ export function getFromCache<T>(key: string): T | null {
 
     const entry: CacheEntry<T> = JSON.parse(entryStr);
 
-    // Check TTL
     if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
       sessionStorage.removeItem(`${CACHE_PREFIX}${key}`);
       return null;
@@ -77,23 +59,17 @@ export function getFromCache<T>(key: string): T | null {
   }
 }
 
-/**
- * Set a cached value
- */
 export function setInCache<T>(key: string, data: T): void {
   try {
     const index = getCacheIndex();
 
-    // Remove key if it exists (to move it to end)
     const existingIndex = index.keys.indexOf(key);
     if (existingIndex >= 0) {
       index.keys.splice(existingIndex, 1);
     }
 
-    // Evict oldest if needed
     evictIfNeeded(index);
 
-    // Add new entry
     const entry: CacheEntry<T> = {
       data,
       timestamp: Date.now(),
@@ -108,9 +84,6 @@ export function setInCache<T>(key: string, data: T): void {
   }
 }
 
-/**
- * Remove a cached value
- */
 export function removeFromCache(key: string): void {
   try {
     sessionStorage.removeItem(`${CACHE_PREFIX}${key}`);
@@ -125,9 +98,6 @@ export function removeFromCache(key: string): void {
   }
 }
 
-/**
- * Clear all cached values
- */
 export function clearCache(): void {
   try {
     const index = getCacheIndex();
@@ -140,9 +110,6 @@ export function clearCache(): void {
   }
 }
 
-/**
- * Cache key generators
- */
 export const CacheKeys = {
   analysisResult: (sessionId: string) => `analysis-${sessionId}`,
   sessionMessages: (sessionId: string) => `messages-${sessionId}`,

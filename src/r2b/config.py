@@ -1,14 +1,3 @@
-"""Configuration loading and modelling.
-
-Configuration is loaded from:
-1. config/default_config.toml (shipped defaults)
-2. R2B_CONFIG env var (optional custom config path)
-3. Environment variables override specific settings:
-   - GHIDRA_INSTALL_DIR: Path to Ghidra installation
-   - ANTHROPIC_API_KEY / OPENAI_API_KEY / ZAI_API_KEY / GLM_API_KEY:
-     API keys (toml names the env var; never store the secret in the file)
-"""
-
 from __future__ import annotations
 
 import os
@@ -33,7 +22,6 @@ FALSE_ENV_VALUES = {"0", "false", "no", "off"}
 
 
 def _get_env(*names: str) -> str | None:
-    """Return the first configured environment variable from a small alias set."""
     for name in names:
         value = os.getenv(name)
         if value is not None:
@@ -42,7 +30,6 @@ def _get_env(*names: str) -> str | None:
 
 
 def _load_implicit_overlays() -> bool:
-    """Load ~/.config/r2b/config.toml and config/local.toml outside pytest."""
     if os.getenv("PYTEST_CURRENT_TEST"):
         return False
     parsed = _parse_env_bool(_get_env("R2B_IGNORE_LOCAL") or "")
@@ -63,14 +50,12 @@ def _parse_env_bool(value: str) -> bool | None:
 class LLMSettings(BaseModel):
     provider: str = "ollama"
     model: str = "gemma3:4b"
-    # Provider identity and wire protocol are separate. "auto" selects the
-    # provider's native/default transport.
     transport: str = "auto"
     api_key_env: str = ""
     fallback_provider: str | None = "openai"
     fallback_model: str | None = "gpt-5.6-luna"
     fallback_api_key_env: str | None = "OPENAI_API_KEY"
-    enable_fallback: bool = False  # Disabled by default - user enables if needed
+    enable_fallback: bool = False
     max_tokens: int = 8192
     temperature: float = 0.1
     base_url: str = "http://127.0.0.1:11434"
@@ -80,7 +65,6 @@ class LLMSettings(BaseModel):
 
 
 class ExtractSettings(BaseModel):
-    """Sandboxed unblob/binwalk3 → artifact DAG. Off on tiny ELF fixtures by default."""
 
     enable: bool = False
     extract_elf: bool = False
@@ -131,7 +115,6 @@ class UISettings(BaseModel):
 
 
 class WebSettings(BaseModel):
-    """Opt-in gates for web routes that can execute target-controlled code."""
 
     enable_script_execution: bool = False
     enable_native_execution: bool = False
@@ -190,11 +173,6 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
 
 def apply_lab_tool_path() -> list[Path]:
-    """Prepend lab RE tool bins to PATH (checksec, jefferson, ubireader).
-
-    Does not switch Python. r2b stays in its uv venv; those CLIs are
-    discovered via PATH. Override with R2B_TOOL_PATH=dir:dir.
-    """
     extra: list[Path] = []
     raw = _get_env("R2B_TOOL_PATH") or ""
     for part in raw.split(":"):
@@ -211,7 +189,6 @@ def apply_lab_tool_path() -> list[Path]:
         prepend.append(resolved)
     if prepend:
         current = os.environ.get("PATH", "")
-        # Append: r2b's uv .venv (angr, frida, r2pipe) stays first.
         os.environ["PATH"] = ":".join(([current] if current else []) + prepend)
     return [Path(item) for item in prepend]
 
@@ -227,21 +204,11 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_config(config_path: Path | None = None) -> AppConfig:
-    """Load configuration from defaults and optional overrides.
-    
-    Config sources (in order of precedence, later overrides earlier):
-    1. config/default_config.toml (project defaults)
-    2. ~/.config/r2b/config.toml (user overlay, if present)
-    3. config/local.toml (gitignored lab overlay, if present)
-    4. R2B_CONFIG env var or config_path argument
-    5. Environment variables (GHIDRA_INSTALL_DIR, API keys)
-    """
     load_dotenv()
     apply_lab_tool_path()
 
     data: dict[str, Any] = {}
     
-    # Load project defaults
     if DEFAULT_CONFIG_PATH.exists():
         data = _merge(data, _load_toml(DEFAULT_CONFIG_PATH))
 
@@ -251,7 +218,6 @@ def load_config(config_path: Path | None = None) -> AppConfig:
         if LOCAL_CONFIG_PATH.exists():
             data = _merge(data, _load_toml(LOCAL_CONFIG_PATH))
 
-    # Load custom config if specified via argument or R2B_CONFIG env var
     custom_config = config_path
     if custom_config is None:
         env_config = _get_env("R2B_CONFIG")
@@ -259,9 +225,6 @@ def load_config(config_path: Path | None = None) -> AppConfig:
             custom_config = Path(env_config).expanduser()
 
     if custom_config is not None:
-        # An explicitly requested config must exist — silently falling back to
-        # the default/local chain hides wrong-cwd mistakes (e.g. a relative
-        # --config under `uv run --directory`, which chdirs before launch).
         if not custom_config.exists():
             raise FileNotFoundError(
                 f"Config file not found: {custom_config} (resolved from cwd {Path.cwd()})"
@@ -270,7 +233,6 @@ def load_config(config_path: Path | None = None) -> AppConfig:
 
     config = AppConfig(raw=data)
 
-    # Re-bind nested models from merged dict to capture overrides
     if "llm" in data:
         config.llm = LLMSettings.model_validate(data["llm"])
     if "analysis" in data:
@@ -289,11 +251,9 @@ def load_config(config_path: Path | None = None) -> AppConfig:
         config.extract = ExtractSettings.model_validate(data["extract"])
     if "ghidra" in data:
         ghidra_data = dict(data["ghidra"])
-        # Handle empty string install_dir - treat as None so env var can apply
         if ghidra_data.get("install_dir") == "":
             ghidra_data["install_dir"] = None
         config.ghidra = GhidraSettings.model_validate(ghidra_data)
-    # Environment variable overrides (highest precedence)
     env_install_dir = os.getenv("GHIDRA_INSTALL_DIR")
     if env_install_dir:
         config.ghidra.install_dir = Path(env_install_dir).expanduser()

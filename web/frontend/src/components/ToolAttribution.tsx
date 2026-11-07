@@ -7,7 +7,6 @@ import { toolColors } from '../theme';
 import { getToolDescription, getToolDisplayName, getToolProduces, TOOL_ORDER } from '../toolCatalog';
 import type { ToolStatusInfo } from '../types';
 
-// Mapping from backend result keys to tool names
 const KEY_TO_TOOL: Record<string, string> = {
   autoprofile: 'autoprofile',
   radare2: 'radare2',
@@ -35,8 +34,8 @@ const KEY_TO_TOOL: Record<string, string> = {
 interface ToolAttributionProps {
   quickScan?: Record<string, unknown>;
   deepScan?: Record<string, unknown>;
-  toolAvailability?: Record<string, boolean>;  // Which tools were available during analysis
-  toolsInfo?: Record<string, ToolStatusInfo>;  // Detailed tool info from health endpoint
+  toolAvailability?: Record<string, boolean>;
+  toolsInfo?: Record<string, ToolStatusInfo>;
   compact?: boolean;
 }
 
@@ -50,7 +49,6 @@ const ToolAttribution: FC<ToolAttributionProps> = ({
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
-  // Detect which tools were used
   const toolsUsed = useMemo(() => {
     const used = new Set<string>();
 
@@ -67,25 +65,20 @@ const ToolAttribution: FC<ToolAttributionProps> = ({
     return used;
   }, [quickScan, deepScan]);
 
-  // Check tool availability - map from backend names to our tool names
   const getToolAvailable = (name: string): boolean | undefined => {
-    // Try exact match from toolAvailability first (from analysis result)
     if (name in toolAvailability) {
       return toolAvailability[name];
     }
-    // Then try toolsInfo from health endpoint
     if (name in toolsInfo) {
       return toolsInfo[name].available;
     }
-    // Handle special cases (libmagic vs identification)
     if (name === 'libmagic') {
       if ('libmagic' in toolAvailability) return toolAvailability['libmagic'];
       if ('libmagic' in toolsInfo) return toolsInfo['libmagic'].available;
     }
-    return undefined; // Unknown
+    return undefined;
   };
 
-  // Get install hint for a tool
   const getInstallHint = (name: string): string | undefined => {
     if (name in toolsInfo) {
       return toolsInfo[name].install_hint;
@@ -99,12 +92,10 @@ const ToolAttribution: FC<ToolAttributionProps> = ({
     return null;
   }
 
-  // Get color for a tool
   const getToolColor = (name: string): string => {
     return toolColors[name as keyof typeof toolColors] || theme.palette.grey[500];
   };
 
-  // Build tooltip content
   const getTooltipContent = (name: string, isUsed: boolean) => {
     const isAvailable = getToolAvailable(name);
     const installHint = getInstallHint(name);
@@ -170,7 +161,6 @@ const ToolAttribution: FC<ToolAttributionProps> = ({
   };
 
   if (compact) {
-    // Compact mode: inline badges
     return (
       <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" gap={0.5}>
         <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
@@ -201,7 +191,6 @@ const ToolAttribution: FC<ToolAttributionProps> = ({
     );
   }
 
-  // Full mode: card with all tools
   return (
     <Box
       sx={{
@@ -233,7 +222,6 @@ const ToolAttribution: FC<ToolAttributionProps> = ({
           const isAvailable = getToolAvailable(name);
           const color = getToolColor(name);
 
-          // Determine icon based on state
           let icon;
           if (isUsed) {
             icon = <CheckCircleIcon sx={{ fontSize: 14, color: `${color} !important` }} />;

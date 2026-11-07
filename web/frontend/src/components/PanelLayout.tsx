@@ -37,7 +37,6 @@ export default function PanelLayout({
 
   const visiblePanels = panels.filter((p) => activePanels.includes(p.id));
 
-  // Initialize widths when panels change
   useEffect(() => {
     if (visiblePanels.length === 0) {
       setWidths([]);
@@ -48,7 +47,6 @@ export default function PanelLayout({
     const totalMinWidth = visiblePanels.reduce((sum, p) => sum + (p.minWidth || 200), 0);
     const availableWidth = Math.max(containerWidth - (visiblePanels.length - 1) * 6, totalMinWidth);
 
-    // Distribute width equally or based on defaults
     const totalDefault = visiblePanels.reduce((sum, p) => sum + (p.defaultWidth || 1), 0);
     const newWidths = visiblePanels.map((p) => {
       const ratio = (p.defaultWidth || 1) / totalDefault;
@@ -82,7 +80,6 @@ export default function PanelLayout({
         const newLeftWidth = Math.max(startWidths[panelIndex] + delta, leftMinWidth);
         const newRightWidth = Math.max(startWidths[panelIndex + 1] - delta, rightMinWidth);
 
-        // Only apply if both are above minimum
         if (newLeftWidth >= leftMinWidth && newRightWidth >= rightMinWidth) {
           const newWidths = [...startWidths];
           newWidths[panelIndex] = newLeftWidth;
@@ -139,7 +136,6 @@ export default function PanelLayout({
     >
       {visiblePanels.map((panel, idx) => (
         <React.Fragment key={panel.id}>
-          {/* Panel */}
           <Box
             sx={{
               width: widths[idx] || 'auto',
@@ -155,7 +151,6 @@ export default function PanelLayout({
               flexGrow: idx === visiblePanels.length - 1 ? 1 : 0,
             }}
           >
-            {/* Panel header */}
             <Box
               sx={{
                 display: 'flex',
@@ -190,11 +185,9 @@ export default function PanelLayout({
               </Tooltip>
             </Box>
 
-            {/* Panel content */}
             <Box sx={{ flex: 1, overflow: 'auto' }}>{panel.content}</Box>
           </Box>
 
-          {/* Resize handle (between panels) */}
           {idx < visiblePanels.length - 1 && (
             <Box
               onMouseDown={(e) => handleMouseDown(e, idx)}
@@ -230,7 +223,6 @@ export default function PanelLayout({
   );
 }
 
-// Panel selector component for toggling panels
 interface PanelSelectorProps {
   panels: { id: string; title: string; icon?: React.ReactNode }[];
   activePanels: string[];

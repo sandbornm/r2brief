@@ -1,15 +1,3 @@
-"""Durable, tagged, per-binary analysis records.
-
-A record is content-addressed by SHA-256 and stored as a directory of
-JSON/Markdown files. Re-running analysis *merges* into the existing
-record instead of replacing it, so tool blobs, region commentary, and
-serialized CFGs stay revisitable and extensible.
-
-This is the backing store for "one binary, many passes." Chat sessions
-and analysis bundles remain views over a record; they are not the
-source of truth.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -48,7 +36,6 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 
 class AnalysisRecordStore:
-    """Filesystem store: ``<root>/records/<aa>/<sha256>/``."""
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root).expanduser()
@@ -741,7 +728,6 @@ def _unique(values: Iterable[Any]) -> list[Any]:
 
 
 def _write_json(path: Path, payload: Any) -> None:
-    """Atomic write: a crash mid-write must not tear the durable record."""
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
     tmp = path.with_name(f".{path.name}.tmp")

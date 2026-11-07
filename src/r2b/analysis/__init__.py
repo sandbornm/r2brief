@@ -1,5 +1,3 @@
-"""Core analysis orchestration package."""
-
 from .artifact_dag import DAG_SCHEMA_VERSION, build_artifact_dag, compact_dag
 from .graph import AnalysisGraph, AnalysisGraphEdge, AnalysisGraphNode, build_analysis_graph
 from .investigation_graph import (

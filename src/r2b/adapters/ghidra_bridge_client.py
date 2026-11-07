@@ -1,13 +1,3 @@
-"""Ghidra Bridge RPC client for interactive Ghidra analysis.
-
-This module provides a client wrapper for ghidra_bridge, enabling persistent
-RPC connections to a running Ghidra instance for richer reverse engineering
-data (decompilation, types, cross-references).
-
-The bridge server must be started externally in Ghidra's Script Manager by
-running ghidra_bridge_server_background.py.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -23,7 +13,6 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass(slots=True, frozen=True)
 class DecompiledFunction:
-    """Decompiled function data from Ghidra."""
 
     name: str
     address: int
@@ -36,33 +25,26 @@ class DecompiledFunction:
 
 @dataclass(slots=True, frozen=True)
 class GhidraTypeInfo:
-    """Type information from Ghidra's data type manager."""
 
     name: str
     category: str
     size: int
-    kind: str  # "struct", "enum", "typedef", "pointer", "array", "primitive"
+    kind: str
     members: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True, frozen=True)
 class CrossReference:
-    """Cross-reference information."""
 
     from_address: int
     to_address: int
-    ref_type: str  # "CALL", "DATA", "JUMP", etc.
+    ref_type: str
     from_function: str | None = None
     to_function: str | None = None
 
 
 @dataclass
 class GhidraBridgeClient:
-    """RPC client wrapper for ghidra_bridge.
-
-    This client manages connections to a Ghidra bridge server and provides
-    methods for extracting analysis data via RPC.
-    """
 
     host: str = "127.0.0.1"
     port: int = 13100
@@ -72,11 +54,6 @@ class GhidraBridgeClient:
     _connected: bool = field(default=False, repr=False)
 
     def connect(self) -> bool:
-        """Establish connection to the Ghidra bridge server.
-
-        Returns:
-            True if connection succeeded, False otherwise.
-        """
         if self._connected and self._bridge is not None:
             return True
 
@@ -101,13 +78,10 @@ class GhidraBridgeClient:
             return False
 
     def is_connected(self) -> bool:
-        """Check if the client is connected to the bridge server."""
         if not self._connected or self._bridge is None:
             return False
 
-        # Verify connection is still alive with a simple ping
         try:
-            # Use remote_import to verify connection
             self._bridge.remote_import("__main__")
             return True
         except Exception:
@@ -115,17 +89,11 @@ class GhidraBridgeClient:
             return False
 
     def disconnect(self) -> None:
-        """Disconnect from the Ghidra bridge server."""
         self._bridge = None
         self._connected = False
         _LOGGER.debug("Disconnected from Ghidra bridge")
 
     def get_current_program_name(self) -> str | None:
-        """Get the name of the currently loaded program in Ghidra.
-
-        Returns:
-            Program name if a program is loaded, None otherwise.
-        """
         if not self.is_connected() or self._bridge is None:
             return None
 
@@ -139,11 +107,6 @@ class GhidraBridgeClient:
             return None
 
     def get_current_program_path(self) -> str | None:
-        """Get the executable path of the currently loaded program.
-
-        Returns:
-            Executable path if available, None otherwise.
-        """
         if not self.is_connected() or self._bridge is None:
             return None
 
@@ -157,33 +120,16 @@ class GhidraBridgeClient:
             return None
 
     def is_binary_loaded(self, binary: Path) -> bool:
-        """Check if the specified binary is currently loaded in Ghidra.
-
-        Args:
-            binary: Path to the binary file.
-
-        Returns:
-            True if the binary is loaded, False otherwise.
-        """
         current_path = self.get_current_program_path()
         if not current_path:
             return False
 
-        # Compare resolved paths
         try:
             return Path(current_path).resolve() == binary.resolve()
         except Exception:
             return current_path == str(binary)
 
     def get_functions(self, limit: int = 200) -> list[dict[str, Any]]:
-        """Get list of functions from the current program.
-
-        Args:
-            limit: Maximum number of functions to return.
-
-        Returns:
-            List of function dictionaries with name, address, size, etc.
-        """
         if not self.is_connected() or self._bridge is None:
             return []
 
@@ -222,14 +168,6 @@ class GhidraBridgeClient:
             return []
 
     def decompile_function(self, address: int) -> DecompiledFunction | None:
-        """Decompile a single function at the given address.
-
-        Args:
-            address: Entry point address of the function.
-
-        Returns:
-            DecompiledFunction with decompiled C code, or None on failure.
-        """
         if not self.is_connected() or self._bridge is None:
             return None
 
@@ -240,7 +178,6 @@ class GhidraBridgeClient:
             if not currentProgram:
                 return None
 
-            # Import Ghidra classes
             DecompInterface = self._bridge.remote_import(
                 "ghidra.app.decompiler"
             ).DecompInterface
@@ -248,7 +185,6 @@ class GhidraBridgeClient:
                 "ghidra.util.task"
             ).ConsoleTaskMonitor
 
-            # Get function at address
             addr_factory = currentProgram.getAddressFactory()
             addr_obj = addr_factory.getAddress(hex(address))
             fm = currentProgram.getFunctionManager()
@@ -257,7 +193,6 @@ class GhidraBridgeClient:
             if not func:
                 return None
 
-            # Decompile
             decomp = DecompInterface()
             decomp.openProgram(currentProgram)
 
@@ -300,15 +235,6 @@ class GhidraBridgeClient:
     def batch_decompile(
         self, addresses: list[int], limit: int = 20
     ) -> list[DecompiledFunction]:
-        """Decompile multiple functions in batch.
-
-        Args:
-            addresses: List of function entry point addresses.
-            limit: Maximum number of functions to decompile.
-
-        Returns:
-            List of successfully decompiled functions.
-        """
         if not self.is_connected():
             return []
 
@@ -321,14 +247,6 @@ class GhidraBridgeClient:
         return results
 
     def get_types(self, limit: int = 100) -> list[GhidraTypeInfo]:
-        """Get data types from Ghidra's data type manager.
-
-        Args:
-            limit: Maximum number of types to return.
-
-        Returns:
-            List of GhidraTypeInfo objects.
-        """
         if not self.is_connected() or self._bridge is None:
             return []
 
@@ -339,7 +257,6 @@ class GhidraBridgeClient:
             if not currentProgram:
                 return []
 
-            # Import type classes
             data_module = self._bridge.remote_import("ghidra.program.model.data")
             Structure = data_module.Structure
             Enum = data_module.Enum
@@ -399,14 +316,6 @@ class GhidraBridgeClient:
             return []
 
     def get_xrefs_to(self, address: int) -> list[CrossReference]:
-        """Get cross-references TO the given address.
-
-        Args:
-            address: Target address to find references to.
-
-        Returns:
-            List of CrossReference objects pointing to this address.
-        """
         if not self.is_connected() or self._bridge is None:
             return []
 
@@ -445,14 +354,6 @@ class GhidraBridgeClient:
             return []
 
     def get_xrefs_from(self, address: int) -> list[CrossReference]:
-        """Get cross-references FROM the given address.
-
-        Args:
-            address: Source address to find references from.
-
-        Returns:
-            List of CrossReference objects originating from this address.
-        """
         if not self.is_connected() or self._bridge is None:
             return []
 
@@ -493,15 +394,6 @@ class GhidraBridgeClient:
     def get_xrefs_for_functions(
         self, addresses: list[int], limit: int = 10
     ) -> dict[str, dict[str, list[dict[str, Any]]]]:
-        """Get cross-references for multiple function addresses.
-
-        Args:
-            addresses: List of function addresses.
-            limit: Maximum number of addresses to process.
-
-        Returns:
-            Dict mapping hex addresses to {"to": [...], "from": [...]} xref lists.
-        """
         if not self.is_connected():
             return {}
 
@@ -534,14 +426,6 @@ class GhidraBridgeClient:
         return xref_map
 
     def get_strings(self, limit: int = 200) -> list[dict[str, Any]]:
-        """Get defined strings from the current program.
-
-        Args:
-            limit: Maximum number of strings to return.
-
-        Returns:
-            List of string dictionaries with address, value, and length.
-        """
         if not self.is_connected() or self._bridge is None:
             return []
 
@@ -584,19 +468,6 @@ class GhidraBridgeClient:
     def execute_script(
         self, script: str, timeout: int | None = None
     ) -> dict[str, Any]:
-        """Run a Python script in the Ghidra context via RPC bridge.
-
-        The script has access to:
-        - currentProgram: The loaded program
-        - All Ghidra API classes via imports
-
-        Args:
-            script: Python script to run.
-            timeout: Script timeout in seconds (uses default if None).
-
-        Returns:
-            Dict with 'output' (stdout capture) and 'error' (if failed).
-        """
         if not self.is_connected() or self._bridge is None:
             return {"output": "", "error": "Not connected to Ghidra bridge"}
 
@@ -613,21 +484,9 @@ class GhidraBridgeClient:
     def _execute_remote(
         self, script: str, timeout: int | None = None
     ) -> dict[str, Any]:
-        """Run script remotely via bridge.
-
-        Internal method that handles the actual RPC invocation.
-
-        Args:
-            script: Python script to run.
-            timeout: Script timeout in seconds (unused, for future use).
-
-        Returns:
-            Dict with 'output' (stdout capture) and 'error' (if failed).
-        """
         if self._bridge is None:
             return {"output": "", "error": "Bridge not initialized"}
 
-        # Wrap script to capture output
         wrapped_script = f"""
 import io
 import sys
@@ -645,11 +504,9 @@ _r2b_result = _r2b_output.getvalue()
 """
 
         try:
-            # Run the wrapped script
             namespace: dict[str, Any] = {"__name__": "__main__"}
             self._bridge.remote_exec(wrapped_script, namespace)
 
-            # Get the captured output
             output = namespace.get("_r2b_result", "")
             return {"output": output, "error": None}
 
@@ -658,15 +515,6 @@ _r2b_result = _r2b_output.getvalue()
 
     @staticmethod
     def _indent_script(script: str, indent: str = "    ") -> str:
-        """Indent a script for wrapping in try block.
-
-        Args:
-            script: The script to indent.
-            indent: The indentation string to use.
-
-        Returns:
-            The indented script.
-        """
         lines = script.split("\n")
         return "\n".join(indent + line for line in lines)
 

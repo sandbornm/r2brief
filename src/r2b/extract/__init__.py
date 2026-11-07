@@ -1,5 +1,3 @@
-"""Sandboxed firmware extractors (binwalk3, unblob)."""
-
 from __future__ import annotations
 
 from .binwalk3 import Binwalk3Extractor

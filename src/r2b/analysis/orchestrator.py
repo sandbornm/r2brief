@@ -1,5 +1,3 @@
-"""Analysis orchestration pipeline."""
-
 from __future__ import annotations
 
 import logging
@@ -58,7 +56,7 @@ class AnalysisResult:
     deep_scan: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     issues: list[str] = field(default_factory=list)
-    tool_availability: dict[str, bool] = field(default_factory=dict)  # Which tools were available
+    tool_availability: dict[str, bool] = field(default_factory=dict)
     tool_status: dict[str, dict[str, Any]] = field(default_factory=dict)
     evidence_coverage: dict[str, Any] = field(default_factory=dict)
     analysis_graph: dict[str, Any] = field(default_factory=dict)
@@ -66,7 +64,6 @@ class AnalysisResult:
 
 
 class AnalysisOrchestrator:
-    """Coordinate analysis adapters according to plan."""
 
     def __init__(
         self,
@@ -79,7 +76,6 @@ class AnalysisOrchestrator:
         self._trajectory_dao = trajectory_dao
 
         adapters: list[AnalyzerAdapter] = []
-        # AutoProfile runs first for quick characterization
         adapters.append(cast(AnalyzerAdapter, BinaryFormatAdapter()))
         adapters.append(cast(AnalyzerAdapter, AutoProfileAdapter()))
         adapters.append(cast(AnalyzerAdapter, FirmwareAdapter(
@@ -150,7 +146,6 @@ class AnalysisOrchestrator:
             self._ensure_elf(binary)
         result = AnalysisResult(binary=binary, plan=plan)
 
-        # Collect tool availability info for transparency
         for adapter in self._registry:
             try:
                 result.tool_availability[adapter.name] = adapter.is_available()
@@ -255,7 +250,7 @@ class AnalysisOrchestrator:
                 "adapter_completed",
                 {"stage": "quick", "adapter": "sniff", "payload": sniff},
             )
-        except Exception as exc:  # pragma: no cover - host tools missing
+        except Exception as exc:  # pragma: no cover
             result.notes.append(f"sniff failed: {exc}")
             result.tool_status["sniff"] = {
                 "status": "failed",
@@ -297,9 +292,6 @@ class AnalysisOrchestrator:
 
         subject_is_code = self._is_code_subject(binary, result)
 
-        # AutoProfile shells out to file/strings/readelf/checksec/binwalk and
-        # overlaps the format-specific path below. Keep it as an exhaustive
-        # executable enrichment, not a tax on every intake.
         if autoprofile and subject_is_code and result.plan.profile == "exhaustive":
             start = time.perf_counter()
             try:
@@ -400,7 +392,7 @@ class AnalysisOrchestrator:
                     "adapter_completed",
                     {"stage": "quick", "adapter": "runtime", "payload": runtime_info},
                 )
-            except Exception as exc:  # pragma: no cover - best effort
+            except Exception as exc:  # pragma: no cover
                 result.notes.append(f"runtime requirements failed: {exc}")
                 result.tool_status["runtime"] = {
                     "status": "failed",
@@ -559,7 +551,6 @@ class AnalysisOrchestrator:
                 )
                 update_tool_status(adapter_name, None, error=str(exc), duration_ms=duration_ms)
             except Exception as exc:
-                # One crashed adapter must not abort the remaining deep stage.
                 duration_ms = int((time.perf_counter() - start) * 1000)
                 result.issues.append(f"{adapter_name} crashed: {type(exc).__name__}: {exc}")
                 _LOGGER.exception("Deep adapter %s crashed", adapter_name)
@@ -571,7 +562,6 @@ class AnalysisOrchestrator:
         ghidra = self._registry.get("ghidra") if self._has_adapter("ghidra") else None
         capstone = self._registry.get("capstone") if self._has_adapter("capstone") else None
         dwarf = self._registry.get("dwarf") if self._has_adapter("dwarf") else None
-        # Only get angr adapter if run_angr is enabled in plan
         run_angr = plan.run_angr if plan else self._config.analysis.enable_angr
         angr = self._registry.get("angr") if self._has_adapter("angr") and run_angr else None
         frida = (
@@ -632,7 +622,6 @@ class AnalysisOrchestrator:
                 )
                 update_tool_status("radare2", None, error=str(exc), duration_ms=duration_ms)
             except Exception as exc:
-                # Tree population or status bookkeeping must not kill the run.
                 duration_ms = int((time.perf_counter() - start) * 1000)
                 result.issues.append(f"radare2 crashed: {type(exc).__name__}: {exc}")
                 _LOGGER.exception("radare2 deep stage crashed")
@@ -1160,7 +1149,7 @@ class AnalysisOrchestrator:
             return
         try:
             callback(event, payload or {})
-        except Exception:  # pragma: no cover - defensive hook
+        except Exception:  # pragma: no cover
             _LOGGER.exception("Progress callback failed for event %s", event)
 
     def _ensure_elf(self, binary: Path) -> None:
@@ -1169,7 +1158,7 @@ class AnalysisOrchestrator:
                 magic = handle.read(4)
         except FileNotFoundError as exc:
             raise FileNotFoundError(f"Binary not found: {binary}") from exc
-        except OSError as exc:  # pragma: no cover - unexpected IO error
+        except OSError as exc:  # pragma: no cover
             raise RuntimeError(f"Unable to read binary {binary}: {exc}") from exc
 
         if magic != b"\x7fELF":

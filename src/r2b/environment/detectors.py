@@ -1,5 +1,3 @@
-"""Environment detection and verification."""
-
 from __future__ import annotations
 
 import os
@@ -101,12 +99,6 @@ def _check_binwalk3() -> ToolCheck:
 
 
 def _probe_version(command: str) -> str | None:
-    """Return a one-line version, skipping usage banners.
-
-    radare2 6.x treats ``--version`` as an unknown flag and prints the
-    usage banner with exit 0. Prefer ``-v`` / ``-V`` when ``--version``
-    is not a version string. Capture stdout even on a non-zero exit.
-    """
     for flag in ("--version", "-version", "-v", "-V"):
         text = _command_output(command, flag)
         if not text:
@@ -154,7 +146,6 @@ def _looks_like_usage(line: str) -> bool:
 
 
 def _r2_decompiler_checks() -> list[ToolCheck]:
-    """Probe loaded r2 decompilers. r2ghidra is available only if `LD` lists it."""
     r2 = shutil.which("r2") or shutil.which("radare2")
     if not r2:
         return []
@@ -191,7 +182,6 @@ def _check_python_module(module: str) -> ToolCheck:
     except ModuleNotFoundError:
         return ToolCheck(name=module, command=module, available=False)
     except Exception as exc:
-        # Handle import errors from broken dependencies (e.g. angr + msgspec mismatch)
         return ToolCheck(
             name=module,
             command=module,
@@ -240,7 +230,6 @@ def detect_environment(config: AppConfig) -> EnvironmentReport:
     ):
         report.tools.append(_check_python_module("anthropic"))
 
-    # Optional runtime tools helpful for replay/debugging.
     report.tools.append(_check_command("file", _COMMANDS["file"]))
     report.tools.append(_check_command("binwalk", _COMMANDS["binwalk"]))
     report.tools.append(_check_binwalk3())

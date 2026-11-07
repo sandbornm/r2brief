@@ -1,5 +1,3 @@
-"""Utility helpers."""
-
 from .progress import progress_bar
 from .serialization import to_json
 

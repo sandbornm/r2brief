@@ -1,5 +1,3 @@
-"""Unit tests for Ghidra bridge client and adapter."""
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -16,10 +14,8 @@ from r2b.environment.ghidra import GhidraDetection
 
 
 class TestGhidraBridgeClient:
-    """Tests for GhidraBridgeClient."""
 
     def test_init_defaults(self):
-        """Test client initializes with default values."""
         client = GhidraBridgeClient()
 
         assert client.host == "127.0.0.1"
@@ -29,7 +25,6 @@ class TestGhidraBridgeClient:
         assert client._connected is False
 
     def test_init_custom_values(self):
-        """Test client initializes with custom values."""
         client = GhidraBridgeClient(
             host="192.168.1.100",
             port=13200,
@@ -41,7 +36,6 @@ class TestGhidraBridgeClient:
         assert client.timeout == 60
 
     def test_connect_returns_false_when_module_not_available(self):
-        """Test connect returns False when ghidra_bridge module not installed."""
         client = GhidraBridgeClient()
 
         with patch("builtins.__import__", side_effect=ImportError("ghidra_bridge")):
@@ -51,7 +45,6 @@ class TestGhidraBridgeClient:
         assert client._connected is False
 
     def test_connect_returns_false_on_connection_error(self):
-        """Test connect returns False when connection fails."""
         client = GhidraBridgeClient()
 
         mock_bridge_module = MagicMock()
@@ -64,7 +57,6 @@ class TestGhidraBridgeClient:
         assert client._connected is False
 
     def test_connect_success(self):
-        """Test connect returns True on successful connection."""
         client = GhidraBridgeClient()
 
         mock_bridge = MagicMock()
@@ -79,12 +71,10 @@ class TestGhidraBridgeClient:
         assert client._bridge is mock_bridge
 
     def test_is_connected_false_when_not_connected(self):
-        """Test is_connected returns False when not connected."""
         client = GhidraBridgeClient()
         assert client.is_connected() is False
 
     def test_is_connected_false_when_ping_fails(self):
-        """Test is_connected returns False when ping fails."""
         client = GhidraBridgeClient()
         client._connected = True
         mock_bridge = MagicMock()
@@ -97,7 +87,6 @@ class TestGhidraBridgeClient:
         assert client._connected is False
 
     def test_disconnect(self):
-        """Test disconnect clears connection state."""
         client = GhidraBridgeClient()
         client._connected = True
         client._bridge = MagicMock()
@@ -108,66 +97,53 @@ class TestGhidraBridgeClient:
         assert client._connected is False
 
     def test_get_current_program_name_returns_none_when_not_connected(self):
-        """Test get_current_program_name returns None when not connected."""
         client = GhidraBridgeClient()
         assert client.get_current_program_name() is None
 
     def test_get_current_program_path_returns_none_when_not_connected(self):
-        """Test get_current_program_path returns None when not connected."""
         client = GhidraBridgeClient()
         assert client.get_current_program_path() is None
 
     def test_is_binary_loaded_returns_false_when_not_connected(self):
-        """Test is_binary_loaded returns False when not connected."""
         client = GhidraBridgeClient()
         assert client.is_binary_loaded(Path("/test/binary")) is False
 
     def test_get_functions_returns_empty_when_not_connected(self):
-        """Test get_functions returns empty list when not connected."""
         client = GhidraBridgeClient()
         assert client.get_functions() == []
 
     def test_decompile_function_returns_none_when_not_connected(self):
-        """Test decompile_function returns None when not connected."""
         client = GhidraBridgeClient()
         assert client.decompile_function(0x1000) is None
 
     def test_batch_decompile_returns_empty_when_not_connected(self):
-        """Test batch_decompile returns empty list when not connected."""
         client = GhidraBridgeClient()
         assert client.batch_decompile([0x1000, 0x2000]) == []
 
     def test_get_types_returns_empty_when_not_connected(self):
-        """Test get_types returns empty list when not connected."""
         client = GhidraBridgeClient()
         assert client.get_types() == []
 
     def test_get_xrefs_to_returns_empty_when_not_connected(self):
-        """Test get_xrefs_to returns empty list when not connected."""
         client = GhidraBridgeClient()
         assert client.get_xrefs_to(0x1000) == []
 
     def test_get_xrefs_from_returns_empty_when_not_connected(self):
-        """Test get_xrefs_from returns empty list when not connected."""
         client = GhidraBridgeClient()
         assert client.get_xrefs_from(0x1000) == []
 
     def test_get_xrefs_for_functions_returns_empty_when_not_connected(self):
-        """Test get_xrefs_for_functions returns empty dict when not connected."""
         client = GhidraBridgeClient()
         assert client.get_xrefs_for_functions([0x1000]) == {}
 
     def test_get_strings_returns_empty_when_not_connected(self):
-        """Test get_strings returns empty list when not connected."""
         client = GhidraBridgeClient()
         assert client.get_strings() == []
 
 
 class TestDecompiledFunction:
-    """Tests for DecompiledFunction dataclass."""
 
     def test_create_decompiled_function(self):
-        """Test creating a DecompiledFunction."""
         func = DecompiledFunction(
             name="main",
             address=0x401000,
@@ -187,7 +163,6 @@ class TestDecompiledFunction:
         assert func.calling_convention == "cdecl"
 
     def test_decompiled_function_is_frozen(self):
-        """Test DecompiledFunction is immutable."""
         func = DecompiledFunction(
             name="test",
             address=0x1000,
@@ -202,10 +177,8 @@ class TestDecompiledFunction:
 
 
 class TestGhidraTypeInfo:
-    """Tests for GhidraTypeInfo dataclass."""
 
     def test_create_struct_type(self):
-        """Test creating a struct type."""
         stype = GhidraTypeInfo(
             name="MyStruct",
             category="/user",
@@ -223,7 +196,6 @@ class TestGhidraTypeInfo:
         assert len(stype.members) == 2
 
     def test_create_enum_type(self):
-        """Test creating an enum type."""
         etype = GhidraTypeInfo(
             name="Color",
             category="/user",
@@ -242,10 +214,8 @@ class TestGhidraTypeInfo:
 
 
 class TestCrossReference:
-    """Tests for CrossReference dataclass."""
 
     def test_create_cross_reference(self):
-        """Test creating a CrossReference."""
         xref = CrossReference(
             from_address=0x401000,
             to_address=0x402000,
@@ -262,10 +232,8 @@ class TestCrossReference:
 
 
 class TestGhidraAdapter:
-    """Tests for GhidraAdapter with bridge mode."""
 
     def test_adapter_uses_headless_when_bridge_disabled(self):
-        """Test adapter uses headless mode when bridge is disabled."""
         from r2b.adapters.ghidra import GhidraAdapter
 
         detection = GhidraDetection(
@@ -286,7 +254,6 @@ class TestGhidraAdapter:
         assert adapter._use_bridge_mode() is False
 
     def test_adapter_reports_available_when_headless_ready(self):
-        """Test adapter is available when headless is ready."""
         from r2b.adapters.ghidra import GhidraAdapter
 
         detection = GhidraDetection(
@@ -307,7 +274,6 @@ class TestGhidraAdapter:
         assert adapter.is_available() is True
 
     def test_adapter_quick_scan_returns_mode(self):
-        """Test quick_scan returns the analysis mode."""
         from r2b.adapters.ghidra import GhidraAdapter
 
         detection = GhidraDetection(
@@ -331,7 +297,6 @@ class TestGhidraAdapter:
         assert result["status"] == "queued"
 
     def test_adapter_close_disconnects_bridge(self):
-        """Test close() disconnects the bridge client."""
         from r2b.adapters.ghidra import GhidraAdapter
 
         detection = GhidraDetection(
@@ -349,7 +314,6 @@ class TestGhidraAdapter:
             settings=settings,
         )
 
-        # Mock a connected bridge client
         mock_client = MagicMock()
         adapter._bridge_client = mock_client
 
@@ -360,10 +324,8 @@ class TestGhidraAdapter:
 
 
 class TestGhidraDetectionBridge:
-    """Tests for GhidraDetection bridge fields."""
 
     def test_bridge_ready_false_when_not_available(self):
-        """Test bridge_ready is False when bridge not available."""
         detection = GhidraDetection(
             install_dir=Path("/opt/ghidra"),
             headless_path=Path("/opt/ghidra/support/analyzeHeadless"),
@@ -375,7 +337,6 @@ class TestGhidraDetectionBridge:
         assert detection.bridge_ready is False
 
     def test_bridge_ready_false_when_not_connected(self):
-        """Test bridge_ready is False when bridge not connected."""
         detection = GhidraDetection(
             install_dir=Path("/opt/ghidra"),
             headless_path=Path("/opt/ghidra/support/analyzeHeadless"),
@@ -387,7 +348,6 @@ class TestGhidraDetectionBridge:
         assert detection.bridge_ready is False
 
     def test_bridge_ready_true_when_connected(self):
-        """Test bridge_ready is True when bridge available and connected."""
         detection = GhidraDetection(
             install_dir=Path("/opt/ghidra"),
             headless_path=Path("/opt/ghidra/support/analyzeHeadless"),
@@ -402,10 +362,8 @@ class TestGhidraDetectionBridge:
 
 
 class TestGhidraBridgeScriptExecution:
-    """Test script execution via bridge."""
 
     def test_execute_script_not_connected(self):
-        """Execute script when not connected returns error."""
         client = GhidraBridgeClient()
         result = client.execute_script("print('test')")
 
@@ -413,14 +371,12 @@ class TestGhidraBridgeScriptExecution:
         assert "not connected" in result["error"].lower()
 
     def test_execute_script_success(self):
-        """Execute script returns output on success."""
         client = GhidraBridgeClient()
         client._connected = True
 
         mock_bridge = MagicMock()
         client._bridge = mock_bridge
 
-        # Mock _execute_remote to return a successful result
         with patch.object(
             client,
             "_execute_remote",
@@ -432,14 +388,12 @@ class TestGhidraBridgeScriptExecution:
         assert "Found 3 functions" in result["output"]
 
     def test_execute_script_timeout(self):
-        """Execute script handles timeout."""
         client = GhidraBridgeClient(timeout=1)
         client._connected = True
 
         mock_bridge = MagicMock()
         client._bridge = mock_bridge
 
-        # Mock timeout
         with patch.object(
             client, "_execute_remote", side_effect=TimeoutError("Script execution timed out")
         ):
@@ -449,14 +403,12 @@ class TestGhidraBridgeScriptExecution:
         assert "timeout" in result["error"].lower()
 
     def test_execute_script_handles_generic_exception(self):
-        """Execute script handles generic exceptions gracefully."""
         client = GhidraBridgeClient()
         client._connected = True
 
         mock_bridge = MagicMock()
         client._bridge = mock_bridge
 
-        # Mock a generic exception
         with patch.object(
             client, "_execute_remote", side_effect=RuntimeError("Remote execution failed")
         ):
@@ -466,19 +418,15 @@ class TestGhidraBridgeScriptExecution:
         assert "Remote execution failed" in result["error"]
 
     def test_execute_remote_wraps_script_for_stdout_capture(self):
-        """_execute_remote wraps script to capture stdout."""
         client = GhidraBridgeClient()
         client._connected = True
 
         mock_bridge = MagicMock()
 
-        # Capture the namespace to verify the wrapper executed
         captured_namespace = {}
 
         def mock_remote_exec(script, namespace):
-            # Simulate the wrapped script execution
             captured_namespace.update(namespace)
-            # The wrapper script sets _r2b_result
             namespace["_r2b_result"] = "Hello from Ghidra"
 
         mock_bridge.remote_exec = mock_remote_exec
@@ -490,7 +438,6 @@ class TestGhidraBridgeScriptExecution:
         assert result["output"] == "Hello from Ghidra"
 
     def test_execute_remote_returns_error_when_bridge_none(self):
-        """_execute_remote returns error when bridge is None."""
         client = GhidraBridgeClient()
         client._connected = True
         client._bridge = None
@@ -501,7 +448,6 @@ class TestGhidraBridgeScriptExecution:
         assert "not initialized" in result["error"].lower()
 
     def test_execute_remote_handles_remote_exec_exception(self):
-        """_execute_remote catches exceptions from remote_exec."""
         client = GhidraBridgeClient()
         client._connected = True
 
@@ -515,14 +461,12 @@ class TestGhidraBridgeScriptExecution:
         assert "RPC error" in result["error"]
 
     def test_indent_script_helper(self):
-        """Test _indent_script helper indents correctly."""
         script = "line1\nline2\nline3"
         result = GhidraBridgeClient._indent_script(script)
 
         assert result == "    line1\n    line2\n    line3"
 
     def test_indent_script_custom_indent(self):
-        """Test _indent_script with custom indent."""
         script = "a\nb"
         result = GhidraBridgeClient._indent_script(script, indent="  ")
 

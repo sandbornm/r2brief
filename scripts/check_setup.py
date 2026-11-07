@@ -7,7 +7,6 @@ import argparse
 import sys
 from pathlib import Path
 
-# Ensure local src/ is on sys.path when running via `uv run scripts/...`
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
@@ -46,7 +45,7 @@ def main() -> int:
 
     try:
         create_app(args.config)
-    except Exception as exc:  # pragma: no cover - defensive check
+    except Exception as exc:  # pragma: no cover
         errors.append(f"Failed to bootstrap web application: {exc}")
 
     print("r2b setup check\n==================")

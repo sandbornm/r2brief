@@ -1,10 +1,3 @@
-"""Graph-shaped analysis model for unifying tool evidence.
-
-The graph is intentionally compact: raw adapter payloads remain available in
-``quick_scan`` and ``deep_scan``, while this model gives the UI and chat layer a
-stable JSON contract for cross-tool relationships.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -22,7 +15,6 @@ _MAX_PROPERTY_STRING = 4000
 
 
 class AnalysisGraphNode(BaseModel):
-    """A normalized evidence node emitted by one or more analysis tools."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -35,7 +27,6 @@ class AnalysisGraphNode(BaseModel):
 
 
 class AnalysisGraphEdge(BaseModel):
-    """A directed relationship between graph nodes."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -49,7 +40,6 @@ class AnalysisGraphEdge(BaseModel):
 
 
 class AnalysisGraph(BaseModel):
-    """Stable JSON graph contract for a single binary analysis."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -223,7 +213,6 @@ class _GraphAccumulator:
 
 
 def build_analysis_graph(result: Any) -> dict[str, Any]:
-    """Build a compact, validated JSON graph from an ``AnalysisResult``."""
 
     binary = Path(getattr(result, "binary"))
     acc = _GraphAccumulator(binary)
@@ -360,9 +349,6 @@ def _add_firmware_quick(acc: _GraphAccumulator, firmware: Any) -> None:
     )
     acc.add_edge("has_inventory", acc.binary_node_id, profile_id, source_tool="firmware")
 
-    # Executable subjects already contribute native string/import nodes. Keep
-    # firmware categorization in the adapter payload, but do not duplicate it
-    # in the graph with a second, more interpretive label.
     firmware_signals = [] if is_executable else _as_list(
         (firmware.get("string_signals") or {}).get("top_signals")
     )[:100]
@@ -458,10 +444,6 @@ def _add_artifact_dag(acc: _GraphAccumulator, dag: Any) -> None:
     for node in _as_list(dag.get("nodes"))[:400]:
         if not isinstance(node, dict):
             continue
-        # The artifact DAG carries compact code/string evidence for portable
-        # records. The evidence map already receives those nodes from their
-        # native adapters, so only merge byte/container topology here. This
-        # avoids showing one import or string twice under different IDs.
         if str(node.get("kind") or "file") in {
             "function",
             "import",

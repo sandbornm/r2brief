@@ -21,7 +21,6 @@ interface AutoProfilePanelProps {
   compact?: boolean;
 }
 
-// Security feature display config
 const SECURITY_FEATURES: Array<{
   key: keyof SecurityFeatures;
   label: string;
@@ -206,7 +205,6 @@ const AutoProfilePanel: FC<AutoProfilePanelProps> = ({ data, compact = false }) 
 
   const profile = data.profile;
 
-  // Compact mode: show only security badges and risk level
   if (compact) {
     const severity = profile.risk_level === 'high' ? 'error' : profile.risk_level === 'medium' ? 'warning' : 'success';
     return (
@@ -242,11 +240,9 @@ const AutoProfilePanel: FC<AutoProfilePanelProps> = ({ data, compact = false }) 
 
   return (
     <Box sx={{ p: 1.5, height: '100%', overflow: 'auto' }}>
-      {/* Risk Alert */}
       <RiskAlert level={profile.risk_level} factors={profile.risk_factors} />
 
       <Grid container spacing={1.5}>
-        {/* Binary Info */}
         <Grid item xs={12} md={6}>
           <Paper variant="outlined" sx={{ p: 1.5, height: '100%' }}>
             <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -273,7 +269,6 @@ const AutoProfilePanel: FC<AutoProfilePanelProps> = ({ data, compact = false }) 
           </Paper>
         </Grid>
 
-        {/* Security Features */}
         <Grid item xs={12} md={6}>
           <Paper variant="outlined" sx={{ p: 1.5, height: '100%' }}>
             <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -300,7 +295,6 @@ const AutoProfilePanel: FC<AutoProfilePanelProps> = ({ data, compact = false }) 
           </Paper>
         </Grid>
 
-        {/* Embedded Files */}
         {profile.embedded_files.length > 0 && (
           <Grid item xs={12}>
             <Paper variant="outlined" sx={{ p: 1.5 }}>
@@ -340,7 +334,6 @@ const AutoProfilePanel: FC<AutoProfilePanelProps> = ({ data, compact = false }) 
           </Grid>
         )}
 
-        {/* Interesting Strings */}
         <Grid item xs={12}>
           <Paper variant="outlined" sx={{ p: 1.5 }}>
             <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 1, display: 'block' }}>

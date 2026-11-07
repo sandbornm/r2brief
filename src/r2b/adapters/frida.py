@@ -1,5 +1,3 @@
-"""Frida integration for dynamic instrumentation."""
-
 from __future__ import annotations
 
 import logging
@@ -23,9 +21,9 @@ class FridaAdapter:
     def _frida() -> types.ModuleType:
         try:
             import frida
-        except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        except ModuleNotFoundError as exc:  # pragma: no cover
             raise AdapterUnavailable("frida module is not installed") from exc
-        return frida  # type: ignore[no-any-return]
+        return frida
 
     def is_available(self) -> bool:
         return self._module_available()
@@ -39,11 +37,9 @@ class FridaAdapter:
         return True
 
     def quick_scan(self, binary: Path, **kwargs: Any) -> dict[str, object]:
-        """Quick scan: check if binary is executable and get basic info."""
         if not self.is_available():
             raise AdapterUnavailable("frida is not available on this system")
 
-        # For quick scan, just verify the binary is accessible
         if not binary.exists():
             return {"error": f"Binary not found: {binary}"}
 
@@ -57,19 +53,16 @@ class FridaAdapter:
         }
 
     def deep_scan(self, binary: Path, *, resource_tree: object | None = None, **kwargs: Any) -> dict[str, object]:
-        """Deep scan: spawn binary and perform basic dynamic analysis."""
         if not self.is_available():
             raise AdapterUnavailable("frida is not available on this system")
 
         frida = self._frida()
 
         try:
-            # Spawn the binary (suspended) so we can instrument it
             _LOGGER.info("Spawning binary for Frida instrumentation: %s", binary)
             pid = frida.spawn(str(binary))
             session = frida.attach(pid)
 
-            # Basic instrumentation script to enumerate modules and exports
             script_code = """
             // Enumerate loaded modules
             var modules = Process.enumerateModules();
@@ -141,13 +134,10 @@ class FridaAdapter:
             script.on("message", on_message)
             script.load()
 
-            # Resume the process so the script can execute
             frida.resume(pid)
 
-            # Wait a bit for the script to complete
             time.sleep(2)
 
-            # Kill the process
             try:
                 session.detach()
                 frida.kill(pid)

@@ -1,12 +1,3 @@
-"""Ground AI claims in artifact IDs, addresses, xrefs, and the establishing tool.
-
-Cite tag (one per claim bullet)::
-
-    [tool=radare2 addr=0x7a8 artifact=n:function:ab12 xref=puts]
-
-Model-invented names and types are proposals, not facts.
-"""
-
 from __future__ import annotations
 
 import re
@@ -49,7 +40,6 @@ def parse_cites(text: str) -> list[dict[str, str]]:
 
 
 def parse_cited_claims(text: str) -> dict[str, Any]:
-    """Split an LLM answer into cited claims vs uncited / proposed-only lines."""
     claims: list[dict[str, Any]] = []
     uncited: list[str] = []
     proposed: list[str] = []
@@ -79,7 +69,6 @@ def parse_cited_claims(text: str) -> dict[str, Any]:
 
 
 def proposed_annotations_from_claims(cited: dict[str, Any]) -> list[dict[str, Any]]:
-    """Rows for proposed_annotations: invented names/types only, still cited."""
     rows: list[dict[str, Any]] = []
     for claim in cited.get("claims") or []:
         if not isinstance(claim, dict) or not claim.get("proposed"):
@@ -112,7 +101,6 @@ def evidence_block(
     artifact: str | None = None,
     xref: str | None = None,
 ) -> str:
-    """Compact list of IDs the model is allowed to cite for this region."""
     lines = ["Cite each claim as [tool=NAME addr=0x… artifact=ID xref=SYM]. Invented names/types: prefix proposed."]
     cite = format_cite(tool=tool or "unknown", addr=addr, artifact=artifact, xref=xref)
     lines.append(f"Evidence: {cite}")

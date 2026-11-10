@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,6 +40,8 @@ def _satisfies_atom(version: str, atom: str) -> bool:
     if atom.startswith("~"):
         base = _parse(atom[1:])
         return base <= current < (base[0], base[1] + 1, 0)
+    if atom == "*":
+        return True
     return current == _parse(atom)
 
 
@@ -148,30 +151,34 @@ def test_node_22_declarations_agree() -> None:
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
     dockerfile = (ROOT / "Dockerfile.frontend").read_text()
     setup = (ROOT / "scripts" / "setup_frontend.sh").read_text()
+    checker = (ROOT / "scripts" / "frontend_node_range.mjs").read_text()
     nvmrc = (FRONTEND / ".nvmrc").read_text().strip()
     pkg = _pkg()
     engines = pkg["engines"]["node"]
+    jsdom_engines = _locked("jsdom")["engines"]["node"]
 
-    ci_nodes = re.findall(r'node-version:\s*"([^"]+)"', ci)
-    release_nodes = re.findall(r'node-version:\s*"([^"]+)"', release)
     image = re.search(r"^FROM node:(\S+)", dockerfile, re.M)
     assert image is not None
     image_node = image.group(1).split("-", 1)[0]
+    range_match = re.search(r"FRONTEND_NODE_RANGE = '([^']+)'", checker)
+    assert range_match is not None
+    node_range = range_match.group(1)
 
-    assert ci_nodes == ["22"]
-    assert release_nodes == ["22"]
-    assert image_node == "22"
-    assert nvmrc == "22"
+    assert re.fullmatch(r"22\.\d+\.\d+", nvmrc)
+    assert nvmrc == image_node
+    assert "node-version-file: web/frontend/.nvmrc" in ci
+    assert "node-version-file: web/frontend/.nvmrc" in release
+    assert "node-version:" not in ci.replace("node-version-file:", "")
+    assert "node-version:" not in release.replace("node-version-file:", "")
     assert "npm run typecheck" in ci
     assert "npm run typecheck" in release
+    assert node_range == jsdom_engines
+    assert satisfies(nvmrc, engines)
+    assert satisfies(nvmrc, node_range)
+    assert "frontend_node_range.mjs" in setup
+    assert "major > 22" not in setup
 
-    floor = _parse(engines.removeprefix(">="))
-    assert engines == f">={floor[0]}.{floor[1]}.{floor[2]}"
-    assert floor >= (22, 12, 0)
-    assert f">={floor[0]}.{floor[1]}.{floor[2]}" in setup
-    assert "Node.js 20" not in setup
-    assert "process.versions.node" in setup
-
+    floor = _parse(nvmrc)
     direct = {**pkg["dependencies"], **pkg["devDependencies"]}
     for name in direct:
         spec = _lock()["packages"].get(f"node_modules/{name}", {}).get("engines", {}).get("node")
@@ -180,6 +187,31 @@ def test_node_22_declarations_agree() -> None:
         required = minimum_node_22(spec)
         assert required is not None, f"{name} engines {spec} reject Node 22"
         assert floor >= required, (name, spec, floor, required)
+
+
+def test_frontend_node_range_boundaries() -> None:
+    script = ROOT / "scripts" / "frontend_node_range.mjs"
+    cases = {
+        "22.22.1": False,
+        "22.22.2": True,
+        "22.23.4": True,
+        "23.0.0": False,
+        "24.14.9": False,
+        "24.15.0": True,
+        "24.99.0": True,
+        "25.0.0": False,
+        "25.9.1": False,
+        "26.0.0": True,
+        "27.1.0": True,
+    }
+    for version, accepted in cases.items():
+        result = subprocess.run(
+            ["node", str(script), version],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert (result.returncode == 0) is accepted, (version, result.returncode, result.stderr)
 
 
 def test_typescript_stays_inside_typescript_eslint_peer() -> None:
@@ -208,7 +240,15 @@ def test_eslint_flat_config_replaces_eslintrc() -> None:
     assert not (FRONTEND / ".eslintrc.js").exists()
     assert "eslint-plugin-react" not in _pkg()["devDependencies"]
     assert "@eslint/js" in _pkg()["devDependencies"]
-    assert _parse(_locked("eslint")["version"])[0] == 10
+    assert "eslint-plugin-react-hooks" in _pkg()["devDependencies"]
+    assert "eslint-plugin-react-x" in _pkg()["devDependencies"]
+    assert "react-hooks/rules-of-hooks" in config
+    assert "react-x/no-missing-key" in config
+    eslint_version = _locked("eslint")["version"]
+    assert _parse(eslint_version)[0] == 10
+    for plugin in ("eslint-plugin-react-hooks", "eslint-plugin-react-x"):
+        peer = _locked(plugin)["peerDependencies"]["eslint"]
+        assert satisfies(eslint_version, peer), (plugin, peer)
     assert _parse(_locked("@eslint/js")["version"])[0] == 10
     env = (FRONTEND / "src" / "vite-env.d.ts").read_text()
     assert "vite/client" in env
@@ -228,11 +268,17 @@ def test_mui_stays_on_v5_with_react_19_peers() -> None:
 def test_vite_unwraps_prebundled_mui_icon_defaults() -> None:
     config = (FRONTEND / "vite.config.ts").read_text()
     helper = (FRONTEND / "src" / "muiIconInterop.ts").read_text()
+    rewrite = (FRONTEND / "muiIconRewrite.ts").read_text()
     assert "mui-icon-default-interop" in config
-    assert "rewriteMuiIconDefaultImports" in config
+    assert "rewriteMuiIconImports" in config
+    assert "isAppSourceModule" in config
+    assert "path.sep" not in config
     assert "exclude: ['@mui/icons-material']" not in config
     assert "function muiIconComponent" in helper
-    assert "imported.default" in helper
+    assert "imported.default" in helper or "current.default" in helper
+    assert "isNamedImports" in rewrite
+    assert "isNamespaceImport" in rewrite
+    assert "replace(/\\\\/g, '/')" in rewrite
 
 
 def test_dependabot_majors_that_resolve_are_locked() -> None:

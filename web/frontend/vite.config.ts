@@ -2,28 +2,26 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import { rewriteMuiIconDefaultImports } from './src/muiIconInterop.ts';
+import { isAppSourceModule, rewriteMuiIconImports } from './muiIconRewrite.ts';
 
 const muiIconHelper = fileURLToPath(new URL('./src/muiIconInterop.ts', import.meta.url));
 
 // The dev prebundle serves @mui/icons-material defaults as { default: Icon }.
+// needsInterop does not unwrap that default when the importer is ESM.
 function muiIconDefaultInterop() {
   return {
     name: 'mui-icon-default-interop',
     enforce: 'pre' as const,
     transform(code: string, id: string) {
+      if (!isAppSourceModule(id) || !code.includes('@mui/icons-material')) {
+        return null;
+      }
       const filename = id.split('?', 1)[0];
-      if (!filename.includes(`${path.sep}src${path.sep}`) || filename.includes(`${path.sep}node_modules${path.sep}`)) {
-        return null;
-      }
-      if (!code.includes('@mui/icons-material/')) {
-        return null;
-      }
       let helperSpecifier = path.relative(path.dirname(filename), muiIconHelper).replace(/\\/g, '/').replace(/\.ts$/, '');
       if (!helperSpecifier.startsWith('.')) {
         helperSpecifier = `./${helperSpecifier}`;
       }
-      const next = rewriteMuiIconDefaultImports(code, helperSpecifier);
+      const next = rewriteMuiIconImports(code, helperSpecifier);
       if (next === code) {
         return null;
       }

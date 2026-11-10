@@ -2,7 +2,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SelectAllIcon from '@mui/icons-material/SelectAll';
 import { alpha, Box, Button, IconButton, Popover, Stack, TextField, Tooltip, Typography, useTheme } from '@mui/material';
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FC, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 
 import type { AssemblyAnnotation } from '../types';
 
@@ -557,7 +557,7 @@ const InstructionLine: FC<InstructionLineProps> = ({ parsed, arch, annotation })
   const highlightOperands = useCallback((operands: string) => {
     if (!operands) return null;
     
-    const parts: JSX.Element[] = [];
+    const parts: ReactElement[] = [];
     let key = 0;
     
     // Split by common delimiters while preserving them

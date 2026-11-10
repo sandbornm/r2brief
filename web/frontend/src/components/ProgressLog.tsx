@@ -19,7 +19,7 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import SearchIcon from '@mui/icons-material/Search';
 import MemoryIcon from '@mui/icons-material/Memory';
 import CodeIcon from '@mui/icons-material/Code';
-import { FC, memo, useMemo } from 'react';
+import { FC, memo, useMemo, type ReactElement } from 'react';
 import type { ProgressEventEntry } from '../types';
 
 // Pulse animation for active items (defined outside component to avoid recreation)
@@ -49,7 +49,7 @@ const STAGE_MESSAGES: Record<string, { active: string; done: string }> = {
   },
 };
 
-const ADAPTER_MESSAGES: Record<string, { active: string; done: string; icon: JSX.Element }> = {
+const ADAPTER_MESSAGES: Record<string, { active: string; done: string; icon: ReactElement }> = {
   libmagic: {
     active: "Sniffing file magic bytes — what are you, little binary?",
     done: "File type identified",
@@ -123,7 +123,7 @@ const LogEntry: FC<{ entry: ProgressEventEntry; isLatest: boolean }> = memo(({ e
   }, [data.command, data.payload]);
 
   // Get message and icon
-  let message = '';
+  let message: string;
   let icon = <PlayCircleIcon sx={{ fontSize: 18 }} />;
 
   if (event === 'job_started') {

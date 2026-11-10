@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ResultViewer from '../components/ResultViewer';
 import type { AnalysisResultPayload } from '../types';
@@ -168,7 +168,11 @@ describe('ResultViewer', () => {
           headers: { 'Content-Type': 'application/json' },
         }));
       }
-      return Promise.resolve(new Response(new Blob(['zip-data'], { type: 'application/zip' }), { status: 200 }));
+      // jsdom 30's Blob has no stream(), which Node's Response constructor requires.
+      return Promise.resolve(new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/zip' },
+      }));
     });
     const createObjectURL = vi.fn(() => 'blob:archive');
     const revokeObjectURL = vi.fn();
@@ -179,7 +183,9 @@ describe('ResultViewer', () => {
     await user.click(screen.getByRole('button', { name: /archive/i }));
 
     expect(fetchMock).toHaveBeenCalledWith('/api/chats/session-1/bundle?format=zip');
-    expect(createObjectURL).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalled();
+    });
 
     vi.unstubAllGlobals();
   });

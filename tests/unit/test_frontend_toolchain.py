@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "web" / "frontend"
@@ -305,7 +308,38 @@ def test_frontend_npm_jobs_use_nvmrc() -> None:
     assert covered == {("ci.yml", "frontend"), ("ci.yml", "package"), ("release.yml", "release")}
 
 
+def _step_runs_node_range_test(step: str) -> bool:
+    script = _run_script(step)
+    if re.search(r"\bpytest\b", script) is None:
+        return False
+    return any(
+        token in script
+        for token in ("tests/unit", "test_frontend_toolchain", "test_frontend_node_range_boundaries")
+    )
+
+
+def test_node_range_pytest_jobs_use_nvmrc() -> None:
+    workflows = {
+        "ci.yml": ROOT / ".github" / "workflows" / "ci.yml",
+        "release.yml": ROOT / ".github" / "workflows" / "release.yml",
+    }
+    covered: set[tuple[str, str]] = set()
+    for workflow, path in workflows.items():
+        for name, job in _workflow_jobs(path.read_text()).items():
+            steps = _job_steps(job)
+            pytest_at = [index for index, step in enumerate(steps) if _step_runs_node_range_test(step)]
+            if not pytest_at:
+                continue
+            covered.add((workflow, name))
+            setup_at = [index for index, step in enumerate(steps) if _step_uses_nvmrc(step)]
+            assert setup_at, f"{workflow} job {name} runs the node-range pytest without setup-node"
+            assert min(setup_at) < min(pytest_at), f"{workflow} job {name} sets up Node after pytest"
+    assert covered == {("ci.yml", "backend"), ("release.yml", "release")}
+
+
 def test_frontend_node_range_boundaries() -> None:
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
     script = ROOT / "scripts" / "frontend_node_range.mjs"
     cases = {
         "22.22.1": False,

@@ -173,8 +173,12 @@ def test_node_22_declarations_agree() -> None:
     assert "npm run typecheck" in ci
     assert "npm run typecheck" in release
     assert node_range == jsdom_engines
+    assert engines == node_range
+    assert _lock()["packages"][""]["engines"]["node"] == node_range
     assert satisfies(nvmrc, engines)
     assert satisfies(nvmrc, node_range)
+    for rejected in ("23.0.0", "24.14.9", "25.0.0"):
+        assert not satisfies(rejected, engines)
     assert "frontend_node_range.mjs" in setup
     assert "major > 22" not in setup
 

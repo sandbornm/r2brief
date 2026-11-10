@@ -149,7 +149,6 @@ def test_node_range_helper_matches_known_engines() -> None:
 def test_node_22_declarations_agree() -> None:
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
-    dockerfile = (ROOT / "Dockerfile.frontend").read_text()
     setup = (ROOT / "scripts" / "setup_frontend.sh").read_text()
     checker = (ROOT / "scripts" / "frontend_node_range.mjs").read_text()
     nvmrc = (FRONTEND / ".nvmrc").read_text().strip()
@@ -157,15 +156,25 @@ def test_node_22_declarations_agree() -> None:
     engines = pkg["engines"]["node"]
     jsdom_engines = _locked("jsdom")["engines"]["node"]
 
-    image = re.search(r"^FROM node:(\S+)", dockerfile, re.M)
-    assert image is not None
-    image_node = image.group(1).split("-", 1)[0]
+    frontend_images: dict[str, list[str]] = {}
+    for path in sorted(ROOT.glob("Dockerfile*")):
+        text = path.read_text()
+        if "web/frontend" not in text or "npm " not in text:
+            continue
+        images = re.findall(r"^FROM node:(\S+)", text, re.M)
+        assert images, f"{path.name} installs the frontend without a Node image"
+        frontend_images[path.name] = images
+    assert set(frontend_images) == {"Dockerfile.frontend", "Dockerfile.backend"}
+    for name, images in frontend_images.items():
+        for image in images:
+            assert image.split("-", 1)[0] == nvmrc, (name, image)
+            assert not image.startswith("20"), (name, image)
+
     range_match = re.search(r"FRONTEND_NODE_RANGE = '([^']+)'", checker)
     assert range_match is not None
     node_range = range_match.group(1)
 
     assert re.fullmatch(r"22\.\d+\.\d+", nvmrc)
-    assert nvmrc == image_node
     assert "node-version-file: web/frontend/.nvmrc" in ci
     assert "node-version-file: web/frontend/.nvmrc" in release
     assert "node-version:" not in ci.replace("node-version-file:", "")

@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createElement } from 'react';
@@ -9,14 +9,33 @@ import { muiIconComponent } from './src/muiIconInterop';
 
 const root = process.cwd();
 
-function newestOptimizedSettingsIcon(): string {
+function iconDepSpecifier(code: string): string | undefined {
+  const direct = code.match(/import\s+__muiIcon_SettingsIcon\s+from\s+["']([^"']+)["']/)?.[1];
+  if (direct) {
+    return direct;
+  }
+  const alias = code.match(/const __muiIcon_SettingsIcon = ([A-Za-z0-9_$]+)/)?.[1];
+  if (!alias) {
+    return undefined;
+  }
+  return code.match(new RegExp(`import ${alias} from ["']([^"']+)["']`))?.[1];
+}
+
+function materializedDep(specifier: string, base: string): string {
+  const url = new URL(specifier, base);
+  const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '');
+  const direct = path.join(root, relative);
+  if (existsSync(direct)) {
+    return direct;
+  }
+  const baseName = path.basename(relative);
   const found: string[] = [];
   const walk = (current: string) => {
     for (const name of readdirSync(current)) {
       const full = path.join(current, name);
       if (statSync(full).isDirectory()) {
         walk(full);
-      } else if (name === '@mui_icons-material_Settings.js') {
+      } else if (name === baseName) {
         found.push(full);
       }
     }
@@ -24,7 +43,7 @@ function newestOptimizedSettingsIcon(): string {
   walk(path.join(root, 'node_modules/.vite'));
   const newest = found.sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs)[0];
   if (!newest) {
-    throw new Error('Vite did not prebundle @mui/icons-material/Settings');
+    throw new Error(`Vite did not materialize the imported icon module ${baseName}`);
   }
   return newest;
 }
@@ -40,17 +59,16 @@ describe('mui icon dev pipeline', () => {
     try {
       await server.listen();
       const transformed = await server.transformRequest('/src/__tests__/fixtures/IconProbe.tsx');
-      expect(transformed?.code).toContain('muiIconComponent(__muiIcon_SettingsIcon)');
-      expect(transformed?.code).toContain('/@mui_icons-material_Settings.js');
-
-      const depPath = transformed?.code.match(/"(\/node_modules\/\.vite\/deps\/@mui_icons-material_Settings\.js[^"]*)"/)?.[1];
-      expect(depPath).toBeTruthy();
+      const transformedCode = transformed?.code ?? '';
+      expect(transformedCode).toContain('muiIconComponent(__muiIcon_SettingsIcon)');
+      const depSpecifier = iconDepSpecifier(transformedCode);
+      expect(depSpecifier).toBeTruthy();
       const base = server.resolvedUrls?.local?.[0];
       expect(base).toBeTruthy();
-      const depResponse = await fetch(new URL(depPath!, base));
+      const depResponse = await fetch(new URL(depSpecifier!, base));
       expect(depResponse.status).toBe(200);
       expect(await depResponse.text()).toContain('export default');
-      const optimized = (await import(pathToFileURL(newestOptimizedSettingsIcon()).href)) as {
+      const optimized = (await import(pathToFileURL(materializedDep(depSpecifier!, base!)).href)) as {
         default: unknown;
       };
       expect(typeof optimized.default).not.toBe('function');

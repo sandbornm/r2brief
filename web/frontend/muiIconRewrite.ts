@@ -1,6 +1,11 @@
 import ts from 'typescript';
 
 const HELPER = 'muiIconComponent';
+const NAMESPACE_HELPER = 'muiIconNamespace';
+
+function isIconBarrel(specifier: string): boolean {
+  return specifier === '@mui/icons-material';
+}
 
 export function isAppSourceModule(id: string): boolean {
   const filename = id.split('?', 1)[0].replace(/\\/g, '/');
@@ -20,6 +25,7 @@ export function rewriteMuiIconImports(code: string, helperSpecifier: string): st
   const chunks: string[] = [];
   let cursor = 0;
   let rewrote = false;
+  const helpers = new Set<string>();
 
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !statement.importClause || statement.importClause.isTypeOnly) {
@@ -57,17 +63,25 @@ export function rewriteMuiIconImports(code: string, helperSpecifier: string): st
       const raw = rawBinding(defaultLocal);
       bindings.push(raw);
       consts.push(`const ${defaultLocal} = ${HELPER}(${raw});`);
+      helpers.add(HELPER);
     }
     if (namespace) {
       const raw = rawBinding(namespace);
       bindings.push(`* as ${raw}`);
-      consts.push(`const ${namespace} = ${HELPER}(${raw});`);
+      if (isIconBarrel(specifier)) {
+        consts.push(`const ${namespace} = ${NAMESPACE_HELPER}(${raw});`);
+        helpers.add(NAMESPACE_HELPER);
+      } else {
+        consts.push(`const ${namespace} = ${HELPER}(${raw});`);
+        helpers.add(HELPER);
+      }
     }
     const namedParts = [
       ...valueNamed.map((element) => {
         const imported = (element.propertyName ?? element.name).text;
         const raw = rawBinding(element.name.text);
         consts.push(`const ${element.name.text} = ${HELPER}(${raw});`);
+        helpers.add(HELPER);
         return `${imported} as ${raw}`;
       }),
       ...typeNamed.map((element) => {
@@ -98,7 +112,8 @@ export function rewriteMuiIconImports(code: string, helperSpecifier: string): st
   }
   chunks.push(code.slice(cursor));
   const next = chunks.join('');
-  const helperImport = `import { ${HELPER} } from ${JSON.stringify(helperSpecifier)};\n`;
+  const helperNames = [HELPER, NAMESPACE_HELPER].filter((name) => helpers.has(name));
+  const helperImport = `import { ${helperNames.join(', ')} } from ${JSON.stringify(helperSpecifier)};\n`;
   if (next.includes(helperImport)) {
     return next;
   }

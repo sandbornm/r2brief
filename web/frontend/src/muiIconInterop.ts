@@ -24,3 +24,16 @@ export function muiIconComponent(imported: unknown): unknown {
   }
   return current;
 }
+
+/** Barrel `import * as Icons` keeps every named icon; each property is unwrapped. */
+export function muiIconNamespace<T extends object>(imported: T): T {
+  return new Proxy(imported, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (property === '__esModule' || typeof property === 'symbol') {
+        return value;
+      }
+      return muiIconComponent(value);
+    },
+  });
+}

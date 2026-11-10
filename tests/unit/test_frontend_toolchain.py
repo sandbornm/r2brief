@@ -202,6 +202,109 @@ def test_node_22_declarations_agree() -> None:
         assert floor >= required, (name, spec, floor, required)
 
 
+def _workflow_jobs(text: str) -> dict[str, str]:
+    lines = text.splitlines()
+    start = lines.index("jobs:")
+    jobs: dict[str, str] = {}
+    name: str | None = None
+    buf: list[str] = []
+    for line in lines[start + 1 :]:
+        if line and not line.startswith(" "):
+            break
+        if re.fullmatch(r"  [A-Za-z0-9_-]+:", line):
+            if name is not None:
+                jobs[name] = "\n".join(buf)
+            name = line.strip()[:-1]
+            buf = []
+            continue
+        if name is not None:
+            buf.append(line)
+    if name is not None:
+        jobs[name] = "\n".join(buf)
+    return jobs
+
+
+def _job_steps(job: str) -> list[str]:
+    steps: list[str] = []
+    current: list[str] | None = None
+    in_steps = False
+    for line in job.splitlines():
+        if re.fullmatch(r"    steps:", line):
+            in_steps = True
+            continue
+        if not in_steps:
+            continue
+        if re.fullmatch(r"    [A-Za-z0-9_-]+:", line):
+            break
+        if line.startswith("      - "):
+            if current is not None:
+                steps.append("\n".join(current))
+            current = [line]
+            continue
+        if current is not None:
+            current.append(line)
+    if current is not None:
+        steps.append("\n".join(current))
+    return steps
+
+
+def _script_installs_frontend(relative: str) -> bool:
+    path = ROOT / relative
+    if not path.is_file():
+        return False
+    text = path.read_text()
+    return "web/frontend" in text and re.search(r"\bnpm\s+", text) is not None
+
+
+def _run_script(step: str) -> str:
+    block = re.search(r"(?m)^[ ]*run:[ ]*\|[ ]*$", step)
+    if block:
+        return step[block.end() :]
+    inline = re.search(r"(?m)^[ ]*run:[ ]*(\S.*?)\s*$", step)
+    return inline.group(1) if inline else ""
+
+
+def _step_runs_frontend_npm(step: str, job_wd: str | None) -> bool:
+    script = _run_script(step)
+    if not script:
+        return False
+    for relative in re.findall(r"(?:\./)?(scripts/[\w./-]+\.sh)", script):
+        if _script_installs_frontend(relative):
+            return True
+    wd_match = re.search(r"working-directory:\s*(\S+)", step)
+    wd = wd_match.group(1) if wd_match else job_wd
+    runs_npm = re.search(r"(?m)^\s*npm\s+", script) is not None
+    return runs_npm and (wd == "web/frontend" or "web/frontend" in script)
+
+
+def _step_uses_nvmrc(step: str) -> bool:
+    return "actions/setup-node@" in step and "node-version-file: web/frontend/.nvmrc" in step
+
+
+def test_frontend_npm_jobs_use_nvmrc() -> None:
+    """SKIP_FRONTEND does not skip npm: package_release.sh always builds web/frontend."""
+    workflows = {
+        "ci.yml": ROOT / ".github" / "workflows" / "ci.yml",
+        "release.yml": ROOT / ".github" / "workflows" / "release.yml",
+    }
+    covered: set[tuple[str, str]] = set()
+    for workflow, path in workflows.items():
+        for name, job in _workflow_jobs(path.read_text()).items():
+            header = job.split("steps:", 1)[0]
+            wd_match = re.search(r"working-directory:\s*(\S+)", header)
+            job_wd = wd_match.group(1) if wd_match else None
+            steps = _job_steps(job)
+            npm_at = [index for index, step in enumerate(steps) if _step_runs_frontend_npm(step, job_wd)]
+            if not npm_at:
+                continue
+            covered.add((workflow, name))
+            setup_at = [index for index, step in enumerate(steps) if _step_uses_nvmrc(step)]
+            assert setup_at, f"{workflow} job {name} runs frontend npm without setup-node"
+            assert min(setup_at) < min(npm_at), f"{workflow} job {name} sets up Node after npm"
+
+    assert covered == {("ci.yml", "frontend"), ("ci.yml", "package"), ("release.yml", "release")}
+
+
 def test_frontend_node_range_boundaries() -> None:
     script = ROOT / "scripts" / "frontend_node_range.mjs"
     cases = {

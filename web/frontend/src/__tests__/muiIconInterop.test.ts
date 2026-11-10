@@ -1,6 +1,8 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { isAppSourceModule, rewriteMuiIconImports } from '../../muiIconRewrite';
-import { muiIconComponent } from '../muiIconInterop';
+import { muiIconComponent, muiIconNamespace } from '../muiIconInterop';
 
 describe('mui icon dev interop', () => {
   it('keeps a component function and a forwardRef', () => {
@@ -42,6 +44,30 @@ describe('mui icon dev interop', () => {
     expect(next).toContain('const mention = "import Skip from \'@mui/icons-material/Skip\';";');
     expect(next.match(/import \{ muiIconComponent \}/g)).toHaveLength(1);
     expect(rewriteMuiIconImports(next, '../muiIconInterop')).toBe(next);
+  });
+
+  it('keeps Icons.Settings on a barrel namespace import', () => {
+    const source = "import * as Icons from '@mui/icons-material';\nexport const Icon = Icons.Settings;\n";
+    const next = rewriteMuiIconImports(source, '../muiIconInterop');
+
+    expect(next).toContain('import { muiIconNamespace } from "../muiIconInterop";');
+    expect(next).toContain("import * as __muiIcon_Icons from '@mui/icons-material';");
+    expect(next).toContain('const Icons = muiIconNamespace(__muiIcon_Icons);');
+    expect(next).not.toContain('muiIconComponent(__muiIcon_Icons)');
+
+    function Settings() {
+      return createElement('svg', { id: 'settings' });
+    }
+    function Other() {
+      return createElement('svg', { id: 'other' });
+    }
+    const wrapped = { __esModule: true, default: Settings };
+    const Icons = muiIconNamespace({ Settings: wrapped, default: Other });
+
+    expect(Icons.Settings).toBe(Settings);
+    const SettingsIcon = Icons.Settings as unknown as typeof Settings;
+    expect(renderToStaticMarkup(createElement(SettingsIcon))).toContain('id="settings"');
+    expect(muiIconComponent({ Settings: wrapped, default: Other })).toBe(Other);
   });
 
   it('treats Windows and POSIX source paths the same', () => {

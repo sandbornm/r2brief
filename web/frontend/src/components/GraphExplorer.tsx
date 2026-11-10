@@ -253,7 +253,7 @@ const GraphExplorer: FC<GraphExplorerProps> = memo(function GraphExplorer({
       };
       setGraphs(merged);
       setInCache(CacheKeys.graphs(sessionId), merged);
-    } catch (error) {
+    } catch {
       const cached = getFromCache<SessionGraphsResponse>(CacheKeys.graphs(sessionId));
       if (cached) {
         setGraphs(cached);

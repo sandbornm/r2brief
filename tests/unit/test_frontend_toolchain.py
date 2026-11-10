@@ -153,6 +153,7 @@ def test_node_22_declarations_agree() -> None:
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
     setup = (ROOT / "scripts" / "setup_frontend.sh").read_text()
+    launcher = (ROOT / "scripts" / "run_frontend.sh").read_text()
     checker = (ROOT / "scripts" / "frontend_node_range.mjs").read_text()
     nvmrc = (FRONTEND / ".nvmrc").read_text().strip()
     pkg = _pkg()
@@ -193,6 +194,12 @@ def test_node_22_declarations_agree() -> None:
         assert not satisfies(rejected, engines)
     assert "frontend_node_range.mjs" in setup
     assert "major > 22" not in setup
+    missing_node = "Install Node.js ^22.22.2 || ^24.15.0 || >=26.0.0."
+    assert missing_node in setup
+    assert missing_node in launcher
+    checker_at = launcher.index("frontend_node_range.mjs")
+    assert checker_at < launcher.index("npm ci")
+    assert checker_at < launcher.index("npm run dev")
 
     floor = _parse(nvmrc)
     direct = {**pkg["dependencies"], **pkg["devDependencies"]}

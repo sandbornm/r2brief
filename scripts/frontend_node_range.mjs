@@ -53,6 +53,10 @@ function satisfiesAtom(version, atom) {
 }
 
 export function nodeSatisfies(version, rangeSpec = FRONTEND_NODE_RANGE) {
+  // npm semver ignores a prerelease unless a comparator names that same tuple.
+  if (String(version).trim().replace(/^v/, '').includes('-')) {
+    return false;
+  }
   return rangeSpec.split('||').some((alternative) => {
     const atoms = alternative.trim().split(/\s+/).filter(Boolean);
     return atoms.length > 0 && atoms.every((atom) => satisfiesAtom(version, atom));

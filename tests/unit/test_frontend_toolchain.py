@@ -344,6 +344,8 @@ def test_frontend_node_range_boundaries() -> None:
     cases = {
         "22.22.1": False,
         "22.22.2": True,
+        "22.22.2-rc.1": False,
+        "22.22.3": True,
         "22.23.4": True,
         "23.0.0": False,
         "24.14.9": False,
@@ -352,6 +354,7 @@ def test_frontend_node_range_boundaries() -> None:
         "25.0.0": False,
         "25.9.1": False,
         "26.0.0": True,
+        "26.0.0-rc.1": False,
         "27.1.0": True,
     }
     for version, accepted in cases.items():

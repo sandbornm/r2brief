@@ -252,6 +252,15 @@ def _bwrap_argv(
         resolved = extra.resolve()
         if resolved.exists():
             cmd.extend(["--ro-bind", str(resolved), str(resolved)])
+    # An absolute extractor outside the system roots (e.g. a Homebrew prefix)
+    # and its sibling helpers must be visible inside the sandbox, read-only.
+    if argv and Path(argv[0]).is_absolute():
+        tool_dir = Path(argv[0]).parent.resolve()
+        system_roots = ("/usr", "/bin", "/lib", "/lib64", "/sbin")
+        if tool_dir.is_dir() and not any(
+            tool_dir == Path(root) or Path(root) in tool_dir.parents for root in system_roots
+        ):
+            cmd.extend(["--ro-bind", str(tool_dir), str(tool_dir)])
     cmd.extend(
         [
             "--ro-bind",

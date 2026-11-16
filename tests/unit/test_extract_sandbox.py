@@ -95,3 +95,37 @@ def test_sandbox_stops_extractor_that_crosses_live_file_cap(
     assert result.returncode == 125
     assert any("live output limit" in note for note in result.notes)
     assert len([path for path in result.output_dir.rglob("*") if path.is_file()]) <= 2
+
+
+def test_bwrap_argv_binds_absolute_tool_directory_read_only(tmp_path: Path) -> None:
+    from r2b.extract.sandbox import _bwrap_argv
+
+    tool_dir = tmp_path / "prefix" / "bin"
+    tool_dir.mkdir(parents=True)
+    tool = tool_dir / "extractor"
+    tool.write_text("#!/bin/sh\n", encoding="utf-8")
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    argv = _bwrap_argv("bwrap", [str(tool)], input_file=subject, output_dir=out, extra_ro_binds=None)
+
+    resolved = str(tool_dir.resolve())
+    triples = list(zip(argv, argv[1:], argv[2:]))
+    assert ("--ro-bind", resolved, resolved) in triples
+    assert ("--bind", resolved, resolved) not in triples
+    assert argv.index("--tmpfs") < argv.index(resolved)
+
+
+def test_bwrap_argv_does_not_rebind_system_tool_directory(tmp_path: Path) -> None:
+    from r2b.extract.sandbox import _bwrap_argv
+
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    argv = _bwrap_argv("bwrap", ["/bin/sh"], input_file=subject, output_dir=out, extra_ro_binds=None)
+
+    assert argv.count("/bin") <= 2

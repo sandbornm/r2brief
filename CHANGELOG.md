@@ -5,6 +5,13 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- `r2b brief` on a stripped Rust ARM ELF adds a `rust` object
+  (`rustc_version`, `rustc_commit`, `user_crates`, `user_main`,
+  `entry_chain`, `functions`) and ranks user functions, with real
+  addresses, above entry and imports. Recovery is static. It follows
+  the `lang_start` pointer or the Cortex-M reset trampoline, reads panic
+  `Location` paths, and an in-tree demangler. Non-Rust binaries are
+  unchanged. `handoff.decompile_addrs` is still not a decompile queue.
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

@@ -11,6 +11,29 @@
     "binary": { "type": "string" },
     "subject": { "type": "object" },
     "summary": { "type": "string" },
+    "rust": {
+      "type": "object",
+      "description": "Present for Rust binaries. Static triage only; no model.",
+      "additionalProperties": true,
+      "properties": {
+        "is_rust": { "type": "boolean" },
+        "rustc_version": { "type": ["string", "null"] },
+        "rustc_commit": { "type": ["string", "null"] },
+        "user_crates": { "type": "array", "items": { "type": "string" } },
+        "user_main": { "type": ["string", "null"] },
+        "entry_chain": { "type": "array", "items": { "type": "string" } },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "addr": { "type": ["string", "null"] },
+              "role": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
     "overall_ask": { "type": "string" },
     "next_steps": {
       "type": "array",

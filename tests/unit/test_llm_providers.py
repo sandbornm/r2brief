@@ -134,11 +134,11 @@ def test_legacy_sdk_passes_temperature_keyword(monkeypatch):
         monkeypatch,
         Messages,
         api_version="2023-06-01",
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         temperature=0.4,
     )
     result = client.generate([{"role": "user", "content": "summarize"}])
-    assert result.model == "claude-opus-4-5"
+    assert result.model == "claude-sonnet-4-6"
     assert calls[0]["temperature"] == 0.4
     assert "extra_body" not in calls[0]
 
@@ -169,7 +169,7 @@ def test_api_2026_10_21_rejects_sampling_fields(monkeypatch):
             calls.append(params)
             return _message(params["model"])
 
-    for model in ("claude-opus-4-5", "claude-haiku-5-5", "claude-mythos-5"):
+    for model in ("claude-sonnet-4-6", "claude-haiku-5-5", "claude-mythos-5"):
         calls.clear()
         client = _claude(monkeypatch, Messages, model=model, temperature=0.2)
         result = client.generate([{"role": "user", "content": "summarize"}])
@@ -191,7 +191,7 @@ def test_anthropic_1_uses_extra_body_only_for_pre_claude_5(monkeypatch):
         monkeypatch,
         Messages,
         api_version="2023-06-01",
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         temperature=0.2,
     )
     client.generate([{"role": "user", "content": "summarize"}])

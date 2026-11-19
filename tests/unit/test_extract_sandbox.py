@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from r2b.extract.sandbox import ExtractLimits, enforce_limits, run_sandboxed
+from r2b.extract.sandbox import ExtractLimits, _bwrap_argv, enforce_limits, run_sandboxed
 
 
 def test_enforce_limits_prunes_extracted_files_keeps_root_json(tmp_path: Path) -> None:
@@ -51,6 +51,52 @@ def test_sandbox_path_includes_absolute_tool_directory(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert result.stdout == "helper-found"
+
+
+def _ro_bind_pairs(cmd: list[str]) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    index = 0
+    while index < len(cmd) - 2:
+        if cmd[index] == "--ro-bind":
+            pairs.append((cmd[index + 1], cmd[index + 2]))
+            index += 3
+        else:
+            index += 1
+    return pairs
+
+
+def test_bwrap_argv_ro_binds_absolute_tool_directory(tmp_path: Path) -> None:
+    tool_dir = (tmp_path / "homebrew" / "bin").resolve()
+    tool_dir.mkdir(parents=True)
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    output = tmp_path / "out"
+    output.mkdir()
+    common = {
+        "input_file": subject.resolve(),
+        "output_dir": output.resolve(),
+        "extra_ro_binds": None,
+    }
+
+    absolute = _bwrap_argv("bwrap", [str(tool_dir / "extractor")], **common)
+    relative = _bwrap_argv("bwrap", ["extractor"], **common)
+    tool_pair = (str(tool_dir), str(tool_dir))
+    absolute_pairs = _ro_bind_pairs(absolute)
+    relative_pairs = _ro_bind_pairs(relative)
+
+    assert tool_pair in absolute_pairs
+    assert tool_pair not in relative_pairs
+    assert relative_pairs == [pair for pair in absolute_pairs if pair != tool_pair]
+    tool_at = absolute.index(str(tool_dir))
+    assert absolute.index("--tmpfs") < tool_at
+    for root in ("/usr", "/bin", "/lib", "/lib64", "/sbin"):
+        if Path(root).exists():
+            assert absolute.index(root) < tool_at
+
+    usr_bin = Path("/usr/bin").resolve()
+    if usr_bin.is_dir():
+        covered = _bwrap_argv("bwrap", [str(usr_bin / "true")], **common)
+        assert (str(usr_bin), str(usr_bin)) not in _ro_bind_pairs(covered)
 
 
 def test_sandbox_fails_closed_without_bubblewrap(tmp_path: Path, monkeypatch) -> None:

@@ -222,6 +222,11 @@ def _terminate_process_group(process: subprocess.Popen[str]) -> None:
             process.kill()
 
 
+# Roots mounted for every sandboxed extractor. An absolute tool directory
+# already inside one of these does not need its own bind.
+_SYSTEM_ROOTS = ("/usr", "/bin", "/lib", "/lib64", "/sbin")
+
+
 def _bwrap_argv(
     bwrap: str,
     argv: Sequence[str],
@@ -243,10 +248,14 @@ def _bwrap_argv(
         "--tmpfs",
         "/tmp",
     ]
-    for root in ("/usr", "/bin", "/lib", "/lib64", "/sbin"):
+    for root in _SYSTEM_ROOTS:
         path = Path(root)
         if path.exists():
             cmd.extend(_bind_or_symlink(path))
+    # After --tmpfs /tmp so an absolute tool under /tmp stays visible.
+    tool_dir = _absolute_tool_dir(argv)
+    if tool_dir is not None:
+        cmd.extend(["--ro-bind", str(tool_dir), str(tool_dir)])
     # Interpreter and dynamic linker live here on Debian usrmerge hosts.
     for extra in extra_ro_binds or ():
         resolved = extra.resolve()
@@ -276,3 +285,23 @@ def _bind_or_symlink(path: Path) -> list[str]:
     if path.is_dir() or path.is_file():
         return ["--ro-bind", str(path), str(path)]
     return []
+
+
+def _absolute_tool_dir(argv: Sequence[str]) -> Path | None:
+    if not argv:
+        return None
+    executable = Path(argv[0])
+    if not executable.is_absolute():
+        return None
+    tool_dir = executable.parent.resolve()
+    if not tool_dir.is_dir() or _under_system_root(tool_dir):
+        return None
+    return tool_dir
+
+
+def _under_system_root(path: Path) -> bool:
+    for root in _SYSTEM_ROOTS:
+        root_path = Path(root)
+        if root_path.exists() and path.is_relative_to(root_path.resolve()):
+            return True
+    return False

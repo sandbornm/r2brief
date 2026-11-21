@@ -10,10 +10,12 @@ import pytest
 from r2b.analysis.briefing import build_briefing
 from r2b.analysis.rust import (
     _Image,
+    _ReadBudget,
     _Sec,
     _bounded_elf_read,
     _callees,
     _cortex_reset,
+    _open_image,
     _snap,
     _sweep_xrefs,
     analyze_rust,
@@ -1500,9 +1502,99 @@ def test_bounded_elf_read_stops_at_cap():
     from io import BytesIO
 
     stream = BytesIO(b"A" * 100)
-    assert _bounded_elf_read(stream, 0, 10**12, cap=16) == b"A" * 16
+    budget = _ReadBudget(cap=16)
+    assert _bounded_elf_read(stream, 0, 10**12, budget) == b"A" * 16
+    assert budget.used == 16
     stream = BytesIO(b"B" * 64)
-    assert _bounded_elf_read(stream, 8, 10**9, cap=8) == b"B" * 8
+    budget = _ReadBudget(cap=8)
+    assert _bounded_elf_read(stream, 8, 10**9, budget) == b"B" * 8
+    assert budget.used == 8
+
+
+def test_overlapping_elf_reads_share_one_budget():
+    """Many overlapping headers of the same payload stay under the total budget."""
+    from io import BytesIO
+
+    payload = b"X" * (64 * 1024)
+    stream = BytesIO(payload)
+    budget = _ReadBudget(cap=256 * 1024)
+    chunks = [_bounded_elf_read(stream, 0, len(payload), budget) for _ in range(128)]
+    assert all(chunk == payload for chunk in chunks)
+    assert budget.used == len(payload)
+    assert len({id(chunk) for chunk in chunks}) == 1
+
+
+def test_overlapping_elf_headers_share_open_image_budget(tmp_path: Path):
+    """_open_image retains one copy of a payload shared by many section headers."""
+    payload = bytes(range(256)) * 16  # 4 KiB
+    payload_off = 0x1000
+    n_overlap = 128
+    names = [""] + [f".s{index:03d}" for index in range(n_overlap)] + [".shstrtab"]
+    strtab = b"\x00".join(name.encode() for name in names) + b"\x00"
+    name_off = {}
+    cursor = 0
+    for name in names:
+        name_off[name] = cursor
+        cursor += len(name) + 1
+    str_off = payload_off + len(payload)
+    shoff = str_off + len(strtab)
+    shnum = len(names)
+    buf = bytearray(shoff + 64 * shnum)
+    buf[payload_off : payload_off + len(payload)] = payload
+    buf[str_off : str_off + len(strtab)] = strtab
+
+    def shdr(name: str, typ: int, flags: int, addr: int, off: int, size: int) -> bytes:
+        return struct.pack("<IIQQQQIIQQ", name_off[name], typ, flags, addr, off, size, 0, 0, 1, 0)
+
+    sections = [shdr("", 0, 0, 0, 0, 0)]
+    for index in range(n_overlap):
+        sections.append(shdr(f".s{index:03d}", 1, 6, 0x10000, payload_off, len(payload)))
+    sections.append(shdr(".shstrtab", 3, 0, 0, str_off, len(strtab)))
+    for index, raw in enumerate(sections):
+        start = shoff + index * 64
+        buf[start : start + 64] = raw
+    ident = b"\x7fELF" + bytes([2, 1, 1, 0]) + b"\x00" * 8
+    ehdr = struct.pack(
+        "<16sHHIQQQIHHHHHH",
+        ident,
+        3,
+        183,
+        1,
+        0x10000,
+        64,
+        shoff,
+        0,
+        64,
+        56,
+        1,
+        64,
+        shnum,
+        shnum - 1,
+    )
+    phdr = struct.pack(
+        "<IIQQQQQQ",
+        1,
+        5,
+        payload_off,
+        0x10000,
+        0x10000,
+        len(payload),
+        len(payload),
+        0x1000,
+    )
+    buf[0:64] = ehdr
+    buf[64:120] = phdr
+    path = tmp_path / "overlap.elf"
+    path.write_bytes(buf)
+    image = _open_image(path)
+    assert image is not None
+    overlap = [sec for sec in image.sections if sec.name.startswith(".s") and sec.name[2:].isdigit()]
+    assert len(overlap) == n_overlap
+    assert all(sec.data == payload for sec in overlap)
+    assert len({id(sec.data) for sec in overlap}) == 1
+    assert image.loads
+    assert image.loads[0][1] == payload
+    assert id(image.loads[0][1]) == id(overlap[0].data)
 
 
 def test_sub_x0_from_sp_is_not_a_prologue():
@@ -1653,3 +1745,27 @@ def test_cortex_reset_skips_bl_over_forward_branch(tmp_path: Path):
     assert info is not None
     assert info["user_main"] == hex(user)
     assert hex(other) != info["user_main"]
+
+
+def test_cortex_user_main_spin_after_init_is_not_unwrapped(tmp_path: Path):
+    """`push; bl init; b .` is user main's own loop, not a trampoline to init."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    text_va = flash + 0x100
+    user = text_va + 0x30
+    init = text_va + 0x50
+    body = bytearray(b"\x00" * 0x70)
+    # reset: bl user; b .
+    body[0:4] = _thumb_bl(text_va, user)
+    body[4:6] = b"\xfe\xe7"
+    # user: push {r7, lr}; bl init; b .
+    body[0x30:0x32] = b"\x80\xb5"
+    body[0x32:0x36] = _thumb_bl(user + 2, init)
+    body[0x36:0x38] = b"\xfe\xe7"
+    body[0x50:0x52] = b"\x70\x47"  # init: bx lr
+    binary = tmp_path / "fw-main-spin"
+    _write_cortex_text_elf(binary, bytes(body), flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert hex(init) != info["user_main"]

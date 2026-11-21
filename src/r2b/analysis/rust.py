@@ -162,16 +162,64 @@ class _Image:
 
 
 
-def _bounded_elf_read(stream: Any, offset: int, size: int, cap: int = _MAX_IMAGE) -> bytes:
-    """Read at most ``cap`` bytes from ``stream`` at ``offset``. Never ``read`` the full size first."""
-    if size <= 0 or cap <= 0:
+class _ReadBudget:
+    """A single per-file byte budget shared by every section and segment read."""
+
+    def __init__(self, cap: int = _MAX_IMAGE) -> None:
+        self.cap = cap
+        self.used = 0
+        self._ranges: list[tuple[int, bytes]] = []
+
+    def remaining(self) -> int:
+        return max(0, self.cap - self.used)
+
+    def lookup(self, offset: int, size: int) -> bytes | None:
+        """Return cached bytes that fully cover ``[offset, offset+size)``."""
+        if size <= 0:
+            return b""
+        end = offset + size
+        for start, data in self._ranges:
+            if start <= offset and end <= start + len(data):
+                rel = offset - start
+                return data[rel : rel + size]
+        return None
+
+    def store(self, offset: int, data: bytes) -> bytes:
+        if not data:
+            return data
+        self._ranges.append((offset, data))
+        self.used += len(data)
+        return data
+
+
+def _bounded_elf_read(
+    stream: Any, offset: int, size: int, budget: _ReadBudget | None = None
+) -> bytes:
+    """Read at most the remaining budget from ``stream`` at ``offset``.
+
+    Overlapping reads of a range already in the budget are reused and do not
+    consume additional budget.
+    """
+    if budget is None:
+        budget = _ReadBudget()
+    if size <= 0:
         return b""
-    stream.seek(int(offset))
-    return stream.read(min(int(size), cap))
+    offset = int(offset)
+    size = int(size)
+    cached = budget.lookup(offset, min(size, budget.cap))
+    if cached is not None:
+        return cached
+    want = min(size, budget.remaining())
+    if want <= 0:
+        return b""
+    stream.seek(offset)
+    return budget.store(offset, stream.read(want))
 
 
-def _bounded_section_blob(sec: Any, cap: int = _MAX_IMAGE) -> bytes:
-    """Section bytes, truncated to ``cap`` even when the section is compressed."""
+def _bounded_section_blob(sec: Any, budget: _ReadBudget | None = None) -> bytes:
+    """Section bytes, charged to the shared budget, including zlib sections."""
+    if budget is None:
+        budget = _ReadBudget()
     if sec["sh_type"] == "SHT_NOBITS":
         return b""
     if getattr(sec, "compressed", False):
@@ -180,7 +228,7 @@ def _bounded_section_blob(sec: Any, cap: int = _MAX_IMAGE) -> bytes:
             return b""
         hdr_size = sec.structs.Elf_Chdr.sizeof()
         remaining = int(sec["sh_size"]) - hdr_size
-        dest = min(int(sec.data_size), cap)
+        dest = min(int(sec.data_size), budget.remaining())
         if remaining <= 0 or dest <= 0:
             return b""
         sec.stream.seek(int(sec["sh_offset"]) + hdr_size)
@@ -192,13 +240,17 @@ def _bounded_section_blob(sec: Any, cap: int = _MAX_IMAGE) -> bytes:
                 break
             remaining -= len(chunk)
             out.extend(decomp.decompress(chunk, dest - len(out)))
-        return bytes(out)
+        data = bytes(out)
+        budget.used += len(data)
+        return data
     size = int(getattr(sec, "data_size", sec["sh_size"]))
-    return _bounded_elf_read(sec.stream, int(sec["sh_offset"]), size, cap)
+    return _bounded_elf_read(sec.stream, int(sec["sh_offset"]), size, budget)
 
 
-def _bounded_segment_blob(seg: Any, cap: int = _MAX_IMAGE) -> bytes:
-    return _bounded_elf_read(seg.stream, int(seg["p_offset"]), int(seg["p_filesz"]), cap)
+def _bounded_segment_blob(seg: Any, budget: _ReadBudget | None = None) -> bytes:
+    if budget is None:
+        budget = _ReadBudget()
+    return _bounded_elf_read(seg.stream, int(seg["p_offset"]), int(seg["p_filesz"]), budget)
 
 
 def _open_image(path: Path) -> _Image | None:
@@ -215,13 +267,14 @@ def _open_image(path: Path) -> _Image | None:
         else:
             return None
         bits = elf.elfclass
+        budget = _ReadBudget()
         sections: list[_Sec] = []
         for sec in elf.iter_sections():
             name = sec.name or ""
             if not name or sec["sh_type"] == "SHT_NOBITS":
                 continue
             try:
-                blob = _bounded_section_blob(sec)
+                blob = _bounded_section_blob(sec, budget)
             except Exception:
                 continue
             sections.append(_Sec(name, int(sec["sh_addr"]), blob, int(sec["sh_flags"])))
@@ -230,7 +283,7 @@ def _open_image(path: Path) -> _Image | None:
             if seg["p_type"] != "PT_LOAD":
                 continue
             try:
-                blob = _bounded_segment_blob(seg)
+                blob = _bounded_segment_blob(seg, budget)
             except Exception:
                 continue
             loads.append((int(seg["p_vaddr"]), blob))
@@ -239,7 +292,7 @@ def _open_image(path: Path) -> _Image | None:
                 if seg["p_type"] != "PT_LOAD" or not int(seg["p_flags"]) & 1:
                     continue
                 try:
-                    blob = _bounded_segment_blob(seg)
+                    blob = _bounded_segment_blob(seg, budget)
                 except Exception:
                     continue
                 sections.append(_Sec(".load", int(seg["p_vaddr"]), blob, 0x4))
@@ -905,6 +958,12 @@ def _unwrap_trampoline(image: _Image, addr: int) -> int:
             if code is not None:
                 calls.append(code)
         if insn.mnemonic in {"udf", "bx", "pop"} or insn.mnemonic == "b":
+            # A self-spin or backward branch is this function's own loop
+            # (``push; bl init; b .``), not a forwarding trampoline.
+            if insn.mnemonic == "b":
+                target = _branch_target(insn)
+                if target is None or target <= insn.address:
+                    return addr
             if len(calls) == 1 and index <= 6:
                 return calls[0]
             return addr

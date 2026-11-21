@@ -119,7 +119,11 @@ def _extractor_ro_binds(argv0: str | Path) -> list[Path]:
     seen: set[Path] = set()
     safe: list[Path] = []
     for item in binds:
-        if item in seen or _too_broad_bind(item) and item != tool:
+        # Only a regular file may pass the too-broad check: a tool path
+        # that resolves to $HOME (or another directory) must not be bound.
+        if item in seen or (
+            _too_broad_bind(item) and not (item == tool and tool.is_file())
+        ):
             continue
         seen.add(item)
         safe.append(item)

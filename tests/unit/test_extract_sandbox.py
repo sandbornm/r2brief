@@ -205,3 +205,25 @@ def test_bwrap_argv_does_not_bind_home_project_directory(tmp_path: Path, monkeyp
     tool_s = str(tool.resolve())
     assert ("--ro-bind", proj_s, proj_s) not in triples
     assert ("--ro-bind", tool_s, tool_s) in triples
+
+
+
+def test_bwrap_argv_does_not_bind_symlink_to_home(tmp_path: Path, monkeypatch) -> None:
+    """A tool path that resolves to $HOME must not be ro-bound as a directory."""
+    from r2b.extract.sandbox import _bwrap_argv
+
+    home = tmp_path / "home"
+    home.mkdir()
+    link = tmp_path / "extractor"
+    link.symlink_to(home)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    argv = _bwrap_argv("bwrap", [str(link)], input_file=subject, output_dir=out, extra_ro_binds=None)
+    triples = list(zip(argv, argv[1:], argv[2:]))
+    home_s = str(home.resolve())
+    assert ("--ro-bind", home_s, home_s) not in triples
+    assert ("--bind", home_s, home_s) not in triples

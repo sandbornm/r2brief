@@ -722,8 +722,10 @@ def _is_prologue(insn: Any) -> bool:
         return True
     if mnem == "stp" and "sp" in text and ("!" in text or "#-" in text):
         return True
-    if mnem == "sub" and re.search(r"\bsp\b", text) and "#" in text:
-        return True
+    if mnem == "sub" and "#" in text:
+        dest = text.split(",")[0].strip()
+        if dest in {"sp", "wsp"}:
+            return True
     return False
 
 

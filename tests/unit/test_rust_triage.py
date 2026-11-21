@@ -1458,3 +1458,27 @@ def test_cortex_trampoline_push_sub_reaches_user_main(tmp_path: Path):
     assert info is not None
     assert info["user_main"] == hex(user)
     assert hex(tramp) != info["user_main"]
+
+
+def test_sub_from_sp_is_not_a_prologue():
+    """`sub x8, sp, #imm` addresses a stack slot; it is not a function start."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    path_va = 0x20000
+    # sub x8, sp, #0x20
+    sub_x8 = struct.pack("<I", 0xD1000000 | (0x20 << 10) | (31 << 5) | 8)
+    body = (
+        PAC
+        + NOP
+        + sub_x8
+        + _adrp(1, start + 12, path_va & ~0xFFF)
+        + _add(1, 1, path_va & 0xFFF)
+        + RET
+    )
+    image = _aarch64_image(start, body)
+    refs, starts = _sweep_xrefs(image, {path_va: ("user", "demo")})
+    assert start in starts
+    assert start + 8 not in starts
+    sites = [site for site, vas in refs.items() if path_va in vas]
+    assert sites
+    assert all(_snap(starts, site) == start for site in sites)

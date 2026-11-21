@@ -234,6 +234,26 @@ def test_elf_magic_is_not_a_cortex_vector():
     assert _cortex_reset(_Fake()) is None  # type: ignore[arg-type]
 
 
+def _thumb_b(pc: int, target: int) -> bytes:
+    offset = target - (pc + 4)
+    if offset % 2:
+        raise ValueError("unaligned thumb branch")
+    imm11 = offset // 2
+    if not -1024 <= imm11 < 1024:
+        raise ValueError("thumb b out of range")
+    return struct.pack("<H", 0xE000 | (imm11 & 0x7FF))
+
+
+def _thumb_beq(pc: int, target: int) -> bytes:
+    offset = target - (pc + 4)
+    if offset % 2:
+        raise ValueError("unaligned thumb branch")
+    imm8 = offset // 2
+    if not -128 <= imm8 < 128:
+        raise ValueError("thumb beq out of range")
+    return struct.pack("<H", 0xD000 | (imm8 & 0xFF))
+
+
 def _thumb_bl(pc: int, target: int) -> bytes:
     offset = target - (pc + 4)
     s = (offset >> 24) & 1
@@ -1165,3 +1185,189 @@ def test_real_rustc_elf_is_marked_rust():
     assert info is not None
     assert info["is_rust"] is True
     assert info["rustc_version"]
+
+
+def test_user_main_stops_at_end_of_c_main(tmp_path: Path):
+    """A function after C main must not replace the lang_start user pointer."""
+    pytest.importorskip("capstone")
+    entry = 0x1000
+    lang = 0x1080
+    c_main = 0x1100
+    helper = 0x1180
+    neighbor = 0x11C0
+    user = 0x2000
+    other = 0x2040
+    comment = _comment()
+    comment_off = 0x2080
+    names = ["", ".text", ".comment", ".shstrtab"]
+    strtab = b"\x00".join(name.encode() for name in names) + b"\x00"
+    name_off = {}
+    cursor = 0
+    for name in names:
+        name_off[name] = cursor
+        cursor += len(name) + 1
+    str_off = comment_off + len(comment)
+    shoff = str_off + len(strtab)
+    shnum = len(names)
+    buf = bytearray(shoff + 64 * shnum)
+    buf[entry : entry + 12] = _adr(0, entry, c_main) + _bl(entry + 4, lang) + RET
+    buf[lang : lang + 4] = RET
+    # C main: adr helper; bl helper; adr user; bl lang; ret
+    buf[c_main : c_main + 20] = (
+        _adr(0, c_main, helper)
+        + _bl(c_main + 4, helper)
+        + _adr(0, c_main + 8, user)
+        + _bl(c_main + 12, lang)
+        + RET
+    )
+    buf[helper : helper + 4] = RET
+    # Neighbor immediately after C main, same scan window.
+    buf[neighbor : neighbor + 12] = (
+        _adr(0, neighbor, other) + _bl(neighbor + 4, lang) + RET
+    )
+    buf[user : user + 4] = RET
+    buf[other : other + 4] = RET
+    buf[comment_off : comment_off + len(comment)] = comment
+    buf[str_off : str_off + len(strtab)] = strtab
+
+    def shdr(name: str, typ: int, flags: int, addr: int, off: int, size: int) -> bytes:
+        return struct.pack("<IIQQQQIIQQ", name_off[name], typ, flags, addr, off, size, 0, 0, 1, 0)
+
+    sections = [
+        shdr("", 0, 0, 0, 0, 0),
+        shdr(".text", 1, 6, entry, entry, 0x1080),
+        shdr(".comment", 1, 0, 0, comment_off, len(comment)),
+        shdr(".shstrtab", 3, 0, 0, str_off, len(strtab)),
+    ]
+    for index, raw in enumerate(sections):
+        start = shoff + index * 64
+        buf[start : start + 64] = raw
+    ident = b"\x7fELF" + bytes([2, 1, 1, 0]) + b"\x00" * 8
+    ehdr = struct.pack(
+        "<16sHHIQQQIHHHHHH",
+        ident,
+        3,
+        183,
+        1,
+        entry,
+        64,
+        shoff,
+        0,
+        64,
+        56,
+        1,
+        64,
+        shnum,
+        shnum - 1,
+    )
+    phdr = struct.pack(
+        "<IIQQQQQQ",
+        1,
+        5,
+        0x1000,
+        0x1000,
+        0x1000,
+        len(buf) - 0x1000,
+        len(buf) - 0x1000,
+        0x1000,
+    )
+    buf[0:64] = ehdr
+    buf[64:120] = phdr
+    path = tmp_path / "c-main-neighbor"
+    path.write_bytes(buf)
+    info = analyze_rust(path)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert hex(other) != info["user_main"]
+    assert hex(helper) != info["user_main"]
+
+
+def test_cortex_reset_follows_finite_init_loop(tmp_path: Path):
+    """A reset init loop with a conditional exit must still reach main."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    load_off = 0x100
+    text_va = flash + 0x100
+    helper = flash + 0x130
+    user = flash + 0x140
+    ro_va = flash + 0x200
+    sp = 0x20004000
+    text = bytearray(b"\x00" * 0x50)
+    # reset: bl helper; loop: cmp r0, #0; beq exit; str r0, [r1]; b loop
+    # exit: bl user; b .
+    text[0:4] = _thumb_bl(text_va, helper)
+    loop = text_va + 4
+    exit_va = text_va + 0x0C
+    text[4:6] = b"\x00\x28"  # cmp r0, #0
+    text[6:8] = _thumb_beq(text_va + 6, exit_va)
+    text[8:10] = b"\x08\x60"  # str r0, [r1]
+    text[10:12] = _thumb_b(text_va + 10, loop)
+    text[12:16] = _thumb_bl(exit_va, user)
+    text[16:18] = b"\xfe\xe7"  # b .
+    text[0x30:0x32] = b"\x70\x47"  # helper: bx lr
+    text[0x40:0x42] = b"\x70\x47"  # user: bx lr
+    path_s = b"fw_uart/src/main.rs"
+    record = struct.pack("<IIII", ro_va + 16, len(path_s), 4, 2)
+    ro = record + path_s + b"\x00" + f"/rustc/{COMMIT}/".encode()
+    comment = b"rustc version 1.80.0 (aaaaaaaa 2024-01-01)\x00"
+    names = ["", ".text", ".rodata", ".comment", ".isr_vector", ".shstrtab"]
+    strtab = b"\x00".join(name.encode() for name in names) + b"\x00"
+    name_off: dict[str, int] = {}
+    cursor = 0
+    for name in names:
+        name_off[name] = cursor
+        cursor += len(name) + 1
+    ro_file = load_off + (ro_va - flash)
+    comment_off = ro_file + len(ro)
+    str_off = comment_off + len(comment)
+    shoff = str_off + len(strtab)
+    shnum = len(names)
+    buf = bytearray(shoff + 40 * shnum)
+    buf[load_off : load_off + 8] = struct.pack("<II", sp, text_va | 1)
+    buf[load_off + (text_va - flash) : load_off + (text_va - flash) + len(text)] = text
+    buf[ro_file : ro_file + len(ro)] = ro
+    buf[comment_off : comment_off + len(comment)] = comment
+    buf[str_off : str_off + len(strtab)] = strtab
+
+    def shdr(name: str, typ: int, flags: int, addr: int, off: int, size: int) -> bytes:
+        return struct.pack("<IIIIIIIIII", name_off[name], typ, flags, addr, off, size, 0, 0, 1, 0)
+
+    sections = [
+        shdr("", 0, 0, 0, 0, 0),
+        shdr(".text", 1, 6, text_va, load_off + (text_va - flash), len(text)),
+        shdr(".rodata", 1, 2, ro_va, ro_file, len(ro)),
+        shdr(".comment", 1, 0, 0, comment_off, len(comment)),
+        shdr(".isr_vector", 1, 2, flash, load_off, 8),
+        shdr(".shstrtab", 3, 0, 0, str_off, len(strtab)),
+    ]
+    for index, raw in enumerate(sections):
+        start = shoff + index * 40
+        buf[start : start + 40] = raw
+    ident = b"\x7fELF" + bytes([1, 1, 1, 0]) + b"\x00" * 8
+    ehdr = struct.pack(
+        "<16sHHIIIIIHHHHHH",
+        ident,
+        2,
+        40,
+        1,
+        text_va | 1,
+        52,
+        shoff,
+        0x05000000,
+        52,
+        32,
+        1,
+        40,
+        shnum,
+        shnum - 1,
+    )
+    filesz = len(buf) - load_off
+    phdr = struct.pack("<IIIIIIII", 1, load_off, flash, flash, filesz, filesz, 5, 4)
+    buf[0:52] = ehdr
+    buf[52:84] = phdr
+    binary = tmp_path / "fw-init-loop"
+    binary.write_bytes(buf)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert hex(helper) != info["user_main"]

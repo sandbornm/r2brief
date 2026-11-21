@@ -775,9 +775,16 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     machine = _Machine(image, thumb)
     seen: list[int] = []
     last: int | None = None
+    in_opening = True
     for count, insn in enumerate(_iter_insns(image, c_main, thumb, 0x400)):
         if count >= 120:
             break
+        if in_opening and _is_frame_setup(insn):
+            pass
+        else:
+            in_opening = False
+            if insn.address != c_main and _is_prologue(insn):
+                break
         values, _refs, is_call = machine.feed(insn)
         for value in values:
             code = image.mark_thumb(value)
@@ -789,6 +796,8 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
                 # Prefer the last call with a code pointer in x0/r0
                 # (lang_start) over an earlier helper call.
                 last = picked
+        if _is_return(insn):
+            break
     if last is not None:
         return last
     for code in seen:
@@ -856,6 +865,13 @@ def _unwrap_trampoline(image: _Image, addr: int) -> int:
     return addr
 
 
+def _is_unconditional_b(insn: Any) -> bool:
+    """True for an unconditional `b` / `b.n` / `b.w`, not `beq` or `b.eq`."""
+    mnem = insn.mnemonic.lower()
+    base, _, suffix = mnem.partition(".")
+    return base == "b" and suffix in {"", "n", "w"}
+
+
 def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
     found = _cortex_reset(image)
     if found is None:
@@ -865,6 +881,7 @@ def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
     image.mark_thumb(reset | 1)
     last: int | None = None
     in_opening = True
+    has_forward_exit = False
     for insn in _iter_insns(image, reset, True, 0x200):
         if in_opening and _is_frame_setup(insn):
             pass
@@ -880,11 +897,21 @@ def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
             if code is not None:
                 last = code
                 image.mark_thumb(code | 1)
-        # Terminal loop (`b .`) or a backward branch ends the reset handler.
-        # Do not keep scanning into a neighboring function.
-        if insn.mnemonic.split(".")[0] == "b":
-            target = _branch_target(insn)
-            if target is None or target <= insn.address:
+        target = _branch_target(insn)
+        # A forward conditional (or other non-call) branch is a loop exit.
+        if (
+            target is not None
+            and target > insn.address
+            and insn.mnemonic.split(".")[0] != "bl"
+        ):
+            has_forward_exit = True
+        # `b .` is a spin. A backward `b` ends the handler only when no
+        # reachable forward exit was already seen; a finite init loop must
+        # keep scanning to that exit.
+        if _is_unconditional_b(insn):
+            if target is None or target == insn.address:
+                break
+            if target < insn.address and not has_forward_exit:
                 break
         if _is_return(insn):
             break

@@ -61,15 +61,12 @@ _BLOCKED_BIND_ROOTS = frozenset(
         Path("/Applications"),
     }
 )
-# The directory and every path under it. /tmp and /etc (and Darwin
-# /private aliases) must not be mounted; /var is exact-only because
-# macOS temp dirs live under /private/var/folders.
+# Shared temp directories and every path under them. /tmp and /etc are
+# exact-only (including Darwin aliases already in _BLOCKED_BIND_ROOTS) so
+# a tool in /tmp/subdir can still bind that subdirectory, while /tmp itself
+# cannot. /var/tmp is always too broad.
 _BLOCKED_BIND_PREFIXES = frozenset(
     {
-        Path("/tmp"),
-        Path("/etc"),
-        Path("/private/tmp"),
-        Path("/private/etc"),
         Path("/var/tmp"),
         Path("/private/var/tmp"),
     }

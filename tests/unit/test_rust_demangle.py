@@ -63,3 +63,13 @@ def test_pretty_symbol_keeps_malformed_names():
 
 def test_legacy_unicode_escape_in_range_still_decodes():
     assert demangle("_ZN5$u20$E") == " "
+
+
+def test_demangle_bounds_exponential_backref_output():
+    """Repeated tuple backrefs must not expand without a size budget."""
+    # 76-byte symbol: each tuple duplicates the previous one. Without a cap
+    # this grows to millions of characters; with the cap it is rejected.
+    symbol = "_RIC3fooTuETB5_B5_ETB8_B8_ETBg_Bg_ETBo_Bo_ETBw_Bw_ETBE_BE_ETBM_BM_ETB1_B1_EE"
+    assert len(symbol) < 200
+    assert demangle(symbol) is None
+    assert pretty_symbol(symbol) == symbol

@@ -56,6 +56,7 @@ _BASIC_TYPES = {
 
 _MAX_DEPTH = 64
 _MAX_BINDERS = 16
+_MAX_OUTPUT = 4096
 
 
 def demangle(name: str) -> str | None:
@@ -87,6 +88,17 @@ def pretty_symbol(name: str) -> str:
 
 class _DemangleError(Exception):
     pass
+
+
+def _join(parts: list[str], sep: str = ", ") -> str:
+    total = 0
+    out: list[str] = []
+    for part in parts:
+        total += len(part) + (len(sep) if out else 0)
+        if total > _MAX_OUTPUT:
+            raise _DemangleError("output")
+        out.append(part)
+    return sep.join(out)
 
 
 def _unescape_legacy(ident: str) -> str:
@@ -129,7 +141,7 @@ def _demangle_legacy(symbol: str) -> str:
         parts.pop()
     if not parts:
         raise _DemangleError("empty")
-    return "::".join(parts)
+    return _join(parts, "::")
 
 
 class _Node:
@@ -138,6 +150,12 @@ class _Node:
     def __init__(
         self, kind: str, text: str, inner: str | None = None, trait: str | None = None
     ) -> None:
+        if len(text) > _MAX_OUTPUT:
+            raise _DemangleError("output")
+        if inner is not None and len(inner) > _MAX_OUTPUT:
+            raise _DemangleError("output")
+        if trait is not None and len(trait) > _MAX_OUTPUT:
+            raise _DemangleError("output")
         self.kind = kind
         self.text = text
         self.inner = inner
@@ -320,7 +338,7 @@ class _V0:
             while self._peek() != "E":
                 args.append(self._generic().display())
             self._eat()
-            node = _Node("generic", f"{inner.display()}::<{', '.join(args)}>")
+            node = _Node("generic", f"{inner.display()}::<{_join(args)}>")
         else:
             raise _DemangleError(f"path {tag}")
         self.memo[start] = node
@@ -417,7 +435,7 @@ class _V0:
             while self._peek() != "E":
                 items.append(self._type().display())
             self._eat()
-            text = f"({', '.join(items)})" if len(items) != 1 else f"({items[0]},)"
+            text = f"({_join(items)})" if len(items) != 1 else f"({items[0]},)"
             node = _Node("type", text)
         elif tag == "F":
             node = self._fn_type()
@@ -449,7 +467,7 @@ class _V0:
         self._eat()
         ret = self._type().display()
         ret_text = "" if ret == "()" else f" -> {ret}"
-        return _Node("type", f"{binder}{abi_text}fn({', '.join(inputs)}){ret_text}")
+        return _Node("type", f"{binder}{abi_text}fn({_join(inputs)}){ret_text}")
 
 
 def _format_nested(ns: str, inner: _Node, ident: str) -> _Node:

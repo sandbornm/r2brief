@@ -938,3 +938,29 @@ def test_cortex_reset_stops_at_terminal_branch(tmp_path: Path):
     assert info["user_main"] == hex(user)
     assert hex(other) not in info["entry_chain"]
     assert info["entry_chain"] == [hex(text_va), hex(tramp), hex(user)]
+
+
+def test_thumb_bl_callee_keeps_thumb_state():
+    pytest.importorskip("capstone")
+    start = 0x1000
+    callee = 0x1040
+    # Thumb: push {lr}; bl callee; pop {pc}. The bl immediate is even.
+    body = bytearray(b"\x00" * 0x50)
+    body[0:2] = b"\x00\xb5"  # push {lr}
+    body[2:6] = _thumb_bl(start + 2, callee)
+    body[6:8] = b"\x00\xbd"  # pop {pc}
+    body[0x40:0x42] = b"\x00\xb5"
+    body[0x42:0x44] = b"\x00\xbd"
+    sec = _Sec(".text", start, bytes(body), 0x4)
+    image = _Image(
+        arch="arm",
+        bits=32,
+        entry=start | 1,
+        sections=[sec],
+        loads=[(start, bytes(body))],
+        force_thumb=True,
+    )
+    image.mark_thumb(start | 1)
+    found = _callees(image, start)
+    assert callee in found
+    assert image.thumb_at(callee)

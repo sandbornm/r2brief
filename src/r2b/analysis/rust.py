@@ -698,6 +698,16 @@ def _branch_target(insn: Any) -> int | None:
     return None
 
 
+def _direct_call_target(image: _Image, insn: Any, thumb: bool) -> int | None:
+    """Resolve a direct bl/blx target, preserving Thumb state for same-state bl."""
+    target = _branch_target(insn)
+    if target is None:
+        return None
+    if image.arch == "arm" and thumb and insn.mnemonic == "bl":
+        return image.mark_thumb(target | 1)
+    return image.mark_thumb(target)
+
+
 def _is_prologue(insn: Any) -> bool:
     mnem = insn.mnemonic
     text = insn.op_str
@@ -920,8 +930,7 @@ def _callees(image: _Image, start: int) -> list[int]:
                 break
         values, _refs, is_call = machine.feed(insn)
         if is_call:
-            target = _branch_target(insn)
-            code = image.mark_thumb(target) if target is not None else None
+            code = _direct_call_target(image, insn, thumb)
             if code is not None and code != start:
                 found.append(code)
             continue
@@ -977,8 +986,7 @@ def _sweep_xrefs(
             else:
                 in_prologue = False
             if insn.mnemonic in {"bl", "blx"}:
-                target = _branch_target(insn)
-                code = image.code_addr(target) if target is not None else None
+                code = _direct_call_target(image, insn, thumb)
                 if code is not None:
                     starts.append(code)
             values, mems, _call = machine.feed(insn)

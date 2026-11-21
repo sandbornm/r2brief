@@ -846,7 +846,14 @@ def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
     image.force_thumb = True
     image.mark_thumb(reset | 1)
     last: int | None = None
+    in_opening = True
     for insn in _iter_insns(image, reset, True, 0x200):
+        if in_opening and _is_frame_setup(insn):
+            pass
+        else:
+            in_opening = False
+            if insn.address != reset and _is_prologue(insn):
+                break
         if insn.mnemonic in {"udf", "bkpt"}:
             break
         if insn.mnemonic == "bl":
@@ -855,6 +862,14 @@ def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
             if code is not None:
                 last = code
                 image.mark_thumb(code | 1)
+        # Terminal loop (`b .`) or a backward branch ends the reset handler.
+        # Do not keep scanning into a neighboring function.
+        if insn.mnemonic.split(".")[0] == "b":
+            target = _branch_target(insn)
+            if target is None or target <= insn.address:
+                break
+        if _is_return(insn):
+            break
     if last is None:
         return [reset], None
     user = _unwrap_trampoline(image, last)

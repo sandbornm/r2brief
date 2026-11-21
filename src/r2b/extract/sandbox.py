@@ -342,6 +342,18 @@ def _bwrap_argv(
     if argv:
         for bind in _extractor_ro_binds(argv[0]):
             cmd.extend(["--ro-bind", str(bind), str(bind)])
+        # Also mount the original symlink path so a caller can still see it,
+        # but execute the resolved pathname so the sandbox can find the tool.
+        raw = Path(argv[0]).expanduser()
+        if raw.is_absolute() and raw.is_symlink():
+            raw_s = str(raw)
+            if ("--ro-bind", raw_s) not in zip(cmd, cmd[1:]):
+                cmd.extend(["--ro-bind", raw_s, raw_s])
+    run_argv = list(argv)
+    if argv:
+        resolved = _tool_path(argv[0])
+        if resolved is not None:
+            run_argv[0] = str(resolved)
     cmd.extend(
         [
             "--ro-bind",
@@ -353,7 +365,7 @@ def _bwrap_argv(
             "--chdir",
             str(output_dir),
             "--",
-            *argv,
+            *run_argv,
         ]
     )
     return cmd

@@ -180,3 +180,5 @@ def test_bwrap_argv_resolves_symlinked_extractor(tmp_path: Path) -> None:
         resolved_tool,
     ) in triples
     assert ("--ro-bind", str(link_dir.resolve()), str(link_dir.resolve())) not in triples
+    dash = argv.index("--")
+    assert argv[dash + 1] == resolved_tool

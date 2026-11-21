@@ -964,3 +964,204 @@ def test_thumb_bl_callee_keeps_thumb_state():
     found = _callees(image, start)
     assert callee in found
     assert image.thumb_at(callee)
+
+
+
+def test_sub_sp_prologue_is_a_function_start():
+    """A leaf function starting with `sub sp` must snap refs to that address."""
+    pytest.importorskip("capstone")
+    earlier = 0x10000
+    start = 0x10100
+    path_va = 0x20000
+    # Earlier PAC function, then a later function that only does sub sp + path ref.
+    earlier_body = PAC + RET + NOP * 14
+    later = (
+        _sub_sp(0x20)
+        + _adrp(1, start + 4, path_va & ~0xFFF)
+        + _add(1, 1, path_va & 0xFFF)
+        + RET
+    )
+    # Place later at start; earlier in the same section.
+    blob = bytearray(NOP * ((start - earlier + len(later)) // 4 + 4))
+    blob[0:len(earlier_body)] = earlier_body
+    off = start - earlier
+    blob[off : off + len(later)] = later
+    image = _aarch64_image(earlier, bytes(blob))
+    refs, starts = _sweep_xrefs(image, {path_va: ("user", "demo")})
+    assert start in starts
+    sites = [site for site, vas in refs.items() if path_va in vas]
+    assert sites
+    assert all(_snap(starts, site) == start for site in sites)
+    assert _snap(starts, start + 4) == start
+
+
+def test_stp_offset_addressing_keeps_displacement():
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _Machine, _iter_insns
+
+    # stp x0, x1, [sp, #16]  (signed offset, no writeback) then ldp x2, x3, [sp, #16]
+    stp = struct.pack("<I", 0xA90107E0)  # stp x0, x1, [sp, #16]
+    ldp = struct.pack("<I", 0xA9410FE2)  # ldp x2, x3, [sp, #16]
+    image = _aarch64_image(0x1000, stp + ldp)
+    machine = _Machine(image, False)
+    machine.sp = 0
+    machine.regs["x0"] = ("imm", 0x1111)
+    machine.regs["x1"] = ("imm", 0x2222)
+    insns = list(_iter_insns(image, 0x1000, False, 8))
+    assert len(insns) == 2
+    machine.feed(insns[0])
+    assert 16 in machine.stack
+    assert machine.stack[16] == ("imm", 0x1111)
+    assert 0 not in machine.stack or machine.stack.get(0) != ("imm", 0x1111)
+    machine.feed(insns[1])
+    assert machine.regs["x2"] == ("imm", 0x1111)
+    assert machine.regs["x3"] == ("imm", 0x2222)
+
+
+def test_user_main_skips_helper_call_before_lang_start(tmp_path: Path):
+    pytest.importorskip("capstone")
+    entry = 0x1000
+    lang = 0x1080
+    c_main = 0x1100
+    helper = 0x1180
+    user = 0x2000
+    # Reuse the low-VA ELF writer shape, but make C main call a helper first.
+    comment = _comment()
+    comment_off = 0x2004
+    names = ["", ".text", ".comment", ".shstrtab"]
+    strtab = b"\x00".join(name.encode() for name in names) + b"\x00"
+    name_off = {}
+    cursor = 0
+    for name in names:
+        name_off[name] = cursor
+        cursor += len(name) + 1
+    str_off = comment_off + len(comment)
+    shoff = str_off + len(strtab)
+    shnum = len(names)
+    buf = bytearray(shoff + 64 * shnum)
+    buf[entry : entry + 12] = _adr(0, entry, c_main) + _bl(entry + 4, lang) + RET
+    buf[lang : lang + 4] = RET
+    # C main: adr helper; bl helper; adr user; bl lang; ret
+    buf[c_main : c_main + 20] = (
+        _adr(0, c_main, helper)
+        + _bl(c_main + 4, helper)
+        + _adr(0, c_main + 8, user)
+        + _bl(c_main + 12, lang)
+        + RET
+    )
+    buf[helper : helper + 4] = RET
+    buf[user : user + 4] = RET
+    buf[comment_off : comment_off + len(comment)] = comment
+    buf[str_off : str_off + len(strtab)] = strtab
+
+    def shdr(name: str, typ: int, flags: int, addr: int, off: int, size: int) -> bytes:
+        return struct.pack("<IIQQQQIIQQ", name_off[name], typ, flags, addr, off, size, 0, 0, 1, 0)
+
+    sections = [
+        shdr("", 0, 0, 0, 0, 0),
+        shdr(".text", 1, 6, entry, entry, 0x1004),
+        shdr(".comment", 1, 0, 0, comment_off, len(comment)),
+        shdr(".shstrtab", 3, 0, 0, str_off, len(strtab)),
+    ]
+    for index, raw in enumerate(sections):
+        start = shoff + index * 64
+        buf[start : start + 64] = raw
+    ident = b"\x7fELF" + bytes([2, 1, 1, 0]) + b"\x00" * 8
+    ehdr = struct.pack(
+        "<16sHHIQQQIHHHHHH",
+        ident,
+        3,
+        183,
+        1,
+        entry,
+        64,
+        shoff,
+        0,
+        64,
+        56,
+        1,
+        64,
+        shnum,
+        shnum - 1,
+    )
+    phdr = struct.pack(
+        "<IIQQQQQQ",
+        1,
+        5,
+        0x1000,
+        0x1000,
+        0x1000,
+        len(buf) - 0x1000,
+        len(buf) - 0x1000,
+        0x1000,
+    )
+    buf[0:64] = ehdr
+    buf[64:120] = phdr
+    path = tmp_path / "helper-before-lang"
+    path.write_bytes(buf)
+    info = analyze_rust(path)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert hex(helper) not in (info["user_main"],)
+
+
+def test_sweep_collects_starts_without_source_paths():
+    pytest.importorskip("capstone")
+    start = 0x10000
+    callee = 0x11000
+    body = PAC + _bl(start + 4, callee) + RET
+    image = _aarch64_image(start, body, extra=[(callee, RET)])
+    refs, starts = _sweep_xrefs(image, {})
+    assert refs == {}
+    assert start in starts
+    assert callee in starts
+    found = _callees(image, start)
+    assert callee in found
+    # Without the callee in `starts`, _snap would map it back to user main.
+    assert _snap(starts, callee) == callee
+
+
+def test_thumb_prologue_start_records_thumb_state():
+    pytest.importorskip("capstone")
+    start = 0x1000
+    path_va = 0x2000
+    # Thumb: push {lr}; ldr r1, [pc, #4]; pop {pc}; .word path
+    body = bytearray(b"\x00" * 0x20)
+    body[0:2] = b"\x00\xb5"
+    body[2:4] = _thumb_ldr_pc(1, start + 2, start + 8)
+    body[4:6] = b"\x00\xbd"
+    body[8:12] = struct.pack("<I", path_va)
+    sec = _Sec(".text", start, bytes(body), 0x4)
+    ro = _Sec(".rodata", path_va, b"demo_app/src/main.rs\x00", 0x2)
+    image = _Image(
+        arch="arm",
+        bits=32,
+        entry=start | 1,
+        sections=[sec, ro],
+        loads=[(start, bytes(body)), (path_va, ro.data)],
+        force_thumb=True,
+    )
+    refs, starts = _sweep_xrefs(image, {path_va: ("user", "demo_app")})
+    assert start in starts
+    assert image.thumb_at(start)
+    sites = [site for site, vas in refs.items() if path_va in vas]
+    assert sites
+
+
+def test_real_c_arm64_sample_is_not_marked_rust():
+    """A compiled C AArch64 ELF from samples/ must stay unchanged."""
+    sample = Path(__file__).resolve().parents[1] / ".." / "samples" / "bin" / "arm64" / "hello"
+    if not sample.is_file():
+        sample = Path("samples/bin/arm64/hello")
+    assert sample.is_file()
+    assert analyze_rust(sample) is None
+
+
+def test_real_rustc_elf_is_marked_rust():
+    """A rustc-produced AArch64 ELF must be recognized as Rust."""
+    sample = Path(__file__).resolve().parents[1] / "fixtures" / "tiny-rust-aarch64-musl"
+    assert sample.is_file()
+    info = analyze_rust(sample)
+    assert info is not None
+    assert info["is_rust"] is True
+    assert info["rustc_version"]

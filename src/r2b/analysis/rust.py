@@ -620,7 +620,9 @@ class _Machine:
                 base_v = self._val(base_r, pc)
                 addr_stk = None
                 if base_v and base_v[0] == "stk":
-                    addr_stk = base_v[1] + (disp if writeback else 0)
+                    # Offset addressing ([sp, #16]) must keep the displacement.
+                    # Writeback only updates SP; it does not decide the slot.
+                    addr_stk = base_v[1] + disp
                 if writeback and _canon(base_r, self.aarch64) == "sp":
                     self.sp += disp
                 step = 8 if self.aarch64 else 4
@@ -718,7 +720,9 @@ def _is_prologue(insn: Any) -> bool:
         return True
     if mnem == "push" and re.search(r"\b(lr|pc)\b", text):
         return True
-    if mnem == "stp" and "x29" in text and "x30" in text and ("!" in text or "#-" in text):
+    if mnem == "stp" and "sp" in text and ("!" in text or "#-" in text):
+        return True
+    if mnem == "sub" and re.search(r"\bsp\b", text) and "#" in text:
         return True
     return False
 
@@ -770,6 +774,7 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     thumb = image.thumb_at(c_main)
     machine = _Machine(image, thumb)
     seen: list[int] = []
+    last: int | None = None
     for count, insn in enumerate(_iter_insns(image, c_main, thumb, 0x400)):
         if count >= 120:
             break
@@ -778,11 +783,14 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
             code = image.mark_thumb(value)
             if code is not None and code != c_main:
                 seen.append(code)
-        if is_call and seen:
+        if is_call:
             picked = image.mark_thumb(machine.call_arg())
             if picked and picked != c_main:
-                return picked
-            return seen[0]
+                # Prefer the last call with a code pointer in x0/r0
+                # (lang_start) over an earlier helper call.
+                last = picked
+    if last is not None:
+        return last
     for code in seen:
         if code != c_main:
             return image.mark_thumb(code) or code
@@ -958,7 +966,7 @@ def _sweep_xrefs(
     image: _Image, interesting: dict[int, tuple[str, str | None]]
 ) -> tuple[dict[int, list[int]], list[int]]:
     """Map code addresses to interesting data VAs, and collect prologue starts."""
-    if not interesting or _capstone() is None:
+    if _capstone() is None:
         return {}, []
     refs: dict[int, list[int]] = {}
     starts: list[int] = []
@@ -980,6 +988,8 @@ def _sweep_xrefs(
             if _is_prologue(insn) and not in_prologue:
                 machine.reset()
                 starts.append(insn.address)
+                if thumb and image.arch == "arm":
+                    image.mark_thumb(insn.address | 1)
                 in_prologue = True
             elif in_prologue and _is_frame_setup(insn):
                 pass

@@ -58,7 +58,12 @@ def ranked_addrs(brief: dict) -> list[int]:
         if value not in out:
             out.append(value)
     for raw in handoff.get("decompile_addrs") or []:
-        value = int(raw, 16) if isinstance(raw, str) else int(raw)
+        if raw in (None, ""):
+            continue
+        try:
+            value = int(raw, 16) if isinstance(raw, str) else int(raw)
+        except (TypeError, ValueError):
+            continue
         if value not in out:
             out.append(value)
     return out

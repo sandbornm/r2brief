@@ -78,7 +78,11 @@ def _too_broad_bind(path: Path) -> bool:
         home = Path.home().resolve()
     except OSError:
         home = None
-    if home is not None and (resolved == home or _is_under(home, resolved)):
+    # Bind neither $HOME, nor a parent of it, nor a project dir inside it
+    # such as ~/proj when the extractor lives at ~/proj/extractor.
+    if home is not None and (
+        resolved == home or _is_under(home, resolved) or _is_under(resolved, home)
+    ):
         return True
     for root in _SYSTEM_ROOTS:
         root_path = Path(root)

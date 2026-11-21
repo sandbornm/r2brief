@@ -182,3 +182,26 @@ def test_bwrap_argv_resolves_symlinked_extractor(tmp_path: Path) -> None:
     assert ("--ro-bind", str(link_dir.resolve()), str(link_dir.resolve())) not in triples
     dash = argv.index("--")
     assert argv[dash + 1] == resolved_tool
+
+
+
+def test_bwrap_argv_does_not_bind_home_project_directory(tmp_path: Path, monkeypatch) -> None:
+    from r2b.extract.sandbox import _bwrap_argv
+
+    home = tmp_path / "home"
+    proj = home / "proj"
+    proj.mkdir(parents=True)
+    tool = proj / "extractor"
+    tool.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    argv = _bwrap_argv("bwrap", [str(tool)], input_file=subject, output_dir=out, extra_ro_binds=None)
+    triples = list(zip(argv, argv[1:], argv[2:]))
+    proj_s = str(proj.resolve())
+    tool_s = str(tool.resolve())
+    assert ("--ro-bind", proj_s, proj_s) not in triples
+    assert ("--ro-bind", tool_s, tool_s) in triples

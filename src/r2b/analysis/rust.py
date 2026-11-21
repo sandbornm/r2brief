@@ -848,9 +848,14 @@ def _cortex_reset(image: _Image) -> tuple[int, int] | None:
 
 def _unwrap_trampoline(image: _Image, addr: int) -> int:
     calls: list[int] = []
+    in_opening = True
     for index, insn in enumerate(_iter_insns(image, addr, True, 0x20)):
-        if index > 0 and _is_prologue(insn):
-            return calls[0] if len(calls) == 1 else addr
+        if in_opening and _is_frame_setup(insn):
+            pass
+        else:
+            in_opening = False
+            if index > 0 and _is_prologue(insn):
+                return calls[0] if len(calls) == 1 else addr
         if insn.mnemonic == "bl":
             target = _branch_target(insn)
             code = image.code_addr(target) if target is not None else None

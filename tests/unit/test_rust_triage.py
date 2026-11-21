@@ -1371,3 +1371,90 @@ def test_cortex_reset_follows_finite_init_loop(tmp_path: Path):
     assert info is not None
     assert info["user_main"] == hex(user)
     assert hex(helper) != info["user_main"]
+
+
+def test_cortex_trampoline_push_sub_reaches_user_main(tmp_path: Path):
+    """Opening `push {r7, lr}; sub sp, #8` is frame setup, not a new function."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    load_off = 0x100
+    text_va = flash + 0x100
+    tramp = flash + 0x110
+    user = flash + 0x130
+    ro_va = flash + 0x200
+    sp = 0x20004000
+    body = bytearray(b"\x00" * 0x50)
+    # reset: bl tramp; b .
+    body[0:4] = _thumb_bl(text_va, tramp)
+    body[4:6] = b"\xfe\xe7"
+    # tramp: push {r7, lr}; sub sp, #8; bl user; pop {r7, pc}
+    body[0x10:0x12] = b"\x80\xb5"
+    body[0x12:0x14] = b"\x82\xb0"
+    body[0x14:0x18] = _thumb_bl(tramp + 4, user)
+    body[0x18:0x1A] = b"\x80\xbd"
+    body[0x30:0x32] = b"\x70\x47"  # user: bx lr
+    path_s = b"fw_uart/src/main.rs"
+    record = struct.pack("<IIII", ro_va + 16, len(path_s), 4, 2)
+    ro = record + path_s + b"\x00" + f"/rustc/{COMMIT}/".encode()
+    comment = b"rustc version 1.80.0 (aaaaaaaa 2024-01-01)\x00"
+    names = ["", ".text", ".rodata", ".comment", ".isr_vector", ".shstrtab"]
+    strtab = b"\x00".join(name.encode() for name in names) + b"\x00"
+    name_off: dict[str, int] = {}
+    cursor = 0
+    for name in names:
+        name_off[name] = cursor
+        cursor += len(name) + 1
+    ro_file = load_off + (ro_va - flash)
+    comment_off = ro_file + len(ro)
+    str_off = comment_off + len(comment)
+    shoff = str_off + len(strtab)
+    shnum = len(names)
+    buf = bytearray(shoff + 40 * shnum)
+    buf[load_off : load_off + 8] = struct.pack("<II", sp, text_va | 1)
+    buf[load_off + (text_va - flash) : load_off + (text_va - flash) + len(body)] = body
+    buf[ro_file : ro_file + len(ro)] = ro
+    buf[comment_off : comment_off + len(comment)] = comment
+    buf[str_off : str_off + len(strtab)] = strtab
+
+    def shdr(name: str, typ: int, flags: int, addr: int, off: int, size: int) -> bytes:
+        return struct.pack("<IIIIIIIIII", name_off[name], typ, flags, addr, off, size, 0, 0, 1, 0)
+
+    sections = [
+        shdr("", 0, 0, 0, 0, 0),
+        shdr(".text", 1, 6, text_va, load_off + (text_va - flash), len(body)),
+        shdr(".rodata", 1, 2, ro_va, ro_file, len(ro)),
+        shdr(".comment", 1, 0, 0, comment_off, len(comment)),
+        shdr(".isr_vector", 1, 2, flash, load_off, 8),
+        shdr(".shstrtab", 3, 0, 0, str_off, len(strtab)),
+    ]
+    for index, raw in enumerate(sections):
+        start = shoff + index * 40
+        buf[start : start + 40] = raw
+    ident = b"\x7fELF" + bytes([1, 1, 1, 0]) + b"\x00" * 8
+    ehdr = struct.pack(
+        "<16sHHIIIIIHHHHHH",
+        ident,
+        2,
+        40,
+        1,
+        text_va | 1,
+        52,
+        shoff,
+        0x05000000,
+        52,
+        32,
+        1,
+        40,
+        shnum,
+        shnum - 1,
+    )
+    filesz = len(buf) - load_off
+    phdr = struct.pack("<IIIIIIII", 1, load_off, flash, flash, filesz, filesz, 5, 4)
+    buf[0:52] = ehdr
+    buf[52:84] = phdr
+    binary = tmp_path / "fw-tramp-frame"
+    binary.write_bytes(buf)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert hex(tramp) != info["user_main"]

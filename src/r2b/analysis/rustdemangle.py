@@ -364,8 +364,9 @@ class _V0:
         if self._peek() == "p":
             self._eat()
             return _Node("const", "_")
+        typ = None
         if self._peek() in _BASIC_TYPES or self._peek() in "CNMXYIRQPASOTF":
-            self._type()
+            typ = self._type()
         neg = False
         if self._peek() == "n":
             self._eat()
@@ -377,7 +378,19 @@ class _V0:
             raise _DemangleError("const")
         digits = self.data[start : self.i]
         self._eat()
-        text = "-" + digits if neg else digits
+        try:
+            value = int(digits, 16)
+        except ValueError as exc:
+            raise _DemangleError("const") from exc
+        kind = typ.display() if typ is not None else ""
+        if kind == "bool":
+            text = "true" if value else "false"
+        elif kind == "char" and 0x20 <= value <= 0x7E:
+            text = f"'{chr(value)}'"
+        elif kind == "char":
+            text = f"'\\u{{{value:x}}}'"
+        else:
+            text = f"-{value}" if neg else str(value)
         return _Node("const", text)
 
     def _type(self) -> _Node:

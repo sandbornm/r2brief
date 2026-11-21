@@ -73,3 +73,10 @@ def test_demangle_bounds_exponential_backref_output():
     assert len(symbol) < 200
     assert demangle(symbol) is None
     assert pretty_symbol(symbol) == symbol
+
+
+def test_v0_integer_const_generics_decode_hex():
+    """v0 const generics encode the value as hex and display it in decimal."""
+    assert demangle("_RIC3fooKj10_E") == "foo::<16>"
+    assert demangle("_RIC3fooKja_E") == "foo::<10>"
+    assert demangle("_RIC3fooKjn10_E") == "foo::<-16>"

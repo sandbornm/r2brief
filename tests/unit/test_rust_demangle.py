@@ -46,3 +46,20 @@ def test_pretty_symbol_leaves_plain_names():
     assert demangle("not_a_symbol") is None
     assert demangle("_Rnotreally") is None
     assert demangle("") is None
+
+
+def test_pretty_symbol_keeps_malformed_names():
+    """A bad or deeply nested symbol must not abort briefing demangle."""
+    bad_unicode = "_ZN9$u110000$E"
+    assert demangle(bad_unicode) is None
+    assert pretty_symbol(bad_unicode) == bad_unicode
+    deep = "_R" + "P" * 1200 + "u"
+    assert demangle(deep) is None
+    assert pretty_symbol(deep) == deep
+    huge_binder = "_RIC3fooFG1iE_EuE"
+    assert demangle(huge_binder) is None
+    assert pretty_symbol(huge_binder) == huge_binder
+
+
+def test_legacy_unicode_escape_in_range_still_decodes():
+    assert demangle("_ZN5$u20$E") == " "

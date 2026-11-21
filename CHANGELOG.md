@@ -12,6 +12,12 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   the `lang_start` pointer or the Cortex-M reset trampoline, reads panic
   `Location` paths, and an in-tree demangler. Non-Rust binaries are
   unchanged. `handoff.decompile_addrs` is still not a decompile queue.
+  Review follow-ups: Cortex-M vectors are read at the ELF load address,
+  consecutive PAC prologues are one function start, AArch64 ADR uses the
+  absolute Capstone operand, callee discovery stops at `ret`, Thumb-2
+  Linux is decoded as Thumb, and a bad mangled name can no longer abort
+  `build_briefing`. The extractor sandbox binds the tool itself, not a
+  home directory.
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

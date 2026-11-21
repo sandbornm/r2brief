@@ -37,7 +37,10 @@ _STD_CRATES = frozenset(
 _RELATIVE = frozenset({1027, 23})  # R_AARCH64_RELATIVE, R_ARM_RELATIVE
 _SKIP_SECTIONS = frozenset({".init", ".fini", ".plt", ".plt.sec", ".plt.got", ".iplt"})
 _MAX_SWEEP = 8 * 1024 * 1024
+_MAX_IMAGE = 16 * 1024 * 1024
+_MAX_RELOCS = 100_000
 _ZERO_REGS = frozenset({"wzr", "xzr", "zr"})
+_VECTOR_SECTIONS = frozenset({".isr_vector", ".vectors", ".vector_table", ".intvec"})
 
 
 def classify_path(path: str) -> tuple[str, str | None]:
@@ -59,7 +62,10 @@ def classify_path(path: str) -> tuple[str, str | None]:
         "/cargo/registry/" in low
         or ".cargo/registry/" in low
         or "/registry/src/" in low
-        or _REGISTRY.search(text)
+        or (
+            _REGISTRY.search(text)
+            and re.search(r"(?:^|/)(?:index\.crates\.io[^/]*|[^/]+-[0-9a-f]{8,})(?:/|$)", low)
+        )
     ):
         return "registry", None
     if text.endswith(".rs") and ("/src/" in text or text.startswith("src/")):
@@ -174,7 +180,7 @@ def _open_image(path: Path) -> _Image | None:
             if not name or sec["sh_type"] == "SHT_NOBITS":
                 continue
             try:
-                blob = sec.data()
+                blob = sec.data()[:_MAX_IMAGE]
             except Exception:
                 continue
             sections.append(_Sec(name, int(sec["sh_addr"]), blob, int(sec["sh_flags"])))
@@ -182,7 +188,20 @@ def _open_image(path: Path) -> _Image | None:
         for seg in elf.iter_segments():
             if seg["p_type"] != "PT_LOAD":
                 continue
-            loads.append((int(seg["p_vaddr"]), seg.data()))
+            try:
+                blob = seg.data()[:_MAX_IMAGE]
+            except Exception:
+                continue
+            loads.append((int(seg["p_vaddr"]), blob))
+        if not any(sec.executable for sec in sections):
+            for seg in elf.iter_segments():
+                if seg["p_type"] != "PT_LOAD" or not int(seg["p_flags"]) & 1:
+                    continue
+                try:
+                    blob = seg.data()[:_MAX_IMAGE]
+                except Exception:
+                    continue
+                sections.append(_Sec(".load", int(seg["p_vaddr"]), blob, 0x4))
         image = _Image(
             arch=arch,
             bits=bits,
@@ -195,6 +214,8 @@ def _open_image(path: Path) -> _Image | None:
                 continue
             rela = bool(sec.is_RELA())
             for rel in sec.iter_relocations():
+                if len(image.relocs) >= _MAX_RELOCS:
+                    break
                 if int(rel["r_info_type"]) not in _RELATIVE:
                     continue
                 slot = int(rel["r_offset"])
@@ -234,8 +255,6 @@ def _toolchain(image: _Image) -> tuple[str | None, str | None, bool]:
             if match:
                 commit = match.group(1).decode("ascii")
                 rust = True
-        if b"rustc version" in blob or b"/rustc/" in blob:
-            rust = True
     return version, commit, rust
 
 
@@ -326,6 +345,21 @@ def _imm(token: str) -> int | None:
         return int(text, 0)
     except ValueError:
         return None
+
+
+def _shifted_imm(ops: list[str]) -> int | None:
+    """Immediate from a #imm operand, including an optional following lsl."""
+    imm_i = next((index for index, op in enumerate(ops) if op.startswith("#")), None)
+    if imm_i is None:
+        return None
+    imm = _imm(ops[imm_i])
+    if imm is None:
+        return None
+    if imm_i + 1 < len(ops) and ops[imm_i + 1].lower().startswith("lsl") and "#" in ops[imm_i + 1]:
+        shift = _imm(ops[imm_i + 1][ops[imm_i + 1].index("#") :])
+        if shift:
+            imm <<= shift
+    return imm
 
 
 def _parse_mem(token: str) -> tuple[str, str | None, int] | None:
@@ -436,17 +470,12 @@ class _Machine:
             self.sp += (-4 if base == "push" else 4) * count
             return values, refs, False
         if base == "sub" and ops and _canon(ops[0], self.aarch64) == "sp":
-            imm = _imm(ops[-1]) if ops[-1].startswith("#") else None
+            imm = _shifted_imm(ops)
             if imm is not None:
                 self.sp -= imm
             return values, refs, False
-        if (
-            base == "add"
-            and ops
-            and _canon(ops[0], self.aarch64) == "sp"
-            and ops[-1].startswith("#")
-        ):
-            imm = _imm(ops[-1])
+        if base == "add" and ops and _canon(ops[0], self.aarch64) == "sp":
+            imm = _shifted_imm(ops)
             if imm is not None:
                 self.sp += imm
             return values, refs, False
@@ -460,18 +489,30 @@ class _Machine:
         if base == "adr" and len(ops) >= 2:
             disp = _imm(ops[1])
             if disp is not None:
-                target = disp if self.aarch64 and disp > 0xFFFF else (pc + disp) & self.image.mask
-                # AArch64 ADR immediates from Capstone are absolute. ARM/Thumb are displacements.
-                if not self.aarch64:
+                # Capstone prints AArch64 ADR operands as absolute addresses.
+                # ARM/Thumb ADR operands are PC-relative displacements.
+                if self.aarch64:
+                    target = disp & self.image.mask
+                else:
                     target = (pc + disp) & self.image.mask
                 self._set(ops[0], ("imm", target))
                 values.append(target)
             return values, refs, False
         if base in {"add", "sub"} and ops:
             if len(ops) == 2:
-                result = self._combine(self._val(ops[0], pc), self._val(ops[1], pc), base == "sub")
+                right = self._val(ops[1], pc)
+                if right and right[0] == "imm":
+                    shifted = _shifted_imm(ops)
+                    if shifted is not None:
+                        right = ("imm", shifted)
+                result = self._combine(self._val(ops[0], pc), right, base == "sub")
             else:
-                result = self._combine(self._val(ops[1], pc), self._val(ops[2], pc), base == "sub")
+                right = self._val(ops[2], pc)
+                if right and right[0] == "imm":
+                    shifted = _shifted_imm(ops[2:])
+                    if shifted is not None:
+                        right = ("imm", shifted)
+                result = self._combine(self._val(ops[1], pc), right, base == "sub")
             self._set(ops[0], result)
             if result and result[0] == "imm":
                 values.append(result[1])
@@ -516,7 +557,7 @@ class _Machine:
             self._set(ops[0], ("imm", value & self.image.mask))
             values.append(value & self.image.mask)
             return values, refs, False
-        if base in {"ldr", "ldur"} and len(ops) >= 2:
+        if base in {"ldr", "ldur", "ldrb", "ldrh", "ldrsw"} and len(ops) >= 2:
             mem = _parse_mem(ops[1])
             if mem is None:
                 self._set(ops[0], None)
@@ -541,12 +582,23 @@ class _Machine:
                 return values, refs, False
             addr &= self.image.mask
             refs.append(addr)
-            dest = _canon(ops[0], self.aarch64)
-            width = 8 if dest.startswith("x") else 4
+            dest = ops[0].strip().lower()
+            if base == "ldrb":
+                width = 1
+            elif base == "ldrh":
+                width = 2
+            elif base == "ldrsw" or dest.startswith("w"):
+                width = 4
+            elif dest.startswith("x"):
+                width = 8
+            else:
+                width = self.image.ptr
             loaded = self.image.load_int(addr, width)
             if loaded is None:
                 self._set(ops[0], None)
             else:
+                if base == "ldrsw" and loaded & (1 << 31):
+                    loaded |= (-1 << 32) & self.image.mask
                 self._set(ops[0], ("imm", loaded))
                 values.append(loaded)
             return values, refs, False
@@ -560,7 +612,30 @@ class _Machine:
                     self.stack[base_v[1] + disp] = src
             return values, refs, False
         if base in {"stp", "ldp"} and ops:
-            # Clobber so a stale address is not reused. The lang_start slot is an STR.
+            mem_tok = next((op for op in ops if "[" in op), "")
+            mem = _parse_mem(mem_tok) if mem_tok else None
+            if mem is not None:
+                base_r, _index, disp = mem
+                writeback = "!" in mem_tok
+                base_v = self._val(base_r, pc)
+                addr_stk = None
+                if base_v and base_v[0] == "stk":
+                    addr_stk = base_v[1] + (disp if writeback else 0)
+                if writeback and _canon(base_r, self.aarch64) == "sp":
+                    self.sp += disp
+                step = 8 if self.aarch64 else 4
+                if base == "stp" and addr_stk is not None:
+                    src0 = self._val(ops[0], pc)
+                    src1 = self._val(ops[1], pc) if len(ops) > 1 else None
+                    if src0 is not None:
+                        self.stack[addr_stk] = src0
+                    if src1 is not None:
+                        self.stack[addr_stk + step] = src1
+                elif base == "ldp" and addr_stk is not None:
+                    self._set(ops[0], self.stack.get(addr_stk))
+                    if len(ops) > 1:
+                        self._set(ops[1], self.stack.get(addr_stk + step))
+                    return values, refs, False
             if base == "ldp":
                 self._set(ops[0], None)
                 if len(ops) > 1:
@@ -628,7 +703,8 @@ def _is_prologue(insn: Any) -> bool:
     text = insn.op_str
     if mnem in {"paciasp", "pacibsp"}:
         return True
-    if mnem == "bti" and text.strip() in {"c", "j", "jc"}:
+    # `bti j` is a mid-function jump pad, not a function start.
+    if mnem == "bti" and text.strip() in {"c", "jc"}:
         return True
     if mnem == "push" and re.search(r"\b(lr|pc)\b", text):
         return True
@@ -637,11 +713,30 @@ def _is_prologue(insn: Any) -> bool:
     return False
 
 
+def _is_frame_setup(insn: Any) -> bool:
+    """True for the opening sequence after a recognized prologue."""
+    if _is_prologue(insn):
+        return True
+    mnem = insn.mnemonic.split(".")[0]
+    text = insn.op_str
+    if mnem in {"sub", "add"} and re.search(r"\bsp\b", text):
+        return True
+    if mnem == "mov" and re.search(r"\b(x29|fp)\b", text) and re.search(r"\bsp\b", text):
+        return True
+    if mnem in {"nop", "hint"}:
+        return True
+    return False
+
+
 def _is_return(insn: Any) -> bool:
-    return (
-        insn.mnemonic in {"ret", "retaa", "retab", "autiasp", "autibsp", "bx"}
-        or insn.mnemonic == "b"
-    )
+    mnem = insn.mnemonic.split(".")[0]
+    if mnem in {"ret", "retaa", "retab"}:
+        return True
+    if mnem == "bx" and re.search(r"\blr\b", insn.op_str):
+        return True
+    if mnem == "pop" and re.search(r"\bpc\b", insn.op_str):
+        return True
+    return False
 
 
 def _recover_libc_main(image: _Image) -> int | None:
@@ -655,7 +750,9 @@ def _recover_libc_main(image: _Image) -> int | None:
         _values, _refs, is_call = machine.feed(insn)
         if not is_call:
             continue
-        return image.mark_thumb(machine.call_arg())
+        picked = image.mark_thumb(machine.call_arg())
+        if picked is not None:
+            return picked
     return None
 
 
@@ -682,21 +779,44 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     return None
 
 
+def _vector_bases(image: _Image) -> list[int]:
+    """Candidate vector-table addresses: VA 0, named sections, then load bases."""
+    bases: list[int] = [0]
+    for sec in getattr(image, "sections", []) or ():
+        if sec.name in _VECTOR_SECTIONS or sec.name.startswith(".isr_vector"):
+            bases.append(sec.addr)
+    for base, _blob in getattr(image, "loads", []) or ():
+        bases.append(base)
+    seen: set[int] = set()
+    ordered: list[int] = []
+    for base in bases:
+        if base in seen:
+            continue
+        seen.add(base)
+        ordered.append(base)
+    return ordered
+
+
 def _cortex_reset(image: _Image) -> tuple[int, int] | None:
     if image.arch != "arm":
         return None
-    raw = image.read(0, 8)
-    if len(raw) < 8 or raw.startswith(b"\x7fELF"):
-        return None
-    sp, reset = struct.unpack_from("<II", raw)
-    if sp % 8 or sp < 0x20000000 or not reset & 1:
-        return None
-    code = image.code_addr(reset)
-    if code is None:
-        return None
-    if image.entry and (image.entry | 1) != (reset | 1):
-        return None
-    return sp, code
+    for base in _vector_bases(image):
+        raw = image.read(base, 8)
+        if len(raw) < 8 or raw.startswith(b"\x7fELF"):
+            continue
+        sp, reset = struct.unpack_from("<II", raw)
+        # SRAM is often at 0x20000000, but some maps (STM32 CCM) use 0x10000000.
+        if sp % 8 or sp < 0x10000000 or not reset & 1:
+            continue
+        if image.code_addr(sp & ~1) is not None:
+            continue
+        code = image.code_addr(reset)
+        if code is None:
+            continue
+        if image.entry and (image.entry | 1) != (reset | 1):
+            continue
+        return sp, code
+    return None
 
 
 def _unwrap_trampoline(image: _Image, addr: int) -> int:
@@ -773,9 +893,16 @@ def _callees(image: _Image, start: int) -> list[int]:
     thumb = image.thumb_at(start)
     machine = _Machine(image, thumb)
     found: list[int] = []
+    in_opening = True
     for insn in _iter_insns(image, start, thumb, 0x800):
-        if insn.address != start and insn.address > start + 4 and _is_prologue(insn):
-            break
+        if in_opening and _is_frame_setup(insn):
+            pass
+        else:
+            in_opening = False
+            if insn.address != start and _is_prologue(insn):
+                break
+            if insn.address != start and _is_return(insn):
+                break
         values, _refs, is_call = machine.feed(insn)
         if is_call:
             target = _branch_target(insn)
@@ -794,6 +921,8 @@ def _callees(image: _Image, start: int) -> list[int]:
                     and (_is_prologue(head) or head.mnemonic in {"sub", "stp", "push"})
                 ):
                     found.append(code)
+        if not in_opening and _is_return(insn):
+            break
     ordered: list[int] = []
     for addr in found:
         if addr not in ordered:
@@ -811,19 +940,27 @@ def _sweep_xrefs(
     starts: list[int] = []
     keys = set(interesting)
     for sec in image.sections:
-        if not sec.executable or len(sec.data) > _MAX_SWEEP:
+        if not sec.executable:
             continue
-        thumb = image.force_thumb
+        data_len = min(len(sec.data), _MAX_SWEEP)
+        if data_len == 0:
+            continue
+        # Rust armv7 Linux is Thumb-2; the entry LSB is the usual signal.
+        thumb = image.force_thumb or (image.arch == "arm" and bool(image.entry & 1))
         machine = _Machine(image, thumb)
-        # ARM Linux user code is A32. Thumb entry stubs are decoded on their own.
-        if image.arch == "arm" and not image.force_thumb:
-            thumb = False
-            machine = _Machine(image, False)
-        for insn in _iter_insns(image, sec.addr, thumb, len(sec.data)):
-            if _is_prologue(insn) or insn.mnemonic in {"ret", "retaa", "retab"}:
+        in_prologue = False
+        for insn in _iter_insns(image, sec.addr, thumb, data_len):
+            if _is_return(insn):
                 machine.reset()
-            if _is_prologue(insn):
+                in_prologue = False
+            if _is_prologue(insn) and not in_prologue:
+                machine.reset()
                 starts.append(insn.address)
+                in_prologue = True
+            elif in_prologue and _is_frame_setup(insn):
+                pass
+            else:
+                in_prologue = False
             if insn.mnemonic in {"bl", "blx"}:
                 target = _branch_target(insn)
                 code = image.code_addr(target) if target is not None else None
@@ -877,10 +1014,15 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
         interesting, crates = _paths_and_locations(image)
     except Exception:
         interesting, crates = {}, []
-    if any(kind == "user" or kind == "std" for kind, _crate in interesting.values()):
+    # A lone user .rs path is not enough: C images can mention those strings.
+    # std and registry paths, or a rustc version/commit, mark the binary as Rust.
+    if any(kind in {"std", "registry"} for kind, _crate in interesting.values()):
         marked = True
     if not marked and version is None and commit is None:
         return None
+
+    if image.arch == "arm" and image.entry & 1:
+        image.mark_thumb(image.entry)
 
     chain: list[int] = []
     user_main: int | None = None

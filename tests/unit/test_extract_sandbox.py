@@ -129,3 +129,54 @@ def test_bwrap_argv_does_not_rebind_system_tool_directory(tmp_path: Path) -> Non
     argv = _bwrap_argv("bwrap", ["/bin/sh"], input_file=subject, output_dir=out, extra_ro_binds=None)
 
     assert argv.count("/bin") <= 2
+
+
+
+def test_bwrap_argv_does_not_bind_home_directory(tmp_path: Path, monkeypatch) -> None:
+    from r2b.extract.sandbox import _bwrap_argv
+
+    home = tmp_path / "home"
+    home.mkdir()
+    tool = home / "extractor"
+    tool.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    argv = _bwrap_argv("bwrap", [str(tool)], input_file=subject, output_dir=out, extra_ro_binds=None)
+
+    triples = list(zip(argv, argv[1:], argv[2:]))
+    home_s = str(home.resolve())
+    tool_s = str(tool.resolve())
+    assert ("--ro-bind", home_s, home_s) not in triples
+    assert ("--ro-bind", tool_s, tool_s) in triples
+
+
+def test_bwrap_argv_resolves_symlinked_extractor(tmp_path: Path) -> None:
+    from r2b.extract.sandbox import _bwrap_argv
+
+    real_dir = tmp_path / "prefix" / "bin"
+    real_dir.mkdir(parents=True)
+    tool = real_dir / "extractor"
+    tool.write_text("#!/bin/sh\n", encoding="utf-8")
+    link_dir = tmp_path / "link-bin"
+    link_dir.mkdir()
+    link = link_dir / "extractor"
+    link.symlink_to(tool)
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    argv = _bwrap_argv("bwrap", [str(link)], input_file=subject, output_dir=out, extra_ro_binds=None)
+    triples = list(zip(argv, argv[1:], argv[2:]))
+    resolved_dir = str(real_dir.resolve())
+    resolved_tool = str(tool.resolve())
+    assert ("--ro-bind", resolved_dir, resolved_dir) in triples or (
+        "--ro-bind",
+        resolved_tool,
+        resolved_tool,
+    ) in triples
+    assert ("--ro-bind", str(link_dir.resolve()), str(link_dir.resolve())) not in triples

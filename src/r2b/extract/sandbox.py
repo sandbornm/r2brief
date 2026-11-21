@@ -39,6 +39,89 @@ class SandboxResult:
     notes: list[str] = field(default_factory=list)
 
 
+_SYSTEM_ROOTS = ("/usr", "/bin", "/lib", "/lib64", "/sbin")
+_BLOCKED_BIND_ROOTS = frozenset(
+    {
+        Path("/"),
+        Path("/etc"),
+        Path("/var"),
+        Path("/tmp"),
+        Path("/opt"),
+        Path("/home"),
+        Path("/root"),
+        Path("/nix"),
+        Path("/Users"),
+        Path("/private"),
+        Path("/System"),
+        Path("/Applications"),
+    }
+)
+
+
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _too_broad_bind(path: Path) -> bool:
+    """True when binding ``path`` would expose a home directory or a system root."""
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return True
+    if resolved in _BLOCKED_BIND_ROOTS:
+        return True
+    try:
+        home = Path.home().resolve()
+    except OSError:
+        home = None
+    if home is not None and (resolved == home or _is_under(home, resolved)):
+        return True
+    for root in _SYSTEM_ROOTS:
+        root_path = Path(root)
+        if resolved == root_path or root_path in resolved.parents:
+            return True
+    return False
+
+
+def _tool_path(argv0: str | Path) -> Path | None:
+    path = Path(argv0).expanduser()
+    if not path.is_absolute():
+        return None
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
+def _extractor_ro_binds(argv0: str | Path) -> list[Path]:
+    """Read-only binds for an absolute extractor, never a home or system root."""
+    tool = _tool_path(argv0)
+    if tool is None:
+        return []
+    binds: list[Path] = []
+    if tool.is_file() or tool.exists():
+        binds.append(tool)
+    parent = tool.parent
+    if parent.is_dir() and not _too_broad_bind(parent):
+        binds.append(parent)
+        lib = parent.parent / "lib"
+        if parent.name == "bin" and lib.is_dir() and not _too_broad_bind(lib):
+            binds.append(lib)
+    # Preserve order, drop duplicates and any leftover broad paths.
+    seen: set[Path] = set()
+    safe: list[Path] = []
+    for item in binds:
+        if item in seen or _too_broad_bind(item) and item != tool:
+            continue
+        seen.add(item)
+        safe.append(item)
+    return safe
+
+
 def enforce_limits(output_dir: Path, limits: ExtractLimits) -> list[str]:
     """Delete extracted files past max_files / max_bytes. JSON logs at the root stay."""
     notes: list[str] = []
@@ -94,9 +177,11 @@ def run_sandboxed(
     wrapped = list(argv)
     tool_dirs = []
     if argv:
-        executable = Path(argv[0])
-        if executable.is_absolute():
-            tool_dirs.append(str(executable.parent))
+        for bind in _extractor_ro_binds(argv[0]):
+            if bind.is_dir():
+                tool_dirs.append(str(bind))
+            elif bind.parent.is_dir() and not _too_broad_bind(bind.parent):
+                tool_dirs.append(str(bind.parent))
     for extra in extra_ro_binds or ():
         resolved = extra.resolve()
         if resolved.is_file():
@@ -254,13 +339,9 @@ def _bwrap_argv(
             cmd.extend(["--ro-bind", str(resolved), str(resolved)])
     # An absolute extractor outside the system roots (e.g. a Homebrew prefix)
     # and its sibling helpers must be visible inside the sandbox, read-only.
-    if argv and Path(argv[0]).is_absolute():
-        tool_dir = Path(argv[0]).parent.resolve()
-        system_roots = ("/usr", "/bin", "/lib", "/lib64", "/sbin")
-        if tool_dir.is_dir() and not any(
-            tool_dir == Path(root) or Path(root) in tool_dir.parents for root in system_roots
-        ):
-            cmd.extend(["--ro-bind", str(tool_dir), str(tool_dir)])
+    if argv:
+        for bind in _extractor_ro_binds(argv[0]):
+            cmd.extend(["--ro-bind", str(bind), str(bind)])
     cmd.extend(
         [
             "--ro-bind",

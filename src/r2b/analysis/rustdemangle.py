@@ -54,31 +54,35 @@ _BASIC_TYPES = {
 }
 
 
+_MAX_DEPTH = 64
+_MAX_BINDERS = 16
+
+
 def demangle(name: str) -> str | None:
     """Return a demangled Rust path, or None when ``name`` is not mangled."""
-    text = name.strip()
-    for prefix in ("sym.", "imp.", "sym.imp."):
-        if text.startswith(prefix):
-            text = text[len(prefix) :]
-    if text.startswith("__ZN"):
-        text = text[1:]
-    if text.startswith("_R"):
-        try:
+    try:
+        text = name.strip()
+        for prefix in ("sym.", "imp.", "sym.imp."):
+            if text.startswith(prefix):
+                text = text[len(prefix) :]
+        if text.startswith("__ZN"):
+            text = text[1:]
+        if text.startswith("_R"):
             return _demangle_v0(text)
-        except _DemangleError:
-            return None
-    if _LEGACY_RE.match(text):
-        try:
+        if _LEGACY_RE.match(text):
             return _demangle_legacy(text)
-        except _DemangleError:
-            return None
-    return None
+        return None
+    except (_DemangleError, ValueError, RecursionError, OverflowError, MemoryError):
+        return None
 
 
 def pretty_symbol(name: str) -> str:
     """Demangle when the spelling is Rust. Otherwise return ``name``."""
-    decoded = demangle(name)
-    return decoded if decoded else name
+    try:
+        decoded = demangle(name)
+        return decoded if decoded else name
+    except Exception:
+        return name
 
 
 class _DemangleError(Exception):
@@ -87,7 +91,10 @@ class _DemangleError(Exception):
 
 def _unescape_legacy(ident: str) -> str:
     def repl(match: re.Match[str]) -> str:
-        return chr(int(match.group(1), 16))
+        code = int(match.group(1), 16)
+        if code > 0x10FFFF:
+            raise _DemangleError("unicode")
+        return chr(code)
 
     text = _U_ESCAPE.sub(repl, ident)
     for src, dst in _LEGACY_SUBS:
@@ -145,7 +152,16 @@ class _V0:
         self.data = data
         self.i = 0
         self.base = 0
+        self.depth = 0
         self.memo: dict[int, _Node] = {}
+
+    def _enter(self) -> None:
+        self.depth += 1
+        if self.depth > _MAX_DEPTH:
+            raise _DemangleError("depth")
+
+    def _leave(self) -> None:
+        self.depth = max(0, self.depth - 1)
 
     def parse(self) -> str:
         if self.data.startswith("_R"):
@@ -250,6 +266,13 @@ class _V0:
         return node
 
     def _path(self) -> _Node:
+        self._enter()
+        try:
+            return self._path_body()
+        finally:
+            self._leave()
+
+    def _path_body(self) -> _Node:
         start = self._pos()
         tag = self._eat()
         if tag == "B":
@@ -340,6 +363,13 @@ class _V0:
         return _Node("const", text)
 
     def _type(self) -> _Node:
+        self._enter()
+        try:
+            return self._type_body()
+        finally:
+            self._leave()
+
+    def _type_body(self) -> _Node:
         start = self._pos()
         tag = self._peek()
         if tag == "B":
@@ -402,6 +432,8 @@ class _V0:
         if self._peek() == "G":
             self._eat()
             count = self._base62()
+            if count > _MAX_BINDERS:
+                raise _DemangleError("binder")
             binder = "for<" + ", ".join(f"'_{n}" for n in range(count)) + "> "
         if self._peek() == "U":
             self._eat()
@@ -422,7 +454,7 @@ class _V0:
 
 def _format_nested(ns: str, inner: _Node, ident: str) -> _Node:
     if ns == "C":
-        label = "{closure}" if ident in {"", "_"} else "{closure}"
+        label = "{closure}" if ident in {"", "_"} else ident
         text = f"{inner.display()}::{label}"
         return _Node("nested", text)
     if inner.kind == "impl":
@@ -469,6 +501,8 @@ def _punycode(tail: str, prefix: str) -> str:
             delta = i - old_i
             bias = _puny_bias(delta, len(out) + 1, old_i == 0)
             n += i // (len(out) + 1)
+            if n > 0x10FFFF or i > 1_000_000 or len(out) > 1024:
+                raise ValueError("punycode")
             i %= len(out) + 1
             out.insert(i, chr(n))
             i += 1

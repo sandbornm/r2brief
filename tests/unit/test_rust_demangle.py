@@ -80,3 +80,10 @@ def test_v0_integer_const_generics_decode_hex():
     assert demangle("_RIC3fooKj10_E") == "foo::<16>"
     assert demangle("_RIC3fooKja_E") == "foo::<10>"
     assert demangle("_RIC3fooKjn10_E") == "foo::<-16>"
+
+
+def test_v0_punycode_and_unsafe_fn_types():
+    """Rust punycode uses '_' and the RFC 3492 digit alphabet; unsafe is kept."""
+    assert demangle("_RCu7caf_dma") == "café"
+    assert demangle("_RIC3fooFUEuE") == "foo::<unsafe fn()>"
+    assert demangle("_RIC3fooFEuE") == "foo::<fn()>"

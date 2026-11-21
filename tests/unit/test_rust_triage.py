@@ -11,6 +11,7 @@ from r2b.analysis.briefing import build_briefing
 from r2b.analysis.rust import (
     _Image,
     _Sec,
+    _bounded_elf_read,
     _callees,
     _cortex_reset,
     _snap,
@@ -1482,3 +1483,173 @@ def test_sub_from_sp_is_not_a_prologue():
     sites = [site for site, vas in refs.items() if path_va in vas]
     assert sites
     assert all(_snap(starts, site) == start for site in sites)
+
+
+
+def test_std_or_registry_rs_path_alone_is_not_rust(tmp_path: Path):
+    """A std or registry .rs string, with no rustc marker, is not Rust."""
+    std = tmp_path / "std-only"
+    _elf64(std, NOP * 8, b"/library/std/src/lib.rs\x00", b"GCC: (GNU) 12\x00", b"")
+    assert analyze_rust(std) is None
+    registry = tmp_path / "reg-only"
+    _elf64(registry, NOP * 8, b"x/registry/src/foo.rs\x00", b"", b"")
+    assert analyze_rust(registry) is None
+
+
+def test_bounded_elf_read_stops_at_cap():
+    from io import BytesIO
+
+    stream = BytesIO(b"A" * 100)
+    assert _bounded_elf_read(stream, 0, 10**12, cap=16) == b"A" * 16
+    stream = BytesIO(b"B" * 64)
+    assert _bounded_elf_read(stream, 8, 10**9, cap=8) == b"B" * 8
+
+
+def test_sub_x0_from_sp_is_not_a_prologue():
+    """`sub x0, sp, #imm` is a stack-slot address, not a function start."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    path_va = 0x20000
+    sub_x0 = struct.pack("<I", 0xD1000000 | (0x10 << 10) | (31 << 5) | 0)
+    body = (
+        PAC
+        + NOP
+        + sub_x0
+        + _adrp(1, start + 12, path_va & ~0xFFF)
+        + _add(1, 1, path_va & 0xFFF)
+        + RET
+    )
+    image = _aarch64_image(start, body)
+    refs, starts = _sweep_xrefs(image, {path_va: ("user", "demo")})
+    assert start in starts
+    assert start + 8 not in starts
+    sites = [site for site, vas in refs.items() if path_va in vas]
+    assert sites
+    assert all(_snap(starts, site) == start for site in sites)
+
+
+def _write_cortex_text_elf(path: Path, text: bytes, flash: int = 0x08000000) -> None:
+    """Minimal Thumb Cortex-M ELF with a vector table and rustc .comment."""
+    load_off = 0x100
+    text_va = flash + 0x100
+    ro_va = flash + 0x200
+    sp = 0x20004000
+    path_s = b"fw_uart/src/main.rs"
+    record = struct.pack("<IIII", ro_va + 16, len(path_s), 4, 2)
+    ro = record + path_s + b"\x00" + f"/rustc/{COMMIT}/".encode()
+    comment = b"rustc version 1.80.0 (aaaaaaaa 2024-01-01)\x00"
+    names = ["", ".text", ".rodata", ".comment", ".isr_vector", ".shstrtab"]
+    strtab = b"\x00".join(name.encode() for name in names) + b"\x00"
+    name_off: dict[str, int] = {}
+    cursor = 0
+    for name in names:
+        name_off[name] = cursor
+        cursor += len(name) + 1
+    ro_file = load_off + (ro_va - flash)
+    comment_off = ro_file + len(ro)
+    str_off = comment_off + len(comment)
+    shoff = str_off + len(strtab)
+    shnum = len(names)
+    buf = bytearray(shoff + 40 * shnum)
+    buf[load_off : load_off + 8] = struct.pack("<II", sp, text_va | 1)
+    buf[load_off + (text_va - flash) : load_off + (text_va - flash) + len(text)] = text
+    buf[ro_file : ro_file + len(ro)] = ro
+    buf[comment_off : comment_off + len(comment)] = comment
+    buf[str_off : str_off + len(strtab)] = strtab
+
+    def shdr(name: str, typ: int, flags: int, addr: int, off: int, size: int) -> bytes:
+        return struct.pack("<IIIIIIIIII", name_off[name], typ, flags, addr, off, size, 0, 0, 1, 0)
+
+    sections = [
+        shdr("", 0, 0, 0, 0, 0),
+        shdr(".text", 1, 6, text_va, load_off + (text_va - flash), len(text)),
+        shdr(".rodata", 1, 2, ro_va, ro_file, len(ro)),
+        shdr(".comment", 1, 0, 0, comment_off, len(comment)),
+        shdr(".isr_vector", 1, 2, flash, load_off, 8),
+        shdr(".shstrtab", 3, 0, 0, str_off, len(strtab)),
+    ]
+    for index, raw in enumerate(sections):
+        start = shoff + index * 40
+        buf[start : start + 40] = raw
+    ident = b"\x7fELF" + bytes([1, 1, 1, 0]) + b"\x00" * 8
+    ehdr = struct.pack(
+        "<16sHHIIIIIHHHHHH",
+        ident,
+        2,
+        40,
+        1,
+        text_va | 1,
+        52,
+        shoff,
+        0x05000000,
+        52,
+        32,
+        1,
+        40,
+        shnum,
+        shnum - 1,
+    )
+    filesz = len(buf) - load_off
+    phdr = struct.pack("<IIIIIIII", 1, load_off, flash, flash, filesz, filesz, 5, 4)
+    buf[0:52] = ehdr
+    buf[52:84] = phdr
+    path.write_bytes(buf)
+
+
+def test_cortex_reset_stops_at_wfi_spin_after_init_loop(tmp_path: Path):
+    """A post-loop `wfi; b wfi` must not let a neighbor's bl become user main."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    text_va = flash + 0x100
+    helper = flash + 0x160
+    user = flash + 0x170
+    other = flash + 0x180
+    body = bytearray(b"\x00" * 0x90)
+    # bl helper; loop: cmp r0,#0; beq exit; str r0,[r1]; b loop
+    # exit: bl user; wfi; b wfi;  neighbor: bl other
+    body[0:4] = _thumb_bl(text_va, helper)
+    loop = text_va + 4
+    exit_va = text_va + 0x0C
+    body[4:6] = b"\x00\x28"
+    body[6:8] = _thumb_beq(text_va + 6, exit_va)
+    body[8:10] = b"\x08\x60"
+    body[10:12] = _thumb_b(text_va + 10, loop)
+    body[12:16] = _thumb_bl(exit_va, user)
+    wfi = text_va + 16
+    body[16:18] = b"\x30\xbf"  # wfi
+    body[18:20] = _thumb_b(text_va + 18, wfi)
+    body[20:24] = _thumb_bl(text_va + 20, other)
+    body[0x60:0x62] = b"\x70\x47"
+    body[0x70:0x72] = b"\x70\x47"
+    body[0x80:0x82] = b"\x70\x47"
+    binary = tmp_path / "fw-wfi-spin"
+    _write_cortex_text_elf(binary, bytes(body), flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert hex(other) != info["user_main"]
+    assert hex(helper) != info["user_main"]
+
+
+def test_cortex_reset_skips_bl_over_forward_branch(tmp_path: Path):
+    """An unconditional forward `b` must not publish the jumped-over bl."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    text_va = flash + 0x100
+    user = flash + 0x1A0
+    other = flash + 0x1A8
+    body = bytearray(b"\x00" * 0xB0)
+    # bl user; b end; bl other; end: b .
+    body[0:4] = _thumb_bl(text_va, user)
+    end = text_va + 10
+    body[4:6] = _thumb_b(text_va + 4, end)
+    body[6:10] = _thumb_bl(text_va + 6, other)
+    body[10:12] = b"\xfe\xe7"
+    body[0xA0:0xA2] = b"\x70\x47"
+    body[0xA8:0xAA] = b"\x70\x47"
+    binary = tmp_path / "fw-skip-bl"
+    _write_cortex_text_elf(binary, bytes(body), flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert hex(other) != info["user_main"]

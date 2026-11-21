@@ -250,9 +250,14 @@ class _V0:
             raise _DemangleError("ident")
         raw = self.data[self.i : self.i + length]
         self.i += length
-        if puny and "-" in raw:
-            head, _, tail = raw.partition("-")
-            raw = _punycode(tail, head.replace("_", " ")) if tail else raw
+        if puny:
+            # Rust v0 uses '_' as the punycode delimiter, not RFC 3492 '-'.
+            # No delimiter means the whole ident is punycode (empty prefix).
+            if "_" in raw:
+                head, _, tail = raw.rpartition("_")
+                raw = _punycode(tail, head.replace("_", " "))
+            else:
+                raw = _punycode(raw, "")
         return raw
 
     def _maybe_disambiguator(self) -> None:
@@ -466,8 +471,10 @@ class _V0:
             if count > _MAX_BINDERS:
                 raise _DemangleError("binder")
             binder = "for<" + ", ".join(f"'_{n}" for n in range(count)) + "> "
+        unsafe = ""
         if self._peek() == "U":
             self._eat()
+            unsafe = "unsafe "
         if self._peek() == "K":
             self._eat()
             abi = self._ident()
@@ -480,7 +487,7 @@ class _V0:
         self._eat()
         ret = self._type().display()
         ret_text = "" if ret == "()" else f" -> {ret}"
-        return _Node("type", f"{binder}{abi_text}fn({_join(inputs)}){ret_text}")
+        return _Node("type", f"{binder}{unsafe}{abi_text}fn({_join(inputs)}){ret_text}")
 
 
 def _format_nested(ns: str, inner: _Node, ident: str) -> _Node:
@@ -514,13 +521,15 @@ def _punycode(tail: str, prefix: str) -> str:
                     return prefix + "-" + tail
                 ch = tail[pos]
                 pos += 1
-                digit = (
-                    ord(ch) - 48
-                    if ch.isdigit()
-                    else ord(ch) - 97 + 26
-                    if ch.islower()
-                    else ord(ch) - 65 + 10
-                )
+                # RFC 3492: a-z = 0..25, 0-9 = 26..35 (case-insensitive letters).
+                if "a" <= ch <= "z":
+                    digit = ord(ch) - 97
+                elif "A" <= ch <= "Z":
+                    digit = ord(ch) - 65
+                elif "0" <= ch <= "9":
+                    digit = ord(ch) - 48 + 26
+                else:
+                    digit = -1
                 if digit < 0 or digit > 35:
                     return prefix + "-" + tail
                 i += digit * w

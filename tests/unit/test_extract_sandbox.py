@@ -227,3 +227,61 @@ def test_bwrap_argv_does_not_bind_symlink_to_home(tmp_path: Path, monkeypatch) -
     home_s = str(home.resolve())
     assert ("--ro-bind", home_s, home_s) not in triples
     assert ("--bind", home_s, home_s) not in triples
+
+
+
+def test_too_broad_bind_checks_raw_and_resolved_paths() -> None:
+    from r2b.extract.sandbox import _too_broad_bind
+
+    assert _too_broad_bind(Path("/tmp")) is True
+    assert _too_broad_bind(Path("/private/tmp")) is True
+    assert _too_broad_bind(Path("/etc")) is True
+    assert _too_broad_bind(Path("/private/etc")) is True
+    assert _too_broad_bind(Path("/var")) is True
+    assert _too_broad_bind(Path("/private/var")) is True
+
+
+def test_bwrap_argv_does_not_bind_tmp_directory(tmp_path: Path) -> None:
+    """An extractor under /tmp must not ro-bind /tmp or /private/tmp."""
+    import os
+
+    from r2b.extract.sandbox import _bwrap_argv
+
+    tool = Path("/tmp") / f"r2b-extract-test-{os.getpid()}"
+    try:
+        tool.write_text("#!/bin/sh\n", encoding="utf-8")
+        subject = tmp_path / "subject.bin"
+        subject.write_bytes(b"fixture")
+        out = tmp_path / "out"
+        out.mkdir()
+        argv = _bwrap_argv(
+            "bwrap", [str(tool)], input_file=subject, output_dir=out, extra_ro_binds=None
+        )
+        triples = list(zip(argv, argv[1:], argv[2:]))
+        for folder in ("/tmp", "/private/tmp"):
+            assert ("--ro-bind", folder, folder) not in triples
+            assert ("--bind", folder, folder) not in triples
+        tool_s = str(tool.resolve())
+        assert ("--ro-bind", tool_s, tool_s) in triples
+    finally:
+        tool.unlink(missing_ok=True)
+
+
+def test_bwrap_argv_does_not_bind_symlink_to_root(tmp_path: Path) -> None:
+    from r2b.extract.sandbox import _bwrap_argv
+
+    link = tmp_path / "extractor"
+    link.symlink_to("/")
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+    argv = _bwrap_argv(
+        "bwrap", [str(link)], input_file=subject, output_dir=out, extra_ro_binds=None
+    )
+    triples = list(zip(argv, argv[1:], argv[2:]))
+    assert ("--ro-bind", "/", "/") not in triples
+    assert ("--bind", "/", "/") not in triples
+    resolved = str(Path("/").resolve())
+    if resolved != "/":
+        assert ("--ro-bind", resolved, resolved) not in triples

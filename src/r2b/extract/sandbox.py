@@ -40,13 +40,18 @@ class SandboxResult:
 
 
 _SYSTEM_ROOTS = ("/usr", "/bin", "/lib", "/lib64", "/sbin")
+# Exact-only: binding the root is too broad, but a child such as
+# /opt/homebrew/bin may still be mounted.
 _BLOCKED_BIND_ROOTS = frozenset(
     {
         Path("/"),
+        Path("/opt"),
         Path("/etc"),
         Path("/var"),
+        Path("/private/etc"),
+        Path("/private/var"),
         Path("/tmp"),
-        Path("/opt"),
+        Path("/private/tmp"),
         Path("/home"),
         Path("/root"),
         Path("/nix"),
@@ -54,6 +59,19 @@ _BLOCKED_BIND_ROOTS = frozenset(
         Path("/private"),
         Path("/System"),
         Path("/Applications"),
+    }
+)
+# The directory and every path under it. /tmp and /etc (and Darwin
+# /private aliases) must not be mounted; /var is exact-only because
+# macOS temp dirs live under /private/var/folders.
+_BLOCKED_BIND_PREFIXES = frozenset(
+    {
+        Path("/tmp"),
+        Path("/etc"),
+        Path("/private/tmp"),
+        Path("/private/etc"),
+        Path("/var/tmp"),
+        Path("/private/var/tmp"),
     }
 )
 
@@ -66,14 +84,33 @@ def _is_under(path: Path, root: Path) -> bool:
         return False
 
 
+def _is_blocked_location(path: Path) -> bool:
+    """True when ``path`` itself or a denylist prefix should not be bound."""
+    if path in _BLOCKED_BIND_ROOTS or path in _BLOCKED_BIND_PREFIXES:
+        return True
+    for prefix in _BLOCKED_BIND_PREFIXES:
+        if _is_under(path, prefix):
+            return True
+    for root in _SYSTEM_ROOTS:
+        root_path = Path(root)
+        if path == root_path or root_path in path.parents:
+            return True
+    return False
+
+
 def _too_broad_bind(path: Path) -> bool:
-    """True when binding ``path`` would expose a home directory or a system root."""
+    """True when binding ``path`` would expose a home directory or a system root.
+
+    The denylist is checked against both the raw path and the resolved path so
+    that aliases such as ``/tmp`` -> ``/private/tmp`` cannot skip it.
+    """
     try:
         resolved = path.resolve()
     except OSError:
         return True
-    if resolved in _BLOCKED_BIND_ROOTS:
-        return True
+    for candidate in (path, resolved):
+        if _is_blocked_location(candidate):
+            return True
     try:
         home = Path.home().resolve()
     except OSError:
@@ -84,10 +121,6 @@ def _too_broad_bind(path: Path) -> bool:
         resolved == home or _is_under(home, resolved) or _is_under(resolved, home)
     ):
         return True
-    for root in _SYSTEM_ROOTS:
-        root_path = Path(root)
-        if resolved == root_path or root_path in resolved.parents:
-            return True
     return False
 
 

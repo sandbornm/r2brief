@@ -97,7 +97,8 @@ def metrics(ranked: list[int], recs: list[dict], crate: str) -> dict:
         "user_found": len({r["addr"] for r in mapped if r and r.get("kind") == "user"}),
     }
     for k in KS:
-        result[f"p@{k}"] = round(sum(hits[:k]) / k, 3)
+        denom = min(k, len(hits))
+        result[f"p@{k}"] = round(sum(hits[:k]) / denom, 3) if denom else 0.0
     result["top"] = [
         [hex(a), (r["name"][:80] if r else None), (r.get("kind") if r else None)]
         for a, r in zip(ranked[:10], mapped[:10])
@@ -151,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
             brief, secs, err = run_brief(
                 args.r2b, args.data_root / binary, mode, args.max_regions, args.nice
             )
+            if brief is None and not err:
+                err = "r2b did not emit JSON"
             row[mode] = {
                 "secs": secs,
                 "error": err,
@@ -169,7 +172,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"binary": binary, **brief_line}), flush=True)
     if args.out:
         args.out.write_text(json.dumps(rows, indent=1))
-    return 0
+    failed = any(row[m].get("error") for row in rows for m in args.modes.split(","))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

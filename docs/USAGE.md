@@ -271,7 +271,7 @@ On a stripped Rust ARM ELF, `brief` adds a top-level `rust` object. The fields c
 | `rustc_version` | version text from `.comment` |
 | `rustc_commit` | 40 hex digits from a `/rustc/<hash>/` path |
 | `user_crates` | crate names from user source paths such as `<crate>/src/...` |
-| `user_main` | user `main`, or `__cortex_m_rt_main` on Cortex-M |
+| `user_main` | hex address of the recovered user `main`, or of the function the cortex-m-rt trampoline reaches |
 | `entry_chain` | entry, then C `main` or the reset trampoline, then user main |
 | `functions` | ranked user functions, each with `addr` and `role` |
 

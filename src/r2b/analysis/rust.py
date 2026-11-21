@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import struct
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -160,6 +161,46 @@ class _Image:
     _thumb: set[int] = field(default_factory=set)
 
 
+
+def _bounded_elf_read(stream: Any, offset: int, size: int, cap: int = _MAX_IMAGE) -> bytes:
+    """Read at most ``cap`` bytes from ``stream`` at ``offset``. Never ``read`` the full size first."""
+    if size <= 0 or cap <= 0:
+        return b""
+    stream.seek(int(offset))
+    return stream.read(min(int(size), cap))
+
+
+def _bounded_section_blob(sec: Any, cap: int = _MAX_IMAGE) -> bytes:
+    """Section bytes, truncated to ``cap`` even when the section is compressed."""
+    if sec["sh_type"] == "SHT_NOBITS":
+        return b""
+    if getattr(sec, "compressed", False):
+        typ = getattr(sec, "_compression_type", None)
+        if typ != "ELFCOMPRESS_ZLIB":
+            return b""
+        hdr_size = sec.structs.Elf_Chdr.sizeof()
+        remaining = int(sec["sh_size"]) - hdr_size
+        dest = min(int(sec.data_size), cap)
+        if remaining <= 0 or dest <= 0:
+            return b""
+        sec.stream.seek(int(sec["sh_offset"]) + hdr_size)
+        decomp = zlib.decompressobj()
+        out = bytearray()
+        while remaining > 0 and len(out) < dest:
+            chunk = sec.stream.read(min(remaining, 64 * 1024))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            out.extend(decomp.decompress(chunk, dest - len(out)))
+        return bytes(out)
+    size = int(getattr(sec, "data_size", sec["sh_size"]))
+    return _bounded_elf_read(sec.stream, int(sec["sh_offset"]), size, cap)
+
+
+def _bounded_segment_blob(seg: Any, cap: int = _MAX_IMAGE) -> bytes:
+    return _bounded_elf_read(seg.stream, int(seg["p_offset"]), int(seg["p_filesz"]), cap)
+
+
 def _open_image(path: Path) -> _Image | None:
     with path.open("rb") as handle:
         if handle.read(4) != b"\x7fELF":
@@ -180,7 +221,7 @@ def _open_image(path: Path) -> _Image | None:
             if not name or sec["sh_type"] == "SHT_NOBITS":
                 continue
             try:
-                blob = sec.data()[:_MAX_IMAGE]
+                blob = _bounded_section_blob(sec)
             except Exception:
                 continue
             sections.append(_Sec(name, int(sec["sh_addr"]), blob, int(sec["sh_flags"])))
@@ -189,7 +230,7 @@ def _open_image(path: Path) -> _Image | None:
             if seg["p_type"] != "PT_LOAD":
                 continue
             try:
-                blob = seg.data()[:_MAX_IMAGE]
+                blob = _bounded_segment_blob(seg)
             except Exception:
                 continue
             loads.append((int(seg["p_vaddr"]), blob))
@@ -198,7 +239,7 @@ def _open_image(path: Path) -> _Image | None:
                 if seg["p_type"] != "PT_LOAD" or not int(seg["p_flags"]) & 1:
                     continue
                 try:
-                    blob = seg.data()[:_MAX_IMAGE]
+                    blob = _bounded_segment_blob(seg)
                 except Exception:
                     continue
                 sections.append(_Sec(".load", int(seg["p_vaddr"]), blob, 0x4))
@@ -888,8 +929,14 @@ def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
     image.mark_thumb(reset | 1)
     last: int | None = None
     in_opening = True
-    has_forward_exit = False
+    # Forward exits as (src, dest). A backward `b` is terminal unless one of
+    # these leaves *that* loop, so a later `wfi; b wfi` still stops.
+    forward_exits: list[tuple[int, int]] = []
+    skip_until: int | None = None
     for insn in _iter_insns(image, reset, True, 0x200):
+        if skip_until is not None and insn.address < skip_until:
+            continue
+        skip_until = None
         if in_opening and _is_frame_setup(insn):
             pass
         else:
@@ -905,21 +952,27 @@ def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
                 last = code
                 image.mark_thumb(code | 1)
         target = _branch_target(insn)
-        # A forward conditional (or other non-call) branch is a loop exit.
         if (
             target is not None
             and target > insn.address
             and insn.mnemonic.split(".")[0] != "bl"
         ):
-            has_forward_exit = True
-        # `b .` is a spin. A backward `b` ends the handler only when no
-        # reachable forward exit was already seen; a finite init loop must
-        # keep scanning to that exit.
+            forward_exits.append((insn.address, target))
+        # `b .` is a spin. A backward `b` ends the handler unless a forward
+        # exit leaves this loop. An unconditional forward `b` skips the
+        # intervening instructions so a jumped-over `bl` is not published.
         if _is_unconditional_b(insn):
             if target is None or target == insn.address:
                 break
-            if target < insn.address and not has_forward_exit:
-                break
+            if target < insn.address:
+                loop_lo, loop_hi = target, insn.address
+                if not any(
+                    loop_lo <= src <= loop_hi and dest > loop_hi
+                    for src, dest in forward_exits
+                ):
+                    break
+            else:
+                skip_until = target
         if _is_return(insn):
             break
     if last is None:
@@ -1081,11 +1134,10 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
         interesting, crates = _paths_and_locations(image)
     except Exception:
         interesting, crates = {}, []
-    # A lone user .rs path is not enough: C images can mention those strings.
-    # std and registry paths, or a rustc version/commit, mark the binary as Rust.
-    if any(kind in {"std", "registry"} for kind, _crate in interesting.values()):
-        marked = True
-    if not marked and version is None and commit is None:
+    # A .rs path alone, including std or registry, is not enough: C images can
+    # mention those strings. Only a rustc version or a /rustc/<commit>/ path
+    # marks the binary as Rust, matching USAGE.
+    if not marked:
         return None
 
     if image.arch == "arm" and image.entry & 1:

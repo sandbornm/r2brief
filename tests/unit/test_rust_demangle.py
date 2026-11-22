@@ -91,3 +91,11 @@ def test_v0_punycode_and_unsafe_fn_types():
     assert demangle("_RCu6f_5gaa") == "føø"
     assert demangle("_RIC3fooFUEuE") == "foo::<unsafe fn()>"
     assert demangle("_RIC3fooFEuE") == "foo::<fn()>"
+
+
+def test_bad_punycode_is_rejected_not_published_as_dash_tail():
+    """A malformed punycode ident rejects the symbol; pretty_symbol keeps the raw name."""
+    for raw in ("_RCu4_ab@z", "_RCu1!", "_RCu2_a", "_RCu3_zz"):
+        assert demangle(raw) is None, raw
+        assert pretty_symbol(raw) == raw
+    assert demangle("_RCu7caf_dma") == "café"

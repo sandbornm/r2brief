@@ -360,3 +360,47 @@ def test_bwrap_argv_does_not_bind_symlink_to_tmp(tmp_path: Path) -> None:
         "/private/tmp",
         str(Path("/tmp").resolve()),
     )
+
+
+def test_symlinked_extractor_never_binds_a_broad_target(tmp_path: Path, monkeypatch) -> None:
+    """Pin: a tool symlink to $HOME, /, /tmp, or /var/tmp binds neither the link nor
+    the target, and a symlink to a file inside $HOME binds only that file."""
+    from r2b.extract.sandbox import _bwrap_argv
+
+    home = tmp_path / "home"
+    (home / "bin").mkdir(parents=True)
+    tool = home / "bin" / "extractor"
+    tool.write_bytes(b"#!/bin/sh\n")
+    tool.chmod(0o755)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+    links = tmp_path / "links"
+    links.mkdir()
+
+    for name, target in (("home", home), ("root", Path("/")), ("tmp", Path("/tmp")),
+                         ("vartmp", Path("/var/tmp"))):
+        link = links / name
+        link.symlink_to(target)
+        argv = _bwrap_argv(
+            "bwrap", [str(link)], input_file=subject, output_dir=out, extra_ro_binds=None
+        )
+        bound = {argv[i + 1] for i, a in enumerate(argv) if a in ("--ro-bind", "--bind")}
+        resolved = target.resolve()
+        assert str(link) not in bound, name
+        assert str(resolved) not in bound, name
+        assert not any(Path(b) in resolved.parents for b in bound), name
+        assert str(home.resolve()) not in bound, name
+
+    link = links / "file"
+    link.symlink_to(tool)
+    argv = _bwrap_argv(
+        "bwrap", [str(link)], input_file=subject, output_dir=out, extra_ro_binds=None
+    )
+    bound = {argv[i + 1] for i, a in enumerate(argv) if a in ("--ro-bind", "--bind")}
+    assert str(tool.resolve()) in bound
+    assert str(home.resolve()) not in bound
+    assert str((home / "bin").resolve()) not in bound
+    assert str(link) not in bound

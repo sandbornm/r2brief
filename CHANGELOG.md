@@ -5,6 +5,24 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- Stripped Rust ARM ranking is back to user code first. On fd-find 10.5.2
+  for aarch64 (`strip` and `cargostrip`), user-code p@5/p@10 goes from
+  0.2/0.2 to 1.0/0.8. The causes: std's vendored `/rust/deps/` crates
+  counted as user crates. Callee-saved spills after `stp x29, x30` ended
+  the prologue, so the following `sub sp, sp` was taken as a second
+  function start. The epilogue `sub sp, x29, #imm` was taken as a start
+  too. The user-main scan stopped before the `lang_start` pointer load in
+  an LTO-inlined C `main`. A path-referencing function that user main
+  also calls now gets a one-time +4. Thumb `sub sp, #imm` still starts a
+  function. Static analysis only, no model.
+- v0 demangling rejects malformed punycode instead of publishing a
+  `-tail` spelling, so `pretty_symbol` keeps the raw name.
+- A short ELF read (file ends before a section's declared size) raises
+  `ElfShortRead` instead of returning a short slice. Rust triage drops
+  that section and keeps going.
+- Extractor sandbox: added a test pinning that a tool symlink to `$HOME`,
+  `/`, `/tmp`, or `/var/tmp` binds neither the link nor its target. This
+  already held on `main`, so there is no behavior change.
 - CI job `Stripped Rust eval (fd aarch64)` builds fd-find 10.5.2 for
   aarch64 (pinned crate, rustc 1.93.0, no committed binaries), derives
   per-function truth from a byte-identical symbolized twin, and reports

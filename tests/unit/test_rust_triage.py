@@ -10,12 +10,14 @@ import pytest
 from r2b.analysis.briefing import build_briefing
 from r2b.analysis.rust import (
     ElfReadBudgetExceeded,
+    ElfShortRead,
     _Image,
     _ReadBudget,
     _Sec,
     _bounded_elf_read,
     _callees,
     _open_image,
+    _recover_user_main,
     _snap,
     _sweep_xrefs,
     analyze_rust,
@@ -54,6 +56,18 @@ def test_classify_path_user_std_and_registry():
     assert classify_path("README") == ("other", None)
     assert classify_path("/build/proj/src/main.rs") == ("user", "proj")
     assert classify_path("/home/user/app-1.0/src/main.rs") == ("user", "app-1.0")
+
+
+def test_std_vendored_deps_are_std_not_user():
+    """rust-lang builds std's own dependencies from /rust/deps/<crate>-<ver>/."""
+    for path in (
+        "/rust/deps/addr2line-0.25.1/src/function.rs",
+        "/rust/deps/miniz_oxide-0.8.9/src/inflate/core.rs",
+        "/rust/deps/rustc-demangle-0.1.26/src/v0.rs",
+        "/rust/deps/gimli-0.32.3/src/read/line.rs",
+        "/rust/deps/hashbrown-0.16.1/src/raw/mod.rs",
+    ):
+        assert classify_path(path) == ("std", None), path
 
 
 def _adrp(rd: int, pc: int, page: int) -> bytes:
@@ -1439,3 +1453,122 @@ def test_sub_x0_from_sp_is_not_a_prologue():
     assert all(_snap(starts, site) == start for site in sites)
 
 
+
+
+def _stp_pair_off(rt: int, rt2: int, off: int) -> bytes:
+    # stp xRt, xRt2, [sp, #off]
+    return struct.pack("<I", 0xA9000000 | ((off // 8) << 15) | (rt2 << 10) | (31 << 5) | rt)
+
+
+def _mov_fp_sp() -> bytes:
+    # mov x29, sp
+    return struct.pack("<I", 0x910003FD)
+
+
+def _sub_sp_from_fp(imm: int) -> bytes:
+    # sub sp, x29, #imm
+    return struct.pack("<I", 0xD1000000 | (imm << 10) | (29 << 5) | 31)
+
+
+def test_frame_spills_before_sub_sp_stay_one_function():
+    """stp fp/lr!; stp callee-saved; mov fp; sub sp, sp is one prologue, not two."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    path_va = 0x20000
+    body = (
+        _stp_fp_lr_pre()
+        + _stp_pair_off(28, 27, 0x10)
+        + _stp_pair_off(20, 19, 0x20)
+        + _mov_fp_sp()
+        + _sub_sp(0x350)
+        + _adrp(1, start + 20, path_va & ~0xFFF)
+        + _add(1, 1, path_va & 0xFFF)
+        + RET
+    )
+    image = _aarch64_image(start, body)
+    refs, starts = _sweep_xrefs(image, {path_va: ("user", "demo")})
+    assert start in starts
+    assert start + 16 not in starts
+    sites = [site for site, vas in refs.items() if path_va in vas]
+    assert sites and all(_snap(starts, site) == start for site in sites)
+
+
+def test_epilogue_sub_sp_from_fp_is_not_a_start():
+    """`sub sp, x29, #imm` restores SP before a return; it starts nothing."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    path_va = 0x20000
+    body = (
+        PAC
+        + _stp_fp_lr_pre()
+        + _mov_fp_sp()
+        + _u32(0xD2800009) * 4  # mov x9, #0
+        + _adrp(1, start + 28, path_va & ~0xFFF)
+        + _add(1, 1, path_va & 0xFFF)
+        + _sub_sp_from_fp(0x10)
+        + RET
+    )
+    image = _aarch64_image(start, body)
+    refs, starts = _sweep_xrefs(image, {path_va: ("user", "demo")})
+    assert start + 36 not in starts
+    sites = [site for site, vas in refs.items() if path_va in vas]
+    assert sites and all(_snap(starts, site) == start for site in sites)
+
+
+def test_user_main_found_deep_in_an_lto_inlined_c_main():
+    """With LTO, lang_start_internal inlines into C main; the user-main load sits far in."""
+    pytest.importorskip("capstone")
+    c_main = 0x10000
+    lang = 0x18000
+    user = 0x19000
+    filler = _u32(0x91000529) * 300  # add x9, x9, #1
+    body = _sub_sp(0x100) + filler
+    pc = c_main + len(body)
+    body += _adr(0, pc, user) + _bl(pc + 4, lang) + RET
+    assert len(body) > 0x400
+    image = _aarch64_image(c_main, body, extra=[(lang, RET), (user, PAC + RET)])
+    assert _recover_user_main(image, c_main) == user
+
+
+def test_path_ref_called_from_user_main_outranks_path_ref_alone(tmp_path: Path):
+    """A user path ref plus a direct call from user main beats a path ref alone."""
+    pytest.importorskip("capstone")
+    text = bytearray(_text())
+    # USER: paciasp; bl REF; ret
+    text[0x80:0x8C] = PAC + _bl(USER + 4, REF) + RET
+    binary = tmp_path / "rust-aarch64-callee"
+    rela = struct.pack("<QQq", GOT, 1027, C_MAIN)
+    _elf64(binary, bytes(text), _rodata(), _comment(), rela)
+    info = analyze_rust(binary)
+    assert info is not None and info["user_main"] == hex(USER)
+    ref = next(item for item in info["functions"] if item["addr"] == hex(REF))
+    assert ref["role"] == "user"
+    assert "called from user main" in ref["why"]
+    assert ref["score"] > 211
+
+
+def test_short_read_raises_instead_of_returning_a_short_slice():
+    """A 10-byte read of a 3-byte stream raises and charges nothing."""
+    from io import BytesIO
+
+    budget = _ReadBudget(cap=64)
+    with pytest.raises(ElfShortRead, match="returned 3"):
+        _bounded_elf_read(BytesIO(b"ABC"), 0, 10, budget)
+    assert budget.used == 0
+    assert _bounded_elf_read(BytesIO(b"ABC"), 0, 3, budget) == b"ABC"
+
+
+def test_truncated_section_is_skipped_not_read_short(tmp_path: Path):
+    """A section whose bytes run past EOF is dropped; triage still runs on the rest."""
+    pytest.importorskip("capstone")
+    binary = tmp_path / "rust-aarch64"
+    _aarch64_rust(binary)
+    data = bytearray(binary.read_bytes())
+    shoff = struct.unpack_from("<Q", data, 0x28)[0]
+    # Section 3 is .rodata; claim it is far larger than the file.
+    struct.pack_into("<Q", data, shoff + 3 * 64 + 32, len(data) * 4)
+    binary.write_bytes(bytes(data))
+    image = _open_image(binary)
+    assert image is not None
+    assert ".rodata" not in [sec.name for sec in image.sections]
+    assert ".text" in [sec.name for sec in image.sections]

@@ -507,50 +507,54 @@ def _format_nested(ns: str, inner: _Node, ident: str) -> _Node:
 
 
 def _punycode(tail: str, prefix: str) -> str:
-    """Decode a punycode digit tail onto ``prefix``. RFC 3492, enough for Rust idents."""
-    try:
-        n = 128
-        i = 0
-        bias = 72
-        out = list(prefix)
-        pos = 0
-        while pos < len(tail):
-            old_i = i
-            w = 1
-            k = 36
-            while True:
-                if pos >= len(tail):
-                    return prefix + "-" + tail
-                ch = tail[pos]
-                pos += 1
-                # RFC 3492: a-z = 0..25, 0-9 = 26..35 (case-insensitive letters).
-                if "a" <= ch <= "z":
-                    digit = ord(ch) - 97
-                elif "A" <= ch <= "Z":
-                    digit = ord(ch) - 65
-                elif "0" <= ch <= "9":
-                    digit = ord(ch) - 48 + 26
-                else:
-                    digit = -1
-                if digit < 0 or digit > 35:
-                    return prefix + "-" + tail
-                i += digit * w
-                t = 1 if k <= bias else 26 if k >= bias + 26 else k - bias
-                if digit < t:
-                    break
-                w *= 36 - t
-                k += 36
-            delta = i - old_i
-            bias = _puny_bias(delta, len(out) + 1, old_i == 0)
-            n += i // (len(out) + 1)
-            if n > 0x10FFFF or i > 1_000_000 or len(out) > 1024:
-                raise ValueError("punycode")
-            i %= len(out) + 1
-            out.insert(i, chr(n))
-            i += 1
-        return "".join(out)
-    except (OverflowError, ValueError):
-        return prefix + "-" + tail
+    """Decode a punycode digit tail onto ``prefix``. RFC 3492, enough for Rust idents.
+
+    A tail with a non-digit, a truncated variable-length integer, or a code
+    point outside Unicode scalar values raises ``_DemangleError`` so the whole
+    symbol is rejected instead of published with a guessed spelling.
+    """
+    if not tail:
+        raise _DemangleError("punycode")
+    n = 128
+    i = 0
+    bias = 72
+    out = list(prefix)
+    pos = 0
+    while pos < len(tail):
+        old_i = i
+        w = 1
+        k = 36
+        while True:
+            if pos >= len(tail):
+                raise _DemangleError("punycode")
+            ch = tail[pos]
+            pos += 1
+            # RFC 3492: a-z = 0..25, 0-9 = 26..35 (case-insensitive letters).
+            if "a" <= ch <= "z":
+                digit = ord(ch) - 97
+            elif "A" <= ch <= "Z":
+                digit = ord(ch) - 65
+            elif "0" <= ch <= "9":
+                digit = ord(ch) - 48 + 26
+            else:
+                raise _DemangleError("punycode")
+            i += digit * w
+            t = 1 if k <= bias else 26 if k >= bias + 26 else k - bias
+            if digit < t:
+                break
+            w *= 36 - t
+            k += 36
+            if i > 1_000_000:
+                raise _DemangleError("punycode")
+        delta = i - old_i
+        bias = _puny_bias(delta, len(out) + 1, old_i == 0)
+        n += i // (len(out) + 1)
+        if n > 0x10FFFF or 0xD800 <= n <= 0xDFFF or i > 1_000_000 or len(out) > 1024:
+            raise _DemangleError("punycode")
+        i %= len(out) + 1
+        out.insert(i, chr(n))
+        i += 1
+    return "".join(out)
 
 
 def _puny_bias(delta: int, points: int, first: bool) -> int:

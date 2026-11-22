@@ -54,6 +54,8 @@ def classify_path(path: str) -> tuple[str, str | None]:
         return "std", None
     if "/rustlib/src/rust/library/" in low:
         return "std", None
+    if low.startswith(("/rust/deps/", "rust/deps/")):
+        return "std", None
     for crate in _STD_CRATES:
         if f"/library/{crate}/" in low:
             return "std", None
@@ -163,6 +165,10 @@ class ElfReadBudgetExceeded(ValueError):
     """Raised when a section or segment read would exceed the shared file budget."""
 
 
+class ElfShortRead(ValueError):
+    """Raised when the file ends before a section or segment's declared size."""
+
+
 class _ReadBudget:
     """A single per-file byte budget shared by every section and segment read."""
 
@@ -199,9 +205,9 @@ def _bounded_elf_read(
     """Read ``size`` bytes from ``stream`` at ``offset``, charged to ``budget``.
 
     Overlapping reads of a range already in the budget are reused and do not
-    consume additional budget. A request that cannot be satisfied in full
-    raises ``ElfReadBudgetExceeded`` instead of returning an empty or short
-    slice.
+    consume additional budget. A request larger than the remaining budget
+    raises ``ElfReadBudgetExceeded``. A file that ends early raises
+    ``ElfShortRead``. Neither returns an empty or short slice.
     """
     if budget is None:
         budget = _ReadBudget()
@@ -219,6 +225,8 @@ def _bounded_elf_read(
         )
     stream.seek(offset)
     data = stream.read(size)
+    if len(data) != size:
+        raise ElfShortRead(f"ELF read of {size} bytes at offset {offset} returned {len(data)}")
     return budget.store(offset, data)
 
 
@@ -252,6 +260,8 @@ def _bounded_section_blob(sec: Any, budget: _ReadBudget | None = None) -> bytes:
             remaining -= len(chunk)
             out.extend(decomp.decompress(chunk, dest - len(out)))
         data = bytes(out)
+        if len(data) != dest:
+            raise ElfShortRead(f"compressed ELF section inflated to {len(data)} of {dest} bytes")
         budget.used += len(data)
         return data
     size = int(getattr(sec, "data_size", sec["sh_size"]))
@@ -855,8 +865,10 @@ def _is_prologue(insn: Any) -> bool:
     if mnem == "stp" and "sp" in text and ("!" in text or "#-" in text):
         return True
     if mnem == "sub" and "#" in text:
-        dest = text.split(",")[0].strip()
-        if dest in {"sp", "wsp"}:
+        ops = [op.strip() for op in text.split(",")]
+        # `sub sp, sp, #imm` allocates a frame. `sub sp, x29, #imm` restores
+        # SP in an epilogue and is not a function start.
+        if ops[0] in {"sp", "wsp"} and len(ops) >= 3 and ops[1] in {"sp", "wsp"}:
             return True
     return False
 
@@ -870,6 +882,9 @@ def _is_frame_setup(insn: Any) -> bool:
     if mnem in {"sub", "add"} and re.search(r"\bsp\b", text):
         return True
     if mnem == "mov" and re.search(r"\b(x29|fp)\b", text) and re.search(r"\bsp\b", text):
+        return True
+    # Callee-saved spills into the new frame (`stp x28, x27, [sp, #0x10]`).
+    if mnem in {"stp", "str", "stur"} and re.search(r"\[sp\b", text):
         return True
     if mnem in {"nop", "hint"}:
         return True
@@ -910,8 +925,8 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     seen: list[int] = []
     last: int | None = None
     in_opening = True
-    for count, insn in enumerate(_iter_insns(image, c_main, thumb, 0x400)):
-        if count >= 120:
+    for count, insn in enumerate(_iter_insns(image, c_main, thumb, 0x1000)):
+        if count >= 1024:
             break
         if in_opening and _is_frame_setup(insn):
             pass
@@ -1159,6 +1174,16 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
             if std_n > user_n and user_n == 0:
                 continue
             if abs(snapped - user_main) > 0x6000 and user_n == 0:
+                continue
+            current = ranked.get(snapped)
+            if current is not None and current[1] == "user" and user_n:
+                # Two independent signals agree: a user source path and a
+                # direct call from user main.
+                ranked[snapped] = (
+                    current[0] + 4,
+                    "user",
+                    "References a user-crate source path and is called from user main.",
+                )
                 continue
             add(
                 snapped,

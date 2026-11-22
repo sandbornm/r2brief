@@ -155,8 +155,8 @@ fn parse_cie_aug(elf: &Elf<'_>, mut off: u64, end: u64) -> Option<u8> {
         return Some(if aug.contains(&b'R') { 0 } else { 0 });
     }
     let (aug_len, n) = read_uleb(elf, off, end)?;
-    off += n;
-    let aug_end = off + aug_len;
+    off = off.checked_add(n)?;
+    let aug_end = off.checked_add(aug_len)?;
     let mut fde_enc = 0u8;
     for &ch in aug {
         match ch {

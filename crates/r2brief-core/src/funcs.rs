@@ -234,10 +234,14 @@ fn scan_aarch64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>) 
             let Some(pc) = ph.p_vaddr.checked_add(i as u64) else { break; };
             // BL imm26: 1001 01ii iiii iiii iiii iiii iiii iiii
             if w & 0xfc00_0000 == 0x9400_0000 {
-                let imm26 = (w & 0x03ff_ffff) as i32;
-                // sign-extend 26 bits
-                let imm = ((imm26 << 6) >> 6) as i64;
-                let target = (pc as i64).wrapping_add(imm * 4) as u64;
+                let imm26 = w & 0x03ff_ffff;
+                // Sign-extend 26-bit immediate without overflowing a debug shift.
+                let imm = if imm26 & (1 << 25) != 0 {
+                    (imm26 | 0xfc00_0000) as i32 as i64
+                } else {
+                    imm26 as i64
+                };
+                let target = (pc as i64).wrapping_add(imm.wrapping_mul(4)) as u64;
                 if elf.exec_load_at_va(target).is_some() {
                     calls.push(target);
                 }

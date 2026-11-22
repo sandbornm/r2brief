@@ -72,7 +72,10 @@ pub fn list_imports(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<ImportS
             if bind != 1 && bind != 2 {
                 continue; // not GLOBAL/WEAK
             }
-            let Some((name_bytes, _)) = r.cstr(strsec.sh_offset + name_off as u64, 512) else {
+            let Some(name_abs) = strsec.sh_offset.checked_add(name_off as u64) else {
+                break;
+            };
+            let Some((name_bytes, _)) = r.cstr(name_abs, 512) else {
                 continue;
             };
             if name_bytes.is_empty() {

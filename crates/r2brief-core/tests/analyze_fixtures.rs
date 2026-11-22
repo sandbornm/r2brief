@@ -147,3 +147,16 @@ fn hostile_load_vaddr_does_not_panic() {
     let report = r2brief_core::analyze("hostile-overflow", &data).expect("must not panic");
     assert!(!report.subject.sha256.is_empty());
 }
+
+#[test]
+fn aarch64_backward_bl_does_not_panic() {
+    let path = fixture("triage-aarch64-stripped");
+    if !path.exists() {
+        require_fixture(&path);
+        return;
+    }
+    let data = std::fs::read(&path).unwrap();
+    let report = r2brief_core::analyze("triage-aarch64-stripped", &data).expect("must not panic");
+    assert!(report.functions.call_targets > 0);
+    assert!(report.functions.eh_frame_starts > 0);
+}

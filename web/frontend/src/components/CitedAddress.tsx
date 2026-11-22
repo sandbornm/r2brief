@@ -18,7 +18,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import { FC, useCallback, useMemo, useRef, useState } from 'react';
+import { FC, useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { CodeCitation } from '../types';
 
 interface CitedAddressProps {
@@ -101,7 +101,7 @@ const HighlightedLine: FC<{ line: string; isTarget?: boolean }> = ({ line, isTar
   };
   
   // Simple regex-based highlighting
-  const parts: JSX.Element[] = [];
+  const parts: ReactElement[] = [];
   let remaining = line;
   let key = 0;
   

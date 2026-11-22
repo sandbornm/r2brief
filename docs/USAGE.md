@@ -261,6 +261,26 @@ r2b brief ./httpd --quick --json --ask-regions 3
 Same `local.toml` + `.env`. Restart `r2b-web` after swapping overlays.
 `POST /api/analyze` does not call a model. Confirm with `r2b env --json`.
 
+## Rust ARM triage
+
+On a stripped Rust ARM ELF, `brief` adds a top-level `rust` object. The fields come from the ELF bytes and a Capstone sweep. No model is called, and `decompile` is not queued.
+
+| Field | Meaning |
+|---|---|
+| `is_rust` | `.comment` contains `rustc version`, or a `/rustc/<commit>/` path is present |
+| `rustc_version` | version text from `.comment` |
+| `rustc_commit` | 40 hex digits from a `/rustc/<hash>/` path |
+| `user_crates` | crate names from user source paths such as `<crate>/src/...` |
+| `user_main` | hex address of the recovered user `main` |
+| `entry_chain` | entry, then C `main`, then user main |
+| `functions` | ranked user functions, each with `addr` and `role` |
+
+Those functions are also regions with a real hex `addr`, sorted above entry and imports. `handoff.regions[].addr` repeats them. `handoff.decompile_addrs` stays limited to verified import sites.
+
+Linux recovery follows the entry stub to the function pointer passed into `std::rt::lang_start`. Panic `core::panic::Location` records and other `.rs` paths raise user-crate code and lower std, alloc, and crates.io frames. Rust symbols in region names are demangled only when the binary is Rust.
+
+Every reported `addr` is the architectural function start, including the `paciasp` / `pacibsp` / `bti c` landing instruction on PAC/BTI builds. Non-Rust binaries omit `rust` and keep the previous region order.
+
 ## Sample binaries
 
 Use the shallow corpus for format/architecture sanity checks. It compiles the

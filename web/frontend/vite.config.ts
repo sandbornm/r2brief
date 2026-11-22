@@ -1,12 +1,41 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { isAppSourceModule, rewriteMuiIconImports } from './muiIconRewrite.ts';
+
+const muiIconHelper = fileURLToPath(new URL('./src/muiIconInterop.ts', import.meta.url));
+
+// The dev prebundle serves @mui/icons-material defaults as { default: Icon }.
+// needsInterop does not unwrap that default when the importer is ESM.
+function muiIconDefaultInterop() {
+  return {
+    name: 'mui-icon-default-interop',
+    enforce: 'pre' as const,
+    transform(code: string, id: string) {
+      if (!isAppSourceModule(id) || !code.includes('@mui/icons-material')) {
+        return null;
+      }
+      const filename = id.split('?', 1)[0];
+      let helperSpecifier = path.relative(path.dirname(filename), muiIconHelper).replace(/\\/g, '/').replace(/\.ts$/, '');
+      if (!helperSpecifier.startsWith('.')) {
+        helperSpecifier = `./${helperSpecifier}`;
+      }
+      const next = rewriteMuiIconImports(code, helperSpecifier);
+      if (next === code) {
+        return null;
+      }
+      return { code: next, map: null };
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', 'VITE_');
   const apiTarget = env.VITE_R2B_API_BASE || 'http://127.0.0.1:5050';
 
   return {
-  plugins: [react()],
+  plugins: [react(), muiIconDefaultInterop()],
   server: {
     port: 5173,
     host: '127.0.0.1',

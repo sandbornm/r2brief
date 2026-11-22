@@ -39,6 +39,127 @@ class SandboxResult:
     notes: list[str] = field(default_factory=list)
 
 
+_SYSTEM_ROOTS = ("/usr", "/bin", "/lib", "/lib64", "/sbin")
+# Exact-only: binding the root is too broad, but a child such as
+# /opt/homebrew/bin may still be mounted.
+_BLOCKED_BIND_ROOTS = frozenset(
+    {
+        Path("/"),
+        Path("/opt"),
+        Path("/etc"),
+        Path("/var"),
+        Path("/private/etc"),
+        Path("/private/var"),
+        Path("/tmp"),
+        Path("/private/tmp"),
+        Path("/home"),
+        Path("/root"),
+        Path("/nix"),
+        Path("/Users"),
+        Path("/private"),
+        Path("/System"),
+        Path("/Applications"),
+    }
+)
+# Shared temp directories and every path under them. /tmp and /etc are
+# exact-only (including Darwin aliases already in _BLOCKED_BIND_ROOTS) so
+# a tool in /tmp/subdir can still bind that subdirectory, while /tmp itself
+# cannot. /var/tmp is always too broad.
+_BLOCKED_BIND_PREFIXES = frozenset(
+    {
+        Path("/var/tmp"),
+        Path("/private/var/tmp"),
+    }
+)
+
+
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_blocked_location(path: Path) -> bool:
+    """True when ``path`` itself or a denylist prefix should not be bound."""
+    if path in _BLOCKED_BIND_ROOTS or path in _BLOCKED_BIND_PREFIXES:
+        return True
+    for prefix in _BLOCKED_BIND_PREFIXES:
+        if _is_under(path, prefix):
+            return True
+    for root in _SYSTEM_ROOTS:
+        root_path = Path(root)
+        if path == root_path or root_path in path.parents:
+            return True
+    return False
+
+
+def _too_broad_bind(path: Path) -> bool:
+    """True when binding ``path`` would expose a home directory or a system root.
+
+    The denylist is checked against both the raw path and the resolved path so
+    that aliases such as ``/tmp`` -> ``/private/tmp`` cannot skip it.
+    """
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return True
+    for candidate in (path, resolved):
+        if _is_blocked_location(candidate):
+            return True
+    try:
+        home = Path.home().resolve()
+    except OSError:
+        home = None
+    # Bind neither $HOME, nor a parent of it, nor a project dir inside it
+    # such as ~/proj when the extractor lives at ~/proj/extractor.
+    if home is not None and (
+        resolved == home or _is_under(home, resolved) or _is_under(resolved, home)
+    ):
+        return True
+    return False
+
+
+def _tool_path(argv0: str | Path) -> Path | None:
+    path = Path(argv0).expanduser()
+    if not path.is_absolute():
+        return None
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
+def _extractor_ro_binds(argv0: str | Path) -> list[Path]:
+    """Read-only binds for an absolute extractor, never a home or system root."""
+    tool = _tool_path(argv0)
+    if tool is None:
+        return []
+    binds: list[Path] = []
+    if tool.is_file() or tool.exists():
+        binds.append(tool)
+    parent = tool.parent
+    if parent.is_dir() and not _too_broad_bind(parent):
+        binds.append(parent)
+        lib = parent.parent / "lib"
+        if parent.name == "bin" and lib.is_dir() and not _too_broad_bind(lib):
+            binds.append(lib)
+    # Preserve order, drop duplicates and any leftover broad paths.
+    seen: set[Path] = set()
+    safe: list[Path] = []
+    for item in binds:
+        # Only a regular file may pass the too-broad check: a tool path
+        # that resolves to $HOME (or another directory) must not be bound.
+        if item in seen or (
+            _too_broad_bind(item) and not (item == tool and tool.is_file())
+        ):
+            continue
+        seen.add(item)
+        safe.append(item)
+    return safe
+
+
 def enforce_limits(output_dir: Path, limits: ExtractLimits) -> list[str]:
     """Delete extracted files past max_files / max_bytes. JSON logs at the root stay."""
     notes: list[str] = []
@@ -94,9 +215,11 @@ def run_sandboxed(
     wrapped = list(argv)
     tool_dirs = []
     if argv:
-        executable = Path(argv[0])
-        if executable.is_absolute():
-            tool_dirs.append(str(executable.parent))
+        for bind in _extractor_ro_binds(argv[0]):
+            if bind.is_dir():
+                tool_dirs.append(str(bind))
+            elif bind.parent.is_dir() and not _too_broad_bind(bind.parent):
+                tool_dirs.append(str(bind.parent))
     for extra in extra_ro_binds or ():
         resolved = extra.resolve()
         if resolved.is_file():
@@ -249,9 +372,31 @@ def _bwrap_argv(
             cmd.extend(_bind_or_symlink(path))
     # Interpreter and dynamic linker live here on Debian usrmerge hosts.
     for extra in extra_ro_binds or ():
+        if _too_broad_bind(extra):
+            continue
         resolved = extra.resolve()
         if resolved.exists():
             cmd.extend(["--ro-bind", str(resolved), str(resolved)])
+    # An absolute extractor outside the system roots (e.g. a Homebrew prefix)
+    # and its sibling helpers must be visible inside the sandbox, read-only.
+    if argv:
+        for bind in _extractor_ro_binds(argv[0]):
+            cmd.extend(["--ro-bind", str(bind), str(bind)])
+        # Also mount the original symlink path so a caller can still see it,
+        # but execute the resolved pathname so the sandbox can find the tool.
+        raw = Path(argv[0]).expanduser()
+        # Never mount a symlink whose resolved target is denylisted
+        # (Darwin /tmp -> /private/tmp, /var -> /private/var, or a
+        # tool symlink into $HOME / /).
+        if raw.is_absolute() and raw.is_symlink() and not _too_broad_bind(raw):
+            raw_s = str(raw)
+            if ("--ro-bind", raw_s) not in zip(cmd, cmd[1:]):
+                cmd.extend(["--ro-bind", raw_s, raw_s])
+    run_argv = list(argv)
+    if argv:
+        resolved = _tool_path(argv[0])
+        if resolved is not None:
+            run_argv[0] = str(resolved)
     cmd.extend(
         [
             "--ro-bind",
@@ -263,7 +408,7 @@ def _bwrap_argv(
             "--chdir",
             str(output_dir),
             "--",
-            *argv,
+            *run_argv,
         ]
     )
     return cmd

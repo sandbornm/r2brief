@@ -1625,3 +1625,27 @@ def test_non_spill_store_closes_the_prologue():
     image = _aarch64_image(start, first + _sub_sp(0x20) + RET)
     _, starts = _sweep_xrefs(image, {})
     assert start in starts and second in starts
+
+
+def test_elf_header_bytes_are_not_program_data(tmp_path: Path):
+    """A load through a small leaked integer must not read the ELF header.
+
+    PIE images map the ELF and program headers at the start of the first
+    PT_LOAD. Reading `e_shoff` there as a pointer made stripped fd count a
+    false registry ref whenever `e_shoff` happened to equal a panic
+    Location's address.
+    """
+    pytest.importorskip("capstone")
+    binary = tmp_path / "header-load"
+    mov_x8_va = struct.pack("<I", 0xD2A00000 | ((VA >> 16) << 5) | 8)  # mov x8, #VA
+    text = PAC + mov_x8_va + _ldr(9, 8, 0x28) + RET
+    _elf64(binary, text, _rodata(), _comment(), b"")
+    shoff = struct.unpack_from("<Q", binary.read_bytes(), 0x28)[0]
+    image = _open_image(binary)
+    assert image is not None
+    assert image.read(VA, 4) == b""
+    assert image.load_int(VA + 0x28, 8) is None
+    assert image.read(VA + 0x40 + 56, 4) != b""  # first byte after the phdrs
+    assert image.load_int(LOC, 1) is not None
+    refs, _starts = _sweep_xrefs(image, {shoff: ("registry", None)})
+    assert not any(shoff in vas for vas in refs.values())

@@ -365,6 +365,9 @@ def build_briefing(
         _link_region_evidence(payload, provenance)
     if rust_info and rust_info.get("is_rust"):
         payload["rust"] = _rust_public(rust_info)
+    rust_notes = list(rust_info.get("notes") or []) if rust_info else []
+    if rust_notes:
+        payload["notes"] = rust_notes
     payload["handoff"] = build_handoff(payload, record_id=record_id)
     # Supplemental tool evidence does not change the fixed region point table.
     triage_tools = {}
@@ -1476,7 +1479,10 @@ def _rust_triage(binary: str) -> dict[str, Any] | None:
     try:
         return analyze_rust(binary)
     except ElfReadBudgetExceeded:
-        raise
+        return {
+            "is_rust": False,
+            "notes": ["triage skipped: read budget exceeded"],
+        }
     except Exception:
         return None
 

@@ -453,6 +453,87 @@ def test_missing_binary_does_not_add_rust_or_demangle(tmp_path: Path):
     assert any(mangled in region["title"] for region in payload["regions"])
 
 
+def _write_claimed_huge_text_aarch64(path: Path) -> None:
+    """Small non-Rust AArch64 ELF whose .text sh_size claims 17 MiB."""
+    payload_off = 0x1000
+    payload = b"not rust" * 16
+    names = ["", ".text", ".comment", ".shstrtab"]
+    strtab = b"\x00".join(name.encode() for name in names) + b"\x00"
+    name_off: dict[str, int] = {}
+    cursor = 0
+    for name in names:
+        name_off[name] = cursor
+        cursor += len(name) + 1
+    comment = b"GCC: (GNU) 12\x00"
+    comment_off = payload_off + len(payload)
+    str_off = comment_off + len(comment)
+    shoff = str_off + len(strtab)
+    shnum = 4
+    huge = 17 * 1024 * 1024
+    buf = bytearray(shoff + 64 * shnum)
+    buf[payload_off : payload_off + len(payload)] = payload
+    buf[comment_off : comment_off + len(comment)] = comment
+    buf[str_off : str_off + len(strtab)] = strtab
+
+    def shdr(name: str, typ: int, flags: int, addr: int, off: int, size: int) -> bytes:
+        return struct.pack(
+            "<IIQQQQIIQQ", name_off[name], typ, flags, addr, off, size, 0, 0, 1, 0
+        )
+
+    sections = [
+        shdr("", 0, 0, 0, 0, 0),
+        shdr(".text", 1, 6, 0x10000, payload_off, huge),
+        shdr(".comment", 1, 0, 0, comment_off, len(comment)),
+        shdr(".shstrtab", 3, 0, 0, str_off, len(strtab)),
+    ]
+    for index, raw in enumerate(sections):
+        buf[shoff + index * 64 : shoff + index * 64 + 64] = raw
+    ident = b"\x7fELF" + bytes([2, 1, 1, 0]) + b"\x00" * 8
+    ehdr = struct.pack(
+        "<16sHHIQQQIHHHHHH",
+        ident,
+        3,
+        183,
+        1,
+        0x10000,
+        64,
+        shoff,
+        0,
+        64,
+        56,
+        1,
+        64,
+        shnum,
+        shnum - 1,
+    )
+    phdr = struct.pack(
+        "<IIQQQQQQ",
+        1,
+        5,
+        payload_off,
+        0x10000,
+        0x10000,
+        len(payload),
+        len(payload),
+        0x1000,
+    )
+    buf[0:64] = ehdr
+    buf[64:120] = phdr
+    path.write_bytes(buf)
+
+
+def test_build_briefing_skips_rust_triage_when_read_budget_exceeded(tmp_path: Path):
+    """A non-Rust ARM ELF with a 17 MiB claimed section still produces a briefing."""
+    binary = tmp_path / "big-nonrust.elf"
+    _write_claimed_huge_text_aarch64(binary)
+    assert 4000 <= binary.stat().st_size <= 8000
+    payload = _brief(binary)
+    assert "rust" not in payload
+    assert "triage skipped: read budget exceeded" in payload.get("notes", [])
+    assert payload.get("binary") == str(binary)
+    assert "regions" in payload
+
+
 def test_pac_prologue_reports_architectural_start(tmp_path: Path):
     """A `paciasp` function is reported at the prologue, never inside its body."""
     pytest.importorskip("capstone")

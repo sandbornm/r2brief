@@ -20,8 +20,9 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   Later review follow-ups: AArch64 `stp`/`ldp` uses a 4-byte stride for `w`
   registers and honors post-index writeback; the extractor sandbox never
   binds a symlink whose resolved target is denylisted; a spent ELF read
-  budget raises instead of returning a short or empty read; v0 punycode
-  keeps underscores in the ASCII prefix (`α_ω`).
+  budget raises instead of returning a short or empty read, and optional
+  Rust triage records a skip note rather than aborting the briefing; v0
+  punycode keeps underscores in the ASCII prefix (`α_ω`).
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

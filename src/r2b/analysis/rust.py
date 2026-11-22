@@ -54,6 +54,8 @@ def classify_path(path: str) -> tuple[str, str | None]:
         return "std", None
     if "/rustlib/src/rust/library/" in low:
         return "std", None
+    if low.startswith(("/rust/deps/", "rust/deps/")):
+        return "std", None
     for crate in _STD_CRATES:
         if f"/library/{crate}/" in low:
             return "std", None
@@ -163,6 +165,10 @@ class ElfReadBudgetExceeded(ValueError):
     """Raised when a section or segment read would exceed the shared file budget."""
 
 
+class ElfShortRead(ValueError):
+    """Raised when the file ends before a section or segment's declared size."""
+
+
 class _ReadBudget:
     """A single per-file byte budget shared by every section and segment read."""
 
@@ -199,9 +205,9 @@ def _bounded_elf_read(
     """Read ``size`` bytes from ``stream`` at ``offset``, charged to ``budget``.
 
     Overlapping reads of a range already in the budget are reused and do not
-    consume additional budget. A request that cannot be satisfied in full
-    raises ``ElfReadBudgetExceeded`` instead of returning an empty or short
-    slice.
+    consume additional budget. A request larger than the remaining budget
+    raises ``ElfReadBudgetExceeded``. A file that ends early raises
+    ``ElfShortRead``. Neither returns an empty or short slice.
     """
     if budget is None:
         budget = _ReadBudget()
@@ -219,6 +225,8 @@ def _bounded_elf_read(
         )
     stream.seek(offset)
     data = stream.read(size)
+    if len(data) != size:
+        raise ElfShortRead(f"ELF read of {size} bytes at offset {offset} returned {len(data)}")
     return budget.store(offset, data)
 
 
@@ -252,6 +260,8 @@ def _bounded_section_blob(sec: Any, budget: _ReadBudget | None = None) -> bytes:
             remaining -= len(chunk)
             out.extend(decomp.decompress(chunk, dest - len(out)))
         data = bytes(out)
+        if len(data) != dest:
+            raise ElfShortRead(f"compressed ELF section inflated to {len(data)} of {dest} bytes")
         budget.used += len(data)
         return data
     size = int(getattr(sec, "data_size", sec["sh_size"]))
@@ -855,10 +865,37 @@ def _is_prologue(insn: Any) -> bool:
     if mnem == "stp" and "sp" in text and ("!" in text or "#-" in text):
         return True
     if mnem == "sub" and "#" in text:
-        dest = text.split(",")[0].strip()
-        if dest in {"sp", "wsp"}:
+        ops = [op.strip() for op in text.split(",")]
+        # `sub sp, sp, #imm` (A64) and Thumb `sub sp, #imm` allocate a frame.
+        # `sub sp, x29, #imm` restores SP in an epilogue and is not a start.
+        if ops[0] in {"sp", "wsp"} and (len(ops) == 2 or ops[1] in {"sp", "wsp"}):
             return True
     return False
+
+
+def _is_spill(insn: Any) -> bool:
+    """A callee-saved spill or stack probe into the new frame, without writeback."""
+    text = insn.op_str
+    if insn.mnemonic not in {"stp", "str", "stur"} or not re.search(r"\[sp\b", text):
+        return False
+    regs = _split_ops(text)
+    regs = regs[:2] if insn.mnemonic == "stp" else regs[:1]
+    return (
+        bool(regs)
+        # Callee-saved x19-x30 / d8-d15, or `str xzr, [sp]` stack probes.
+        and all(re.fullmatch(r"x(?:19|2[0-9]|30)|d(?:[89]|1[0-5])|xzr", r) for r in regs)
+        and "!" not in text
+        and "#-" not in text
+    )
+
+
+def _is_entry_marker(insn: Any) -> bool:
+    """Prologue instructions that never continue an earlier frame's spills."""
+    if insn.mnemonic in {"paciasp", "pacibsp", "bti"}:
+        return _is_prologue(insn)
+    if insn.mnemonic == "push":
+        return _is_prologue(insn)
+    return insn.mnemonic == "stp" and _is_prologue(insn)
 
 
 def _is_frame_setup(insn: Any) -> bool:
@@ -870,6 +907,9 @@ def _is_frame_setup(insn: Any) -> bool:
     if mnem in {"sub", "add"} and re.search(r"\bsp\b", text):
         return True
     if mnem == "mov" and re.search(r"\b(x29|fp)\b", text) and re.search(r"\bsp\b", text):
+        return True
+    # Callee-saved spills into the new frame (`stp x28, x27, [sp, #0x10]`).
+    if _is_spill(insn):
         return True
     if mnem in {"nop", "hint"}:
         return True
@@ -910,8 +950,8 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     seen: list[int] = []
     last: int | None = None
     in_opening = True
-    for count, insn in enumerate(_iter_insns(image, c_main, thumb, 0x400)):
-        if count >= 120:
+    for count, insn in enumerate(_iter_insns(image, c_main, thumb, 0x1000)):
+        if count >= 1024:
             break
         if in_opening and _is_frame_setup(insn):
             pass
@@ -1021,20 +1061,27 @@ def _sweep_xrefs(
         thumb = image.force_thumb or (image.arch == "arm" and bool(image.entry & 1))
         machine = _Machine(image, thumb)
         in_prologue = False
+        spilled = False
         for insn in _iter_insns(image, sec.addr, thumb, data_len):
             if _is_return(insn):
                 machine.reset()
                 in_prologue = False
-            if _is_prologue(insn) and not in_prologue:
+            # After frame spills, `sub sp, sp` still belongs to the same
+            # opening, but PAC/BTI or a pre-decrement `stp` starts a new one.
+            if _is_prologue(insn) and (
+                not in_prologue or (spilled and _is_entry_marker(insn))
+            ):
                 machine.reset()
                 starts.append(insn.address)
                 if thumb and image.arch == "arm":
                     image.mark_thumb(insn.address | 1)
                 in_prologue = True
+                spilled = False
             elif in_prologue and _is_frame_setup(insn):
-                pass
+                spilled = spilled or _is_spill(insn)
             else:
                 in_prologue = False
+                spilled = False
             if insn.mnemonic in {"bl", "blx"}:
                 code = _direct_call_target(image, insn, thumb)
                 if code is not None:
@@ -1149,6 +1196,7 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
             "user",
             "Code references a user-crate source path.",
         )
+    boosted: set[int] = set()
     if user_main is not None:
         for index, callee in enumerate(_callees(image, user_main)):
             snapped = _snap(starts, callee)
@@ -1159,6 +1207,19 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
             if std_n > user_n and user_n == 0:
                 continue
             if abs(snapped - user_main) > 0x6000 and user_n == 0:
+                continue
+            current = ranked.get(snapped)
+            if current is not None and current[1] == "user" and user_n:
+                # Two independent signals agree: a user source path and a
+                # direct call from user main. Boost once per function.
+                if snapped in boosted:
+                    continue
+                boosted.add(snapped)
+                ranked[snapped] = (
+                    current[0] + 4,
+                    "user",
+                    "References a user-crate source path and is called from user main.",
+                )
                 continue
             add(
                 snapped,

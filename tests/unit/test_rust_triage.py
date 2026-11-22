@@ -2280,3 +2280,56 @@ def test_callees_reject_a_non_prologue_sub_head():
     found = _callees(image, start)
     assert not_fn not in found
     assert real_fn in found
+
+
+@pytest.mark.parametrize("pre_init", [False, True])
+def test_trampoline_tail_branch_to_the_next_function(pre_init: bool):
+    """`-Oz` `main: b.w __cortex_m_rt_main` where the target is the next symbol."""
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _unwrap_trampoline
+
+    main = 0x08000100
+    hook = main + 0x60
+    code = THUMB_PUSH_R7_LR + _thumb_bl(main + 2, hook) if pre_init else b""
+    user = main + len(code) + 4
+    code += _thumb_bw(main + len(code), user) + THUMB_PUSH_R7_LR
+    image = _thumb_image(main, bytes(_trampoline_body(main, code)))
+    assert _unwrap_trampoline(image, main) == user
+
+
+@pytest.mark.parametrize("init_call", [False, True])
+def test_cortex_reset_ending_in_tail_branch_to_main(tmp_path: Path, init_call: bool):
+    """Reset `[bl memset;] b.w main` hands off to main, not to the init helper."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    text_va = flash + 0x100
+    main = text_va + 0x20
+    user = text_va + 0x60
+    memset = text_va + 0x80
+    body = bytearray(THUMB_BX_LR * 0x50)
+    at = 0
+    if init_call:
+        body[0:4] = _thumb_bl(text_va, memset)
+        at = 4
+    body[at : at + 4] = _thumb_bw(text_va + at, main)
+    # main: push.w {r4, lr}; bl user; udf
+    body[0x20:0x24] = THUMB_PUSH_W_R4_LR
+    body[0x24:0x28] = _thumb_bl(main + 4, user)
+    body[0x28:0x2A] = THUMB_UDF
+    binary = tmp_path / f"fw-reset-tail-{int(init_call)}"
+    _write_cortex_text_elf(binary, bytes(body), flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert info["user_main"] != hex(memset)
+
+
+def test_wide_thumb_tail_stub_is_a_thunk():
+    """A `b.w` tail stub is a thunk, like a plain `b`."""
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _is_thunk
+
+    start = 0x10000
+    body = _thumb_bw(start, start + 0x40) + THUMB_BX_LR * 0x30
+    image = _thumb_image(start, body)
+    assert _is_thunk(image, start)

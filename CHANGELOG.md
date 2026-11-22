@@ -58,8 +58,11 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   Rust triage records a skip note rather than aborting the briefing; v0
   punycode keeps underscores in the ASCII prefix (`α_ω`).
   Cortex-M follow-ups: the `main` trampoline unwrap follows a tail
-  `b` / `b.n` / `b.w` to the user function (also after a pre-init `bl`)
-  and treats `mov r7, sp` as frame setup; Thumb-2 `push.w` / `sub.w`
+  `b` / `b.n` / `b.w` to the user function
+  (also after a pre-init `bl`, and when the target is the next
+  function) and treats `mov r7, sp` as frame setup; a Reset that ends in
+  `b main` hands off to `main`; a `b.w` tail stub is a thunk; Thumb-2
+  `push.w` / `sub.w`
   prologues are recognized; a bare `sub sp` after straight-line code is a
   stack adjustment, not a function start; callee discovery no longer
   accepts a non-prologue `sub` head.

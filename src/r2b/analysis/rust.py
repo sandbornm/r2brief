@@ -1067,8 +1067,7 @@ def _unwrap_trampoline(image: _Image, addr: int) -> int:
     """
     calls: list[int] = []
     in_opening = True
-    window = 0x20
-    for index, insn in enumerate(_iter_insns(image, addr, True, window)):
+    for index, insn in enumerate(_iter_insns(image, addr, True, 0x20)):
         if in_opening and _is_frame_setup(insn):
             pass
         else:
@@ -1087,9 +1086,10 @@ def _unwrap_trampoline(image: _Image, addr: int) -> int:
             # (``push; bl init; b .``), not a forwarding trampoline.
             if target is None or target <= insn.address:
                 return addr
+            # An unconditional forward branch in the trampoline is the tail
+            # call, including `b.w` to the very next function (`-Oz` stubs).
             code = image.code_addr(target)
-            # A forward branch out of this short window is a tail call.
-            if code is not None and not addr <= code < addr + window:
+            if code is not None:
                 return code
             if len(calls) == 1 and index <= 6:
                 return calls[0]
@@ -1108,6 +1108,20 @@ def _is_unconditional_b(insn: Any) -> bool:
     mnem = insn.mnemonic.lower()
     base, _, suffix = mnem.partition(".")
     return base == "b" and suffix in {"", "n", "w"}
+
+
+def _is_reset_tail_call(image: _Image, insn: Any, target: int) -> bool:
+    """A forward `b` out of Reset into another function, not a local skip."""
+    code = image.code_addr(target)
+    if code is None:
+        return False
+    head = next(_iter_insns(image, code, True, 4), None)
+    if head is not None and head.address == code and _is_prologue(head):
+        return True
+    after = next(_iter_insns(image, insn.address + insn.size, True, 4), None)
+    return after is not None and (
+        _starts_function(after) or _base_mnemonic(after) in {"nop", "udf", "bkpt"}
+    )
 
 
 def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
@@ -1154,6 +1168,12 @@ def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
         if _is_unconditional_b(insn):
             if target is None or target == insn.address:
                 break
+            if target > insn.address and _is_reset_tail_call(image, insn, target):
+                # `Reset` that ends in `b main` hands off like a final `bl`.
+                last = image.code_addr(target)
+                if last is not None:
+                    image.mark_thumb(last | 1)
+                break
             if target < insn.address:
                 loop_lo, loop_hi = target, insn.address
                 if not any(
@@ -1187,7 +1207,7 @@ def _is_thunk(image: _Image, addr: int) -> bool:
     body = [insn for insn in insns if insn.mnemonic not in {"paciasp", "pacibsp", "bti", "nop"}]
     if not body:
         return True
-    return body[0].mnemonic in {"b", "br", "bx", "ret", "retaa", "retab"}
+    return _base_mnemonic(body[0]) in {"b", "br", "bx", "ret", "retaa", "retab"}
 
 
 def _snippet(image: _Image, addr: int) -> str:

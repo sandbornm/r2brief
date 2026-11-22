@@ -271,13 +271,13 @@ On a stripped Rust ARM ELF, `brief` adds a top-level `rust` object. The fields c
 | `rustc_version` | version text from `.comment` |
 | `rustc_commit` | 40 hex digits from a `/rustc/<hash>/` path |
 | `user_crates` | crate names from user source paths such as `<crate>/src/...` |
-| `user_main` | hex address of the recovered user `main`, or of the function the cortex-m-rt trampoline reaches |
-| `entry_chain` | entry, then C `main` or the reset trampoline, then user main |
+| `user_main` | hex address of the recovered user `main` |
+| `entry_chain` | entry, then C `main`, then user main |
 | `functions` | ranked user functions, each with `addr` and `role` |
 
 Those functions are also regions with a real hex `addr`, sorted above entry and imports. `handoff.regions[].addr` repeats them. `handoff.decompile_addrs` stays limited to verified import sites.
 
-Linux recovery follows the entry stub to the function pointer passed into `std::rt::lang_start`. Thumb firmware reads the vector table at the image start (initial SP, then Reset) and the `cortex-m-rt` trampoline. Panic `core::panic::Location` records and other `.rs` paths raise user-crate code and lower std, alloc, and crates.io frames. Rust symbols in region names are demangled only when the binary is Rust.
+Linux recovery follows the entry stub to the function pointer passed into `std::rt::lang_start`. Panic `core::panic::Location` records and other `.rs` paths raise user-crate code and lower std, alloc, and crates.io frames. Rust symbols in region names are demangled only when the binary is Rust.
 
 Every reported `addr` is the architectural function start, including the `paciasp` / `pacibsp` / `bti c` landing instruction on PAC/BTI builds. Non-Rust binaries omit `rust` and keep the previous region order.
 

@@ -8,7 +8,6 @@ Capstone is optional. Without it the toolchain fields still report.
 from __future__ import annotations
 
 import re
-import struct
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,7 +40,6 @@ _MAX_SWEEP = 8 * 1024 * 1024
 _MAX_IMAGE = 16 * 1024 * 1024
 _MAX_RELOCS = 100_000
 _ZERO_REGS = frozenset({"wzr", "xzr", "zr"})
-_VECTOR_SECTIONS = frozenset({".isr_vector", ".vectors", ".vector_table", ".intvec"})
 
 
 def classify_path(path: str) -> tuple[str, str | None]:
@@ -159,7 +157,6 @@ class _Image:
         return code
 
     _thumb: set[int] = field(default_factory=set)
-
 
 
 class ElfReadBudgetExceeded(ValueError):
@@ -943,150 +940,6 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     return None
 
 
-def _vector_bases(image: _Image) -> list[int]:
-    """Candidate vector-table addresses: VA 0, named sections, then load bases."""
-    bases: list[int] = [0]
-    for sec in getattr(image, "sections", []) or ():
-        if sec.name in _VECTOR_SECTIONS or sec.name.startswith(".isr_vector"):
-            bases.append(sec.addr)
-    for base, _blob in getattr(image, "loads", []) or ():
-        bases.append(base)
-    seen: set[int] = set()
-    ordered: list[int] = []
-    for base in bases:
-        if base in seen:
-            continue
-        seen.add(base)
-        ordered.append(base)
-    return ordered
-
-
-def _cortex_reset(image: _Image) -> tuple[int, int] | None:
-    if image.arch != "arm":
-        return None
-    for base in _vector_bases(image):
-        raw = image.read(base, 8)
-        if len(raw) < 8 or raw.startswith(b"\x7fELF"):
-            continue
-        sp, reset = struct.unpack_from("<II", raw)
-        # SRAM is often at 0x20000000, but some maps (STM32 CCM) use 0x10000000.
-        if sp % 8 or sp < 0x10000000 or not reset & 1:
-            continue
-        if image.code_addr(sp & ~1) is not None:
-            continue
-        code = image.code_addr(reset)
-        if code is None:
-            continue
-        if image.entry and (image.entry | 1) != (reset | 1):
-            continue
-        return sp, code
-    return None
-
-
-def _unwrap_trampoline(image: _Image, addr: int) -> int:
-    calls: list[int] = []
-    in_opening = True
-    for index, insn in enumerate(_iter_insns(image, addr, True, 0x20)):
-        if in_opening and _is_frame_setup(insn):
-            pass
-        else:
-            in_opening = False
-            if index > 0 and _is_prologue(insn):
-                return calls[0] if len(calls) == 1 else addr
-        if insn.mnemonic == "bl":
-            target = _branch_target(insn)
-            code = image.code_addr(target) if target is not None else None
-            if code is not None:
-                calls.append(code)
-        if insn.mnemonic in {"udf", "bx", "pop"} or insn.mnemonic == "b":
-            # A self-spin or backward branch is this function's own loop
-            # (``push; bl init; b .``), not a forwarding trampoline.
-            if insn.mnemonic == "b":
-                target = _branch_target(insn)
-                if target is None or target <= insn.address:
-                    return addr
-            if len(calls) == 1 and index <= 6:
-                return calls[0]
-            return addr
-        if index >= 8:
-            break
-    return addr
-
-
-def _is_unconditional_b(insn: Any) -> bool:
-    """True for an unconditional `b` / `b.n` / `b.w`, not `beq` or `b.eq`."""
-    mnem = insn.mnemonic.lower()
-    base, _, suffix = mnem.partition(".")
-    return base == "b" and suffix in {"", "n", "w"}
-
-
-def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
-    found = _cortex_reset(image)
-    if found is None:
-        return [], None
-    _sp, reset = found
-    image.force_thumb = True
-    image.mark_thumb(reset | 1)
-    last: int | None = None
-    in_opening = True
-    # Forward exits as (src, dest). A backward `b` is terminal unless one of
-    # these leaves *that* loop, so a later `wfi; b wfi` still stops.
-    forward_exits: list[tuple[int, int]] = []
-    skip_until: int | None = None
-    for insn in _iter_insns(image, reset, True, 0x200):
-        if skip_until is not None and insn.address < skip_until:
-            continue
-        skip_until = None
-        if in_opening and _is_frame_setup(insn):
-            pass
-        else:
-            in_opening = False
-            if insn.address != reset and _is_prologue(insn):
-                break
-        if insn.mnemonic in {"udf", "bkpt"}:
-            break
-        if insn.mnemonic == "bl":
-            target = _branch_target(insn)
-            code = image.code_addr(target) if target is not None else None
-            if code is not None:
-                last = code
-                image.mark_thumb(code | 1)
-        target = _branch_target(insn)
-        if (
-            target is not None
-            and target > insn.address
-            and insn.mnemonic.split(".")[0] != "bl"
-        ):
-            forward_exits.append((insn.address, target))
-        # `b .` is a spin. A backward `b` ends the handler unless a forward
-        # exit leaves this loop. An unconditional forward `b` skips the
-        # intervening instructions so a jumped-over `bl` is not published.
-        if _is_unconditional_b(insn):
-            if target is None or target == insn.address:
-                break
-            if target < insn.address:
-                loop_lo, loop_hi = target, insn.address
-                if not any(
-                    loop_lo <= src <= loop_hi and dest > loop_hi
-                    for src, dest in forward_exits
-                ):
-                    break
-            else:
-                skip_until = target
-        if _is_return(insn):
-            break
-    if last is None:
-        return [reset], None
-    user = _unwrap_trampoline(image, last)
-    image.mark_thumb(user | 1)
-    chain = [reset]
-    if last != reset:
-        chain.append(last)
-    if user not in chain:
-        chain.append(user)
-    return chain, user
-
-
 def _is_thunk(image: _Image, addr: int) -> bool:
     thumb = image.thumb_at(addr)
     insns = []
@@ -1249,18 +1102,13 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
     user_main: int | None = None
     c_main: int | None = None
     if _capstone() is not None:
-        cortex_chain, cortex_main = _recover_cortex(image)
-        if cortex_main is not None:
-            chain = cortex_chain
-            user_main = cortex_main
-        else:
-            c_main = _recover_libc_main(image)
-            entry = image.entry & ~1
-            if c_main is not None:
-                user_main = _recover_user_main(image, c_main)
-            if image.arch == "arm" and image.entry & 1:
-                image.mark_thumb(image.entry)
-            chain = [addr for addr in (entry, c_main, user_main) if addr is not None]
+        c_main = _recover_libc_main(image)
+        entry = image.entry & ~1
+        if c_main is not None:
+            user_main = _recover_user_main(image, c_main)
+        if image.arch == "arm" and image.entry & 1:
+            image.mark_thumb(image.entry)
+        chain = [addr for addr in (entry, c_main, user_main) if addr is not None]
 
     xrefs, starts = _sweep_xrefs(image, interesting)
     if user_main is not None:
@@ -1289,11 +1137,7 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
             ranked[addr] = (score, role, why)
 
     if user_main is not None:
-        how = (
-            "Reset vector reaches this function through the cortex-m-rt main trampoline."
-            if image.force_thumb
-            else "C main loads this pointer and passes it to lang_start."
-        )
+        how = "C main loads this pointer and passes it to lang_start."
         add(user_main, 240, "user_main", how)
     for func, count in ref_user.items():
         std = ref_std.get(func, 0)

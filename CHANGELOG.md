@@ -9,13 +9,12 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   (`rustc_version`, `rustc_commit`, `user_crates`, `user_main`,
   `entry_chain`, `functions`) and ranks user functions, with real
   addresses, above entry and imports. Recovery is static. It follows
-  the `lang_start` pointer or the Cortex-M reset trampoline, reads panic
-  `Location` paths, and an in-tree demangler. Non-Rust binaries are
-  unchanged. `handoff.decompile_addrs` is still not a decompile queue.
-  Review follow-ups: Cortex-M vectors are read at the ELF load address,
-  consecutive PAC prologues are one function start, AArch64 ADR uses the
-  absolute Capstone operand, callee discovery stops at `ret`, Thumb-2
-  Linux is decoded as Thumb, and a bad mangled name can no longer abort
+  the `lang_start` pointer, reads panic `Location` paths, and an in-tree
+  demangler. Non-Rust binaries are unchanged. `handoff.decompile_addrs`
+  is still not a decompile queue. Review follow-ups: consecutive PAC
+  prologues are one function start, AArch64 ADR uses the absolute
+  Capstone operand, callee discovery stops at `ret`, Thumb-2 Linux is
+  decoded as Thumb, and a bad mangled name can no longer abort
   `build_briefing`. The extractor sandbox binds the tool itself, not a
   home directory.
   Later review follow-ups: AArch64 `stp`/`ldp` uses a 4-byte stride for `w`

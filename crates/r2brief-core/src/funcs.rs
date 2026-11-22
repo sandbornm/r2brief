@@ -40,6 +40,10 @@ pub struct FuncRecovery {
     pub notes: Vec<String>,
 }
 
+// Unchecked arithmetic here is bounded: i indexes merged.
+
+#[allow(clippy::arithmetic_side_effects)]
+
 pub fn recover(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>, eh: &EhFrame) -> FuncRecovery {
     let mut notes = Vec::new();
     let arch = match elf.hdr.e_machine {
@@ -205,6 +209,10 @@ pub fn recover(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>, eh: &EhFrame) -> Fu
     }
 }
 
+// Unchecked arithmetic here is bounded: usize index math guarded by i + 4 <= slice.len().
+
+#[allow(clippy::arithmetic_side_effects)]
+
 fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let mut taken = Vec::new();
     let mut calls = Vec::new();
@@ -271,6 +279,10 @@ fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, V
     (calls, prologues, taken)
 }
 
+// Unchecked arithmetic here is bounded: usize index math guarded by slice.len(); imm is a 21-bit field.
+
+#[allow(clippy::arithmetic_side_effects)]
+
 fn scan_aarch64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let mut taken = Vec::new();
     let mut calls = Vec::new();
@@ -329,20 +341,10 @@ fn scan_aarch64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, 
                     }
                 }
             }
-            // Prologue: STP x29, x30, [sp, #imm]!  (pre-index)  a9bf7bfd etc.
-            // Encoding: 1010 1001 1xii iiii iiii 1x 11110 11101  (STP paired)
-            // Common: stp x29, x30, [sp, #-N]! = 0xa9bx7bfd family.
-            if w & 0xffc0_07ff == 0xa980_03fd || w & 0xffc0_07ff == 0xa9a0_7bfd {
-                // weak match — refine:
-            }
-            // Concrete common forms:
-            // a9bf7bfd  stp x29, x30, [sp, #-16]!
-            // a9bd7bfd  stp x29, x30, [sp, #-48]!
-            // a9bc7bfd  ...
-            if (w & 0xffc0_07ff) == 0xa980_07bd
-                || (w & 0xffc0_07ff) == 0xa980_03fd
-                || (w & 0xffc0_07ff) == 0xa9a0_7bfd
-                || (0xa9b0_7bfd..=0xa9bf_7bfd).contains(&w) && (w & 0x3ff) == 0x3fd
+            // Prologue: STP x29, x30, [sp, #-N]!  (64-bit, pre-index).
+            // opc=10 101 V=0 011 L=0 | imm7 | Rt2=x30 | Rn=sp | Rt=x29, with a
+            // negative imm7 (bit 21). e.g. a9bf7bfd = stp x29, x30, [sp, #-16]!
+            if (w & 0xffc0_7fff) == 0xa980_7bfd && (w & (1 << 21)) != 0
             {
                 let ok = i == 0
                     || (i >= 4 && is_aarch64_align_or_ret(if le {
@@ -380,6 +382,8 @@ fn is_aarch64_align_or_ret(w: u32) -> bool {
 /// Sectionless PLT-stub recognizer, by instruction shape:
 /// x86-64: [endbr64] [bnd] jmp qword ptr [rip+disp] (or PLT0's push [rip+disp])
 /// AArch64: [bti c] adrp x16, P ; ldr x17, [x16, #off]
+// Unchecked arithmetic here is bounded: indices < 4 into a 16-byte read.
+#[allow(clippy::arithmetic_side_effects)]
 fn looks_like_plt_stub(elf: &Elf<'_>, va: u64) -> bool {
     let Some(b) = elf.read_va(va, 16) else { return false };
     match elf.hdr.e_machine {

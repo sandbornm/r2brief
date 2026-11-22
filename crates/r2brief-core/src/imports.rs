@@ -22,6 +22,10 @@ pub struct ImportSym {
     pub dangerous: bool,
 }
 
+// Unchecked arithmetic here is bounded: entsize checked nonzero above.
+
+#[allow(clippy::arithmetic_side_effects)]
+
 pub fn list_imports(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<ImportSym> {
     let mut out = Vec::new();
     // Prefer the section if present; else walk DT_SYMTAB until we hit a null name.
@@ -48,17 +52,17 @@ pub fn list_imports(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<ImportS
         let n = (span / entsize).min(65_536);
         let r = elf.rd();
         for i in 0..n {
-            let o = sec.sh_offset + i * entsize;
+            let o = sec.sh_offset.saturating_add(i.saturating_mul(entsize));
             if r.bytes(o, entsize).is_none() {
                 break;
             }
             let (name_off, info, shndx) = if elf.hdr.class64 {
-                match (r.u32(o), r.u8(o + 4), r.u16(o + 6)) {
+                match (r.u32(o), r.u8(o.saturating_add(4)), r.u16(o.saturating_add(6))) {
                     (Some(a), Some(b), Some(c)) => (a, b, c),
                     _ => break,
                 }
             } else {
-                match (r.u32(o), r.u8(o + 12), r.u16(o + 14)) {
+                match (r.u32(o), r.u8(o.saturating_add(12)), r.u16(o.saturating_add(14))) {
                     (Some(a), Some(b), Some(c)) => (a, b, c),
                     _ => break,
                 }
@@ -95,22 +99,22 @@ pub fn list_imports(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<ImportS
             let r = elf.rd();
             let mut bad_run = 0u32;
             for i in 0..4096u64 {
-                let Some(sym_off) = elf.va_to_off(symtab + i * syment) else { break };
+                let Some(sym_off) = i.checked_mul(syment).and_then(|d| symtab.checked_add(d)).and_then(|va| elf.va_to_off(va)) else { break };
                 let (name_off, info, shndx) = if elf.hdr.class64 {
                     (
                         r.u32(sym_off).unwrap_or(0),
-                        r.u8(sym_off + 4).unwrap_or(0),
-                        r.u16(sym_off + 6).unwrap_or(0),
+                        r.u8(sym_off.saturating_add(4)).unwrap_or(0),
+                        r.u16(sym_off.saturating_add(6)).unwrap_or(0),
                     )
                 } else {
                     (
                         r.u32(sym_off).unwrap_or(0),
-                        r.u8(sym_off + 12).unwrap_or(0),
-                        r.u16(sym_off + 14).unwrap_or(0),
+                        r.u8(sym_off.saturating_add(12)).unwrap_or(0),
+                        r.u16(sym_off.saturating_add(14)).unwrap_or(0),
                     )
                 };
                 if name_off as u64 >= strsz {
-                    bad_run += 1;
+                    bad_run = bad_run.saturating_add(1);
                     if bad_run > 64 {
                         break;
                     }

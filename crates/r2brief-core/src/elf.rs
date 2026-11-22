@@ -298,6 +298,10 @@ impl<'a> Elf<'a> {
         self.data.is_empty()
     }
 
+    // Unchecked arithmetic here is bounded: i < e_phnum (u16) and want <= 64.
+
+    #[allow(clippy::arithmetic_side_effects)]
+
     fn parse_phdrs(&mut self) {
         let h = &self.hdr;
         let want = if h.class64 { 56 } else { 32 };
@@ -320,31 +324,35 @@ impl<'a> Elf<'a> {
                     index: i as usize,
                     entry_offset: o,
                     p_type: r.u32(o).unwrap(),
-                    p_flags: r.u32(o + 4).unwrap(),
-                    p_offset: r.u64(o + 8).unwrap(),
-                    p_vaddr: r.u64(o + 16).unwrap(),
-                    p_paddr: r.u64(o + 24).unwrap(),
-                    p_filesz: r.u64(o + 32).unwrap(),
-                    p_memsz: r.u64(o + 40).unwrap(),
-                    p_align: r.u64(o + 48).unwrap(),
+                    p_flags: r.u32(o.saturating_add(4)).unwrap(),
+                    p_offset: r.u64(o.saturating_add(8)).unwrap(),
+                    p_vaddr: r.u64(o.saturating_add(16)).unwrap(),
+                    p_paddr: r.u64(o.saturating_add(24)).unwrap(),
+                    p_filesz: r.u64(o.saturating_add(32)).unwrap(),
+                    p_memsz: r.u64(o.saturating_add(40)).unwrap(),
+                    p_align: r.u64(o.saturating_add(48)).unwrap(),
                 }
             } else {
                 Phdr {
                     index: i as usize,
                     entry_offset: o,
                     p_type: r.u32(o).unwrap(),
-                    p_offset: r.u32(o + 4).unwrap() as u64,
-                    p_vaddr: r.u32(o + 8).unwrap() as u64,
-                    p_paddr: r.u32(o + 12).unwrap() as u64,
-                    p_filesz: r.u32(o + 16).unwrap() as u64,
-                    p_memsz: r.u32(o + 20).unwrap() as u64,
-                    p_flags: r.u32(o + 24).unwrap(),
-                    p_align: r.u32(o + 28).unwrap() as u64,
+                    p_offset: r.u32(o.saturating_add(4)).unwrap() as u64,
+                    p_vaddr: r.u32(o.saturating_add(8)).unwrap() as u64,
+                    p_paddr: r.u32(o.saturating_add(12)).unwrap() as u64,
+                    p_filesz: r.u32(o.saturating_add(16)).unwrap() as u64,
+                    p_memsz: r.u32(o.saturating_add(20)).unwrap() as u64,
+                    p_flags: r.u32(o.saturating_add(24)).unwrap(),
+                    p_align: r.u32(o.saturating_add(28)).unwrap() as u64,
                 }
             };
             self.phdrs.push(p);
         }
     }
+
+    // Unchecked arithmetic here is bounded: i < e_shnum (u16), want <= 64; ss - name_off guarded by name_off < ss.
+
+    #[allow(clippy::arithmetic_side_effects)]
 
     fn parse_shdrs(&mut self) {
         let h = &self.hdr;
@@ -369,30 +377,30 @@ impl<'a> Elf<'a> {
                     index: i as usize,
                     entry_offset: o,
                     name: String::new(),
-                    sh_type: r.u32(o + 4).unwrap(),
-                    sh_flags: r.u64(o + 8).unwrap(),
-                    sh_addr: r.u64(o + 16).unwrap(),
-                    sh_offset: r.u64(o + 24).unwrap(),
-                    sh_size: r.u64(o + 32).unwrap(),
-                    sh_link: r.u32(o + 40).unwrap(),
-                    sh_info: r.u32(o + 44).unwrap(),
-                    sh_addralign: r.u64(o + 48).unwrap(),
-                    sh_entsize: r.u64(o + 56).unwrap(),
+                    sh_type: r.u32(o.saturating_add(4)).unwrap(),
+                    sh_flags: r.u64(o.saturating_add(8)).unwrap(),
+                    sh_addr: r.u64(o.saturating_add(16)).unwrap(),
+                    sh_offset: r.u64(o.saturating_add(24)).unwrap(),
+                    sh_size: r.u64(o.saturating_add(32)).unwrap(),
+                    sh_link: r.u32(o.saturating_add(40)).unwrap(),
+                    sh_info: r.u32(o.saturating_add(44)).unwrap(),
+                    sh_addralign: r.u64(o.saturating_add(48)).unwrap(),
+                    sh_entsize: r.u64(o.saturating_add(56)).unwrap(),
                 }
             } else {
                 Shdr {
                     index: i as usize,
                     entry_offset: o,
                     name: String::new(),
-                    sh_type: r.u32(o + 4).unwrap(),
-                    sh_flags: r.u32(o + 8).unwrap() as u64,
-                    sh_addr: r.u32(o + 12).unwrap() as u64,
-                    sh_offset: r.u32(o + 16).unwrap() as u64,
-                    sh_size: r.u32(o + 20).unwrap() as u64,
-                    sh_link: r.u32(o + 24).unwrap(),
-                    sh_info: r.u32(o + 28).unwrap(),
-                    sh_addralign: r.u32(o + 32).unwrap() as u64,
-                    sh_entsize: r.u32(o + 36).unwrap() as u64,
+                    sh_type: r.u32(o.saturating_add(4)).unwrap(),
+                    sh_flags: r.u32(o.saturating_add(8)).unwrap() as u64,
+                    sh_addr: r.u32(o.saturating_add(12)).unwrap() as u64,
+                    sh_offset: r.u32(o.saturating_add(16)).unwrap() as u64,
+                    sh_size: r.u32(o.saturating_add(20)).unwrap() as u64,
+                    sh_link: r.u32(o.saturating_add(24)).unwrap(),
+                    sh_info: r.u32(o.saturating_add(28)).unwrap(),
+                    sh_addralign: r.u32(o.saturating_add(32)).unwrap() as u64,
+                    sh_entsize: r.u32(o.saturating_add(36)).unwrap() as u64,
                 }
             };
             let name_off = r.u32(o).unwrap();
@@ -503,6 +511,10 @@ pub fn ptype_name(t: u32) -> String {
         _ => format!("0x{t:x}"),
     }
 }
+
+// Unchecked arithmetic here is bounded: len*2 of an in-memory slice.
+
+#[allow(clippy::arithmetic_side_effects)]
 
 pub fn hex(b: &[u8]) -> String {
     let mut s = String::with_capacity(b.len() * 2);

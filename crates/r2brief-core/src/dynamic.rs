@@ -75,6 +75,10 @@ pub struct DynamicInfo {
     pub bind_now: bool,
 }
 
+// Unchecked arithmetic here is bounded: word_size() is 4 or 8; ws is a nonzero constant.
+
+#[allow(clippy::arithmetic_side_effects)]
+
 pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
     let ph = elf.phdrs.iter().find(|p| p.p_type == PT_DYNAMIC)?;
     let r = elf.rd();
@@ -87,7 +91,7 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
         if n_entries >= 4096 {
             break; // hostile PT_DYNAMIC without DT_NULL
         }
-        n_entries += 1;
+        n_entries = n_entries.saturating_add(1);
         let tag = if r.c64 {
             let raw = r.u64(off)?;
             raw as i64
@@ -176,7 +180,7 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             for i in 0..n {
                 let Some(va) = i.checked_mul(24).and_then(|d| rela.checked_add(d)) else { break };
                 let Some(o) = elf.va_to_off(va) else { break };
-                let (Some(off), Some(inf), Some(add)) = (r.u64(o), r.u64(o + 8), r.u64(o + 16)) else { break };
+                let (Some(off), Some(inf), Some(add)) = (r.u64(o), r.u64(o.saturating_add(8)), r.u64(o.saturating_add(16))) else { break };
                 if (inf & 0xffff_ffff) as u32 == rt {
                     info.relative.insert(off, add);
                 }

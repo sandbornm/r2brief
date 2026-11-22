@@ -381,6 +381,8 @@ fn build_analysis(
 
 /// Tiny hex encoder so we don't pull a hex crate.
 mod hex {
+    // Unchecked arithmetic here is bounded: len*2 of an in-memory slice.
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn encode(bytes: impl AsRef<[u8]>) -> String {
         let b = bytes.as_ref();
         let mut s = String::with_capacity(b.len() * 2);

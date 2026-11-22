@@ -3,6 +3,9 @@
 //! Everything here is a pure function of the input bytes. No I/O, no
 //! network, no clock, so the same bytes produce the same report in the
 //! browser, in the CLI, and in CI.
+// Offsets come from untrusted input: every add/mul/shift must be checked or
+// saturating, or carry a local, justified allow. Enforced in CI via clippy.
+#![deny(clippy::arithmetic_side_effects)]
 
 pub mod anomalies;
 pub mod bundle;

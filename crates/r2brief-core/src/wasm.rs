@@ -67,6 +67,8 @@ fn stringify_u64_fields(v: &mut serde_json::Value) {
     }
 }
 
+// Unchecked arithmetic here is bounded: indices guarded by i + 3 <= data.len(); input capped at 64 MiB.
+#[allow(clippy::arithmetic_side_effects)]
 fn b64(data: &[u8]) -> String {
     const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((data.len() + 2) / 3 * 4);

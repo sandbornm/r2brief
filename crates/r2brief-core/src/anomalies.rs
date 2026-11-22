@@ -125,6 +125,10 @@ fn check_rwx(elf: &Elf<'_>) -> Vec<Finding> {
         .collect()
 }
 
+// Unchecked arithmetic here is bounded: indices bounded by loads.len().
+
+#[allow(clippy::arithmetic_side_effects)]
+
 fn check_overlapping_loads(elf: &Elf<'_>) -> Vec<Finding> {
     let loads: Vec<&Phdr> = elf.loads().collect();
     let mut out = Vec::new();
@@ -159,6 +163,8 @@ fn check_overlapping_loads(elf: &Elf<'_>) -> Vec<Finding> {
 /// ascending in the program header table. A converted note sits where the
 /// PT_NOTE was (after PT_DYNAMIC), so it is an executable PT_LOAD that is
 /// out of the contiguous LOAD run, while another executable LOAD exists.
+// Unchecked arithmetic here is bounded: phdr indices bounded by phdrs.len(); p.index > run_end >= 0.
+#[allow(clippy::arithmetic_side_effects)]
 fn check_note_to_load(elf: &Elf<'_>) -> Vec<Finding> {
     let mut out = Vec::new();
     let exec_loads = elf.loads().filter(|p| p.exec()).count();
@@ -230,6 +236,8 @@ fn check_text_padding(elf: &Elf<'_>) -> Vec<Finding> {
 /// Reverse-text: an executable LOAD whose vaddr is below the ELF header /
 /// below other LOADs and whose file offset is 0 or near 0, extending the
 /// text segment "backwards" (ElfMaster reverse text infection).
+// Unchecked arithmetic here is bounded: e_phentsize * e_phnum are u16s widened to u64.
+#[allow(clippy::arithmetic_side_effects)]
 fn check_reverse_text(elf: &Elf<'_>) -> Vec<Finding> {
     let mut out = Vec::new();
     let loads: Vec<&Phdr> = elf.loads().filter(|p| p.exec()).collect();
@@ -256,12 +264,12 @@ fn check_reverse_text(elf: &Elf<'_>) -> Vec<Finding> {
         // Practical check used by the fixture: the first LOAD's filesz is
         // larger than e_phoff + e_phentsize*e_phnum by more than a page AND
         // e_entry lands near the start of this segment (parasite entry).
-        let hdr_end = elf.hdr.e_phoff + (elf.hdr.e_phentsize as u64) * (elf.hdr.e_phnum as u64);
-        if p.p_filesz <= hdr_end + 0x1000 {
+        let hdr_end = elf.hdr.e_phoff.saturating_add(u64::from(elf.hdr.e_phentsize) * u64::from(elf.hdr.e_phnum));
+        if p.p_filesz <= hdr_end.saturating_add(0x1000) {
             continue;
         }
         let entry = elf.hdr.e_entry;
-        if entry >= p.p_vaddr && entry < p.p_vaddr + 0x200 {
+        if entry >= p.p_vaddr && entry < p.p_vaddr.saturating_add(0x200) {
             out.push(finding(
                 &format!("elf:reverse_text:{}", p.index),
                 "Suspected reverse-text infection",
@@ -476,6 +484,10 @@ fn check_stripped(elf: &Elf<'_>) -> Vec<Finding> {
     }
     vec![]
 }
+
+// Unchecked arithmetic here is bounded: ws is the constant 4 or 8.
+
+#[allow(clippy::arithmetic_side_effects)]
 
 fn check_init_hijack(elf: &Elf<'_>, d: &DynamicInfo) -> Vec<Finding> {
     let mut out = Vec::new();

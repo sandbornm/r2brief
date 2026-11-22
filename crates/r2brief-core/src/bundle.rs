@@ -113,6 +113,10 @@ fn sort_value(v: &serde_json::Value) -> serde_json::Value {
     }
 }
 
+// Unchecked arithmetic here is bounded: len*2 of an in-memory slice.
+
+#[allow(clippy::arithmetic_side_effects)]
+
 fn crate_hex(bytes: impl AsRef<[u8]>) -> String {
     let b = bytes.as_ref();
     let mut s = String::with_capacity(b.len() * 2);

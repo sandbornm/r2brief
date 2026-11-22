@@ -47,8 +47,8 @@ fn eh_frame_from_hdr(elf: &Elf<'_>, off: u64, size: u64) -> Option<(u64, u64)> {
     if ver != 1 {
         return None;
     }
-    let enc = r.u8(off + 1)?;
-    let ptr_off = off + 4;
+    let enc = r.u8(off.saturating_add(1))?;
+    let ptr_off = off.saturating_add(4);
     // DW_EH_PE_pcrel is relative to the *address* of the field, not its file offset.
     let ptr_va = elf.off_to_va(ptr_off).unwrap_or(ptr_off);
     let (ptr, _) = read_encoded(elf, ptr_off, enc, ptr_va)?;
@@ -64,16 +64,16 @@ fn walk_eh_frame(elf: &Elf<'_>, start: u64, size: u64, out: &mut EhFrame) {
     let mut off = start;
     let end = start.saturating_add(size);
     let mut cie_aug_enc: Vec<(u64, u8)> = Vec::new(); // cie_off -> FDE pointer encoding
-    while off + 8 <= end {
+    while off.saturating_add(8) <= end {
         let Some(length) = r.u32(off) else { break };
         if length == 0 {
             break; // terminator
         }
-        let id_off = off + 4;
+        let id_off = off.saturating_add(4);
         let next = if length == 0xffff_ffff {
             // 64-bit DWARF length; rare in .eh_frame.
-            let Some(len64) = r.u64(off + 4) else { break };
-            let id_off64 = off + 12;
+            let Some(len64) = r.u64(off.saturating_add(4)) else { break };
+            let id_off64 = off.saturating_add(12);
             let end_rec = id_off64.saturating_add(len64);
             if end_rec > end {
                 out.notes.push("eh_frame record overruns section".into());
@@ -81,12 +81,12 @@ fn walk_eh_frame(elf: &Elf<'_>, start: u64, size: u64, out: &mut EhFrame) {
             }
             let Some(id) = r.u64(id_off64) else { break };
             if id == 0 {
-                out.cie_count += 1;
-                if let Some(enc) = parse_cie_aug(elf, id_off64 + 8, end_rec) {
+                out.cie_count = out.cie_count.saturating_add(1);
+                if let Some(enc) = parse_cie_aug(elf, id_off64.saturating_add(8), end_rec) {
                     cie_aug_enc.push((off, enc));
                 }
             } else {
-                out.fde_count += 1;
+                out.fde_count = out.fde_count.saturating_add(1);
             }
             end_rec
         } else {
@@ -97,13 +97,13 @@ fn walk_eh_frame(elf: &Elf<'_>, start: u64, size: u64, out: &mut EhFrame) {
             }
             let Some(id) = r.u32(id_off) else { break };
             if id == 0 {
-                out.cie_count += 1;
-                if let Some(enc) = parse_cie_aug(elf, id_off + 4, end_rec) {
+                out.cie_count = out.cie_count.saturating_add(1);
+                if let Some(enc) = parse_cie_aug(elf, id_off.saturating_add(4), end_rec) {
                     cie_aug_enc.push((off, enc));
                 }
             } else {
                 // FDE: id is offset back to CIE.
-                out.fde_count += 1;
+                out.fde_count = out.fde_count.saturating_add(1);
                 let cie_pos = id_off.saturating_sub(id as u64);
                 let enc = cie_aug_enc
                     .iter()
@@ -111,7 +111,7 @@ fn walk_eh_frame(elf: &Elf<'_>, start: u64, size: u64, out: &mut EhFrame) {
                     .map(|(_, e)| *e)
                     .unwrap_or(0);
                 // pc_begin starts right after the CIE pointer.
-                let pc_off = id_off + 4;
+                let pc_off = id_off.saturating_add(4);
                 let pc_va = elf.off_to_va(pc_off).unwrap_or(pc_off);
                 if let Some((pc, _)) = read_encoded(elf, pc_off, enc, pc_va) {
                     if pc != 0 {
@@ -140,16 +140,16 @@ fn parse_cie_aug(elf: &Elf<'_>, mut off: u64, end: u64) -> Option<u8> {
     // return_register, then augmentation data if 'z' present.
     let r = elf.rd();
     let _ver = r.u8(off)?;
-    off += 1;
+    off = off.saturating_add(1);
     let (aug, _) = r.cstr(off, 64)?;
-    off += aug.len() as u64 + 1;
+    off = off.saturating_add(aug.len() as u64).saturating_add(1);
     let (_, n) = read_uleb(elf, off, end)?;
-    off += n;
+    off = off.saturating_add(n);
     let (_, n) = read_sleb(elf, off, end)?;
-    off += n;
+    off = off.saturating_add(n);
     // return register: uleb in v4+, u8 in v1. Be permissive.
     let (_, n) = read_uleb(elf, off, end)?;
-    off += n;
+    off = off.saturating_add(n);
     if !aug.contains(&b'z') {
         // Look for 'R' without length prefix — uncommon; default to abs pointer.
         return Some(if aug.contains(&b'R') { 0 } else { 0 });
@@ -162,19 +162,19 @@ fn parse_cie_aug(elf: &Elf<'_>, mut off: u64, end: u64) -> Option<u8> {
         match ch {
             b'z' => {}
             b'L' => {
-                off += 1;
+                off = off.saturating_add(1);
             } // LSDA encoding
             b'P' => {
                 // personality encoding + pointer
                 let enc = r.u8(off)?;
-                off += 1;
+                off = off.saturating_add(1);
                 let base = elf.off_to_va(off).unwrap_or(off);
                 let (_, n) = read_encoded(elf, off, enc, base)?;
-                off += n;
+                off = off.saturating_add(n);
             }
             b'R' => {
                 fde_enc = r.u8(off)?;
-                off += 1;
+                off = off.saturating_add(1);
             }
             b'S' => {}
             _ => {}
@@ -201,14 +201,14 @@ fn read_encoded(elf: &Elf<'_>, off: u64, enc: u8, pc_rel_base: u64) -> Option<(u
             (r.word(off)?, w)
         }
         0x1 => {
-            let (v, n) = read_uleb(elf, off, off + 16)?;
+            let (v, n) = read_uleb(elf, off, off.saturating_add(16))?;
             (v, n)
         }
         0x2 => (r.u16(off)? as u64, 2),
         0x3 => (r.u32(off)? as u64, 4),
         0x4 => (r.u64(off)?, 8),
         0x9 => {
-            let (v, n) = read_sleb(elf, off, off + 16)?;
+            let (v, n) = read_sleb(elf, off, off.saturating_add(16))?;
             (v as u64, n)
         }
         0xa => (r.u16(off)? as i16 as i64 as u64, 2),
@@ -243,7 +243,7 @@ fn read_encoded(elf: &Elf<'_>, off: u64, enc: u8, pc_rel_base: u64) -> Option<(u
             0xa => r.u16(off)? as i16 as i64,
             0xb => r.u32(off)? as i32 as i64,
             0xc => r.u64(off)? as i64,
-            0x9 => read_sleb(elf, off, off + 16)?.0,
+            0x9 => read_sleb(elf, off, off.saturating_add(16))?.0,
             _ => 0,
         };
         (pc_rel_base as i64).wrapping_add(signed) as u64
@@ -259,16 +259,16 @@ fn read_uleb(elf: &Elf<'_>, off: u64, end: u64) -> Option<(u64, u64)> {
     let mut shift = 0u32;
     let mut n = 0u64;
     loop {
-        if off + n >= end {
+        if off.saturating_add(n) >= end {
             return None;
         }
-        let b = r.u8(off + n)?;
-        n += 1;
-        result |= u64::from(b & 0x7f) << shift;
+        let b = r.u8(off.saturating_add(n))?;
+        n = n.saturating_add(1);
+        result |= u64::from(b & 0x7f).checked_shl(shift).unwrap_or(0);
         if b & 0x80 == 0 {
             return Some((result, n));
         }
-        shift += 7;
+        shift = shift.saturating_add(7);
         if shift > 63 {
             return None;
         }
@@ -282,13 +282,13 @@ fn read_sleb(elf: &Elf<'_>, off: u64, end: u64) -> Option<(i64, u64)> {
     let mut n = 0u64;
     let mut b;
     loop {
-        if off + n >= end {
+        if off.saturating_add(n) >= end {
             return None;
         }
-        b = r.u8(off + n)?;
-        n += 1;
-        result |= i64::from(b & 0x7f) << shift;
-        shift += 7;
+        b = r.u8(off.saturating_add(n))?;
+        n = n.saturating_add(1);
+        result |= i64::from(b & 0x7f).checked_shl(shift).unwrap_or(0);
+        shift = shift.saturating_add(7);
         if b & 0x80 == 0 {
             break;
         }
@@ -297,7 +297,7 @@ fn read_sleb(elf: &Elf<'_>, off: u64, end: u64) -> Option<(i64, u64)> {
         }
     }
     if shift < 64 && (b & 0x40) != 0 {
-        result |= !0i64 << shift;
+        result |= (!0i64).checked_shl(shift).unwrap_or(0);
     }
     Some((result, n))
 }

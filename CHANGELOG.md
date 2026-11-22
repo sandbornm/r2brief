@@ -57,6 +57,12 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   budget raises instead of returning a short or empty read, and optional
   Rust triage records a skip note rather than aborting the briefing; v0
   punycode keeps underscores in the ASCII prefix (`α_ω`).
+  Cortex-M follow-ups: the `main` trampoline unwrap follows a tail
+  `b` / `b.n` / `b.w` to the user function (also after a pre-init `bl`)
+  and treats `mov r7, sp` as frame setup; Thumb-2 `push.w` / `sub.w`
+  prologues are recognized; a bare `sub sp` after straight-line code is a
+  stack adjustment, not a function start; callee discovery no longer
+  accepts a non-prologue `sub` head.
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

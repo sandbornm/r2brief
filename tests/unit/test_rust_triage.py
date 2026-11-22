@@ -1941,9 +1941,15 @@ def test_non_spill_store_closes_the_prologue():
     start = 0x10000
     first = _sub_sp(0x20) + _stp_pair_off(0, 1, 0x10)
     second = start + len(first)
-    image = _aarch64_image(start, first + _sub_sp(0x20) + RET)
+    # Once the store closes the opening, a pre-decrement `stp` starts a new
+    # function even though no callee-saved spill was seen.
+    image = _aarch64_image(start, first + _stp_fp_lr_pre() + RET)
     _, starts = _sweep_xrefs(image, {})
     assert start in starts and second in starts
+    # A bare `sub sp` after straight-line code is a stack adjustment, not a start.
+    image = _aarch64_image(start, first + _sub_sp(0x20) + RET)
+    _, starts = _sweep_xrefs(image, {})
+    assert start in starts and second not in starts
 
 
 def test_elf_header_bytes_are_not_program_data(tmp_path: Path):
@@ -2117,3 +2123,160 @@ def test_cortex_user_main_spin_after_init_is_not_unwrapped(tmp_path: Path):
     assert info is not None
     assert info["user_main"] == hex(user)
     assert hex(init) != info["user_main"]
+
+
+def _thumb_bw(pc: int, target: int) -> bytes:
+    """Thumb-2 `b.w` (T4)."""
+    offset = target - (pc + 4)
+    s = (offset >> 24) & 1
+    i1 = (offset >> 23) & 1
+    i2 = (offset >> 22) & 1
+    imm10 = (offset >> 12) & 0x3FF
+    imm11 = (offset >> 1) & 0x7FF
+    j1 = (~(i1 ^ s)) & 1
+    j2 = (~(i2 ^ s)) & 1
+    return struct.pack("<HH", 0xF000 | (s << 10) | imm10, 0x9000 | (j1 << 13) | (j2 << 11) | imm11)
+
+
+THUMB_PUSH_R7_LR = b"\x80\xb5"  # push {r7, lr}
+THUMB_MOV_R7_SP = b"\x6f\x46"  # mov r7, sp
+THUMB_SUB_SP_8 = b"\x82\xb0"  # sub sp, #8
+THUMB_PUSH_W_R4_LR = b"\x2d\xe9\x10\x40"  # push.w {r4, lr}
+THUMB_SUB_W_SP_8 = b"\xad\xf1\x08\x0d"  # sub.w sp, sp, #8
+THUMB_BX_LR = b"\x70\x47"
+THUMB_UDF = b"\x00\xde"
+
+
+def _thumb_image(start: int, body: bytes) -> _Image:
+    image = _Image(arch="arm", bits=32, entry=start | 1,
+                   sections=[_Sec(".text", start, body, 0x4)], loads=[(start, body)])
+    image.force_thumb = True
+    return image
+
+
+def _trampoline_body(main: int, code: bytes, size: int = 0x100) -> bytearray:
+    body = bytearray(THUMB_BX_LR * (size // 2))
+    body[0 : len(code)] = code
+    return body
+
+
+@pytest.mark.parametrize("wide", [False, True])
+def test_trampoline_tail_branch_is_user_main(wide: bool):
+    """`main: b user` / `b.w user` (opt-level s/z) forwards to the user function."""
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _unwrap_trampoline
+
+    main = 0x08000100
+    user = main + 0x80
+    other = main + 0xC0
+    branch = _thumb_bw(main, user) if wide else _thumb_b(main, user)
+    # A neighbor `bl other` right after the tail branch must not be picked.
+    code = branch + _thumb_bl(main + len(branch), other)
+    image = _thumb_image(main, bytes(_trampoline_body(main, code)))
+    assert _unwrap_trampoline(image, main) == user
+
+
+def test_cortex_tail_branch_trampoline_end_to_end(tmp_path: Path):
+    """Reset `bl main; udf`, `main: b.w __cortex_m_rt_main` reports the tail target."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    text_va = flash + 0x100
+    main = text_va + 0x20
+    user = text_va + 0x60
+    other = text_va + 0x80
+    body = bytearray(THUMB_BX_LR * 0x50)
+    body[0:4] = _thumb_bl(text_va, main)
+    body[4:6] = THUMB_UDF
+    body[0x20:0x24] = _thumb_bw(main, user)
+    body[0x24:0x28] = _thumb_bl(main + 4, other)
+    binary = tmp_path / "fw-tail-trampoline"
+    _write_cortex_text_elf(binary, bytes(body), flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+
+
+def test_trampoline_pre_init_call_then_tail_branch_picks_tail_target():
+    """`bl pre_init; b.w user` reports user, not the pre-init hook."""
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _unwrap_trampoline
+
+    main = 0x08000100
+    pre_init = main + 0x60
+    user = main + 0x80
+    code = THUMB_PUSH_R7_LR + _thumb_bl(main + 2, pre_init) + _thumb_bw(main + 6, user)
+    image = _thumb_image(main, bytes(_trampoline_body(main, code)))
+    assert _unwrap_trampoline(image, main) == user
+
+
+def test_trampoline_thumb_frame_pointer_then_sub_sp_still_unwraps():
+    """-O0 `push {r7, lr}; mov r7, sp; sub sp, #N; bl user; udf` reaches the bl."""
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _is_frame_setup, _iter_insns, _unwrap_trampoline
+
+    main = 0x08000100
+    user = main + 0x80
+    code = (
+        THUMB_PUSH_R7_LR + THUMB_MOV_R7_SP + THUMB_SUB_SP_8
+        + _thumb_bl(main + 6, user) + THUMB_UDF
+    )
+    image = _thumb_image(main, bytes(_trampoline_body(main, code)))
+    mov = list(_iter_insns(image, main, True, 4))[1]
+    assert _is_frame_setup(mov)
+    assert _unwrap_trampoline(image, main) == user
+
+
+def test_user_main_scan_passes_a_mid_function_sub_sp():
+    """`paciasp; mov x0, x1; sub sp, sp, #0x20; adr x0, user; bl lang; ret`."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    lang = 0x11000
+    user = 0x12000
+    body = (
+        PAC
+        + _u32(0xAA0103E0)  # mov x0, x1
+        + _sub_sp(0x20)
+        + _adr(0, start + 12, user)
+        + _bl(start + 16, lang)
+        + RET
+    )
+    image = _aarch64_image(start, body, extra=[(lang, RET), (user, PAC + RET)])
+    assert _recover_user_main(image, start) == user
+    _refs, starts = _sweep_xrefs(image, {})
+    assert start in starts
+    assert start + 8 not in starts
+
+
+def test_wide_thumb_prologues_start_functions():
+    """Capstone spells Thumb-2 prologues `push.w {r4, lr}` and `sub.w sp, sp, #8`."""
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _is_prologue, _iter_insns
+
+    start = 0x10000
+    body = THUMB_BX_LR + THUMB_PUSH_W_R4_LR + THUMB_BX_LR + THUMB_SUB_W_SP_8 + THUMB_BX_LR
+    image = _thumb_image(start, body)
+    insns = list(_iter_insns(image, start, True, len(body)))
+    assert [i.mnemonic for i in insns][1] == "push.w"
+    assert [i.mnemonic for i in insns][3] == "sub.w"
+    assert _is_prologue(insns[1]) and _is_prologue(insns[3])
+    _refs, starts = _sweep_xrefs(image, {})
+    assert start + 2 in starts
+    assert start + 8 in starts
+
+
+def test_callees_reject_a_non_prologue_sub_head():
+    """A materialized pointer to `sub x0, sp, #0x10` is not a function start."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    not_fn = 0x10040
+    real_fn = 0x10080
+    body = bytearray(RET * 0x30)
+    body[0:4] = _adr(0, start, not_fn)
+    body[4:8] = _adr(1, start + 4, real_fn)
+    body[8:12] = RET
+    body[0x40:0x44] = _u32(0xD10043E0)  # sub x0, sp, #0x10
+    body[0x80:0x84] = _sub_sp(0x10)
+    image = _aarch64_image(start, bytes(body))
+    found = _callees(image, start)
+    assert not_fn not in found
+    assert real_fn in found

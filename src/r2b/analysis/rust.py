@@ -873,8 +873,15 @@ def _direct_call_target(image: _Image, insn: Any, thumb: bool) -> int | None:
     return image.mark_thumb(target)
 
 
+def _base_mnemonic(insn: Any) -> str:
+    """Mnemonic without a Thumb-2 width suffix: `push.w` -> `push`, `sub.w` -> `sub`."""
+    mnem = insn.mnemonic.lower()
+    base, dot, suffix = mnem.partition(".")
+    return base if dot and suffix in {"w", "n"} else mnem
+
+
 def _is_prologue(insn: Any) -> bool:
-    mnem = insn.mnemonic
+    mnem = _base_mnemonic(insn)
     text = insn.op_str
     if mnem in {"paciasp", "pacibsp"}:
         return True
@@ -892,6 +899,16 @@ def _is_prologue(insn: Any) -> bool:
         if ops[0] in {"sp", "wsp"} and (len(ops) == 2 or ops[1] in {"sp", "wsp"}):
             return True
     return False
+
+
+def _is_frame_alloc(insn: Any) -> bool:
+    """A bare `sub sp, #imm`: a frame allocation that also appears mid-function."""
+    return _base_mnemonic(insn) == "sub" and _is_prologue(insn)
+
+
+def _starts_function(insn: Any) -> bool:
+    """A prologue that cannot be a mid-function stack adjustment."""
+    return _is_prologue(insn) and not _is_frame_alloc(insn)
 
 
 def _is_spill(insn: Any) -> bool:
@@ -927,7 +944,7 @@ def _is_frame_setup(insn: Any) -> bool:
     text = insn.op_str
     if mnem in {"sub", "add"} and re.search(r"\bsp\b", text):
         return True
-    if mnem == "mov" and re.search(r"\b(x29|fp)\b", text) and re.search(r"\bsp\b", text):
+    if mnem == "mov" and re.search(r"\b(x29|fp|r7|r11)\b", text) and re.search(r"\bsp\b", text):
         return True
     # Callee-saved spills into the new frame (`stp x28, x27, [sp, #0x10]`).
     if _is_spill(insn):
@@ -978,7 +995,7 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
             pass
         else:
             in_opening = False
-            if insn.address != c_main and _is_prologue(insn):
+            if insn.address != c_main and _starts_function(insn):
                 break
         values, _refs, is_call = machine.feed(insn)
         for value in values:
@@ -1042,27 +1059,42 @@ def _cortex_reset(image: _Image) -> tuple[int, int] | None:
 
 
 def _unwrap_trampoline(image: _Image, addr: int) -> int:
+    """Follow the `cortex-m-rt` `main` trampoline to the user's entry function.
+
+    The trampoline is either `bl user` followed by a trap or return, or a tail
+    branch (`b` / `b.n` / `b.w`) to the user function, possibly after a
+    `#[pre_init]`-style `bl`. A tail branch wins over an earlier call.
+    """
     calls: list[int] = []
     in_opening = True
-    for index, insn in enumerate(_iter_insns(image, addr, True, 0x20)):
+    window = 0x20
+    for index, insn in enumerate(_iter_insns(image, addr, True, window)):
         if in_opening and _is_frame_setup(insn):
             pass
         else:
             in_opening = False
-            if index > 0 and _is_prologue(insn):
+            if index > 0 and _starts_function(insn):
                 return calls[0] if len(calls) == 1 else addr
-        if insn.mnemonic == "bl":
+        mnem = _base_mnemonic(insn)
+        if mnem == "bl":
             target = _branch_target(insn)
             code = image.code_addr(target) if target is not None else None
             if code is not None:
                 calls.append(code)
-        if insn.mnemonic in {"udf", "bx", "pop"} or insn.mnemonic == "b":
+        if _is_unconditional_b(insn):
+            target = _branch_target(insn)
             # A self-spin or backward branch is this function's own loop
             # (``push; bl init; b .``), not a forwarding trampoline.
-            if insn.mnemonic == "b":
-                target = _branch_target(insn)
-                if target is None or target <= insn.address:
-                    return addr
+            if target is None or target <= insn.address:
+                return addr
+            code = image.code_addr(target)
+            # A forward branch out of this short window is a tail call.
+            if code is not None and not addr <= code < addr + window:
+                return code
+            if len(calls) == 1 and index <= 6:
+                return calls[0]
+            return addr
+        if mnem in {"udf", "bkpt", "bx", "pop"} or _is_return(insn):
             if len(calls) == 1 and index <= 6:
                 return calls[0]
             return addr
@@ -1099,7 +1131,7 @@ def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
             pass
         else:
             in_opening = False
-            if insn.address != reset and _is_prologue(insn):
+            if insn.address != reset and _starts_function(insn):
                 break
         if insn.mnemonic in {"udf", "bkpt"}:
             break
@@ -1177,7 +1209,7 @@ def _callees(image: _Image, start: int) -> list[int]:
             pass
         else:
             in_opening = False
-            if insn.address != start and _is_prologue(insn):
+            if insn.address != start and _starts_function(insn):
                 break
             if insn.address != start and _is_return(insn):
                 break
@@ -1195,7 +1227,7 @@ def _callees(image: _Image, start: int) -> list[int]:
                 if (
                     head is not None
                     and head.address == code
-                    and (_is_prologue(head) or head.mnemonic in {"sub", "stp", "push"})
+                    and (_is_prologue(head) or _base_mnemonic(head) == "push")
                 ):
                     found.append(code)
         if not in_opening and _is_return(insn):
@@ -1227,13 +1259,23 @@ def _sweep_xrefs(
         machine = _Machine(image, thumb)
         in_prologue = False
         spilled = False
+        # True at the section start and after a return, trap, unconditional
+        # branch or padding. A bare `sub sp` starts a function only there;
+        # after straight-line code it is a mid-function stack adjustment.
+        boundary = True
         for insn in _iter_insns(image, sec.addr, thumb, data_len):
+            at_boundary = boundary
+            mnem = _base_mnemonic(insn)
+            if _is_return(insn) or mnem in {"udf", "bkpt"} or _is_unconditional_b(insn):
+                boundary = True
+            elif mnem not in {"nop", "hint"}:
+                boundary = False
             if _is_return(insn):
                 machine.reset()
                 in_prologue = False
             # After frame spills, `sub sp, sp` still belongs to the same
             # opening, but PAC/BTI or a pre-decrement `stp` starts a new one.
-            if _is_prologue(insn) and (
+            if _is_prologue(insn) and (_starts_function(insn) or at_boundary or in_prologue) and (
                 not in_prologue or (spilled and _is_entry_marker(insn))
             ):
                 machine.reset()

@@ -17,6 +17,8 @@ from typing import Any
 
 from ..llm.citations import evidence_block
 from ..llm.prompts import PROMPT_ID, overall_ask_header, overall_ask_tail, region_ask_tail
+from .rust import ElfReadBudgetExceeded, analyze_rust
+from .rustdemangle import pretty_symbol
 
 BRIEFING_SCHEMA_VERSION = "r2b.briefing.v1"
 HANDOFF_SCHEMA_VERSION = "r2b.handoff.v1"
@@ -322,6 +324,7 @@ def build_briefing(
     children = _dict(deep.get("firmware_children"))
 
     subject = _subject(name, binary, firmware, profile, r2_quick, r2_deep, analysis)
+    rust_info = _rust_triage(binary)
     candidates = _collect_regions(
         name=name,
         firmware=firmware,
@@ -335,6 +338,9 @@ def build_briefing(
         issues=list(analysis.get("issues") or []),
         subject_class=str(subject.get("subject_class") or ""),
     )
+    if rust_info and rust_info.get("is_rust"):
+        _demangle_region_names(candidates)
+        candidates.extend(_rust_regions(rust_info))
     candidates.sort(key=lambda region: (-region.score, region.id))
     regions = _dedupe_regions(candidates)[: max(1, max_regions)]
     for index, region in enumerate(regions, start=1):
@@ -343,7 +349,7 @@ def build_briefing(
             region.next_actions = _default_next_actions(region)
 
     next_steps = _overall_next_steps(subject, regions, firmware, children, binary=binary)
-    summary = _summary_line(subject, regions)
+    summary = _summary_line(subject, regions, rust_info)
     overall_ask = _overall_ask(subject, regions, next_steps)
     payload = AnalysisBriefing(
         binary=binary,
@@ -357,6 +363,11 @@ def build_briefing(
     if provenance:
         payload["provenance"] = provenance
         _link_region_evidence(payload, provenance)
+    if rust_info and rust_info.get("is_rust"):
+        payload["rust"] = _rust_public(rust_info)
+    rust_notes = list(rust_info.get("notes") or []) if rust_info else []
+    if rust_notes:
+        payload["notes"] = rust_notes
     payload["handoff"] = build_handoff(payload, record_id=record_id)
     # Supplemental tool evidence does not change the fixed region point table.
     triage_tools = {}
@@ -1462,7 +1473,89 @@ def _firmware_next_actions(kind: str, artifact: dict[str, Any]) -> list[str]:
     return [f"Carve at {artifact.get('offset_hex') or artifact.get('offset')} and identify the payload."]
 
 
-def _summary_line(subject: dict[str, Any], regions: list[RegionAsk]) -> str:
+def _rust_triage(binary: str) -> dict[str, Any] | None:
+    if not binary or binary == "unknown":
+        return None
+    try:
+        return analyze_rust(binary)
+    except ElfReadBudgetExceeded:
+        return {
+            "is_rust": False,
+            "notes": ["triage skipped: read budget exceeded"],
+        }
+    except Exception:
+        return None
+
+
+def _rust_public(info: dict[str, Any]) -> dict[str, Any]:
+    functions = []
+    for func in info.get("functions") or []:
+        if not isinstance(func, dict):
+            continue
+        functions.append({"addr": func.get("addr"), "role": func.get("role")})
+    return {
+        "is_rust": True,
+        "rustc_version": info.get("rustc_version"),
+        "rustc_commit": info.get("rustc_commit"),
+        "user_crates": list(info.get("user_crates") or []),
+        "user_main": info.get("user_main"),
+        "entry_chain": list(info.get("entry_chain") or []),
+        "functions": functions,
+    }
+
+
+def _rust_regions(info: dict[str, Any]) -> list[RegionAsk]:
+    regions: list[RegionAsk] = []
+    for func in info.get("functions") or []:
+        if not isinstance(func, dict):
+            continue
+        addr = func.get("addr")
+        if not isinstance(addr, str) or not addr:
+            continue
+        role = str(func.get("role") or "user")
+        regions.append(
+            RegionAsk(
+                id=f"rust:{role}:{addr}",
+                title=str(func.get("title") or "Rust user function"),
+                why=str(func.get("why") or "Rust user code."),
+                score=float(func.get("score") or 0),
+                tags=["rust", "user", role],
+                snippet=RegionSnippet(
+                    source="r2b",
+                    kind="disasm",
+                    text=str(func.get("snippet") or addr),
+                    address=addr,
+                    function=role,
+                ),
+                next_actions=[
+                    f"r2b decompile BIN {addr} --json",
+                    "Read this as user code. Std and registry frames rank below it.",
+                ],
+            )
+        )
+    return regions
+
+
+def _demangle_region_names(regions: list[RegionAsk]) -> None:
+    for region in regions:
+        snippet = region.snippet
+        if snippet is None or not snippet.function:
+            continue
+        old = snippet.function
+        pretty = pretty_symbol(old)
+        if pretty == old:
+            continue
+        snippet.function = pretty
+        region.title = region.title.replace(old, pretty)
+        if snippet.text:
+            snippet.text = snippet.text.replace(old, pretty)
+
+
+def _summary_line(
+    subject: dict[str, Any],
+    regions: list[RegionAsk],
+    rust: dict[str, Any] | None = None,
+) -> str:
     parts = [
         f"{subject.get('name')} looks like {subject.get('format') or 'an unidentified image'}",
         f"{subject.get('arch') or 'unknown arch'}",
@@ -1477,7 +1570,19 @@ def _summary_line(subject: dict[str, Any], regions: list[RegionAsk]) -> str:
         if subject.get("triage_scope") == "broad"
         else ""
     )
-    return f"{'; '.join(parts)}. First region: {top}.{warning}"
+    line = f"{'; '.join(parts)}. First region: {top}.{warning}"
+    if rust and rust.get("is_rust"):
+        bits: list[str] = []
+        if rust.get("rustc_version"):
+            bits.append(f"rustc {rust['rustc_version']}")
+        crates = [str(crate) for crate in (rust.get("user_crates") or [])[:4]]
+        if crates:
+            bits.append("crates " + ", ".join(crates))
+        if rust.get("user_main"):
+            bits.append(f"user main {rust['user_main']}")
+        if bits:
+            line = f"{line} Rust {'; '.join(bits)}."
+    return line
 
 
 def _overview_snippet(

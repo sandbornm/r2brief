@@ -5,6 +5,24 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- `r2b brief` on a stripped Rust ARM ELF adds a `rust` object
+  (`rustc_version`, `rustc_commit`, `user_crates`, `user_main`,
+  `entry_chain`, `functions`) and ranks user functions, with real
+  addresses, above entry and imports. Recovery is static. It follows
+  the `lang_start` pointer, reads panic `Location` paths, and an in-tree
+  demangler. Non-Rust binaries are unchanged. `handoff.decompile_addrs`
+  is still not a decompile queue. Review follow-ups: consecutive PAC
+  prologues are one function start, AArch64 ADR uses the absolute
+  Capstone operand, callee discovery stops at `ret`, Thumb-2 Linux is
+  decoded as Thumb, and a bad mangled name can no longer abort
+  `build_briefing`. The extractor sandbox binds the tool itself, not a
+  home directory.
+  Later review follow-ups: AArch64 `stp`/`ldp` uses a 4-byte stride for `w`
+  registers and honors post-index writeback; the extractor sandbox never
+  binds a symlink whose resolved target is denylisted; a spent ELF read
+  budget raises instead of returning a short or empty read, and optional
+  Rust triage records a skip note rather than aborting the briefing; v0
+  punycode keeps underscores in the ASCII prefix (`α_ω`).
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

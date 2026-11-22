@@ -30,13 +30,26 @@ STD = {
 
 
 def demangle(raw: str) -> str:
-    try:
-        from rust_demangler import demangle as _demangle
+    # A missing package must fail the job, not silently leave every name raw.
+    from rust_demangler import demangle as _demangle
 
+    try:
         name = _demangle(raw)
-    except Exception:
+    except Exception:  # C/asm symbols and odd names stay raw
         name = raw
     return re.sub(r"::h[0-9a-f]{16}$", "", name)
+
+
+def require_user(recs: list[dict], user_crate: str, where: str) -> int:
+    """Return the user-function count; zero means truth is broken, not r2b."""
+    n_user = sum(r["kind"] == "user" for r in recs)
+    if n_user == 0:
+        raw = sum(r["name"].startswith(("_ZN", "_R")) for r in recs)
+        raise SystemExit(
+            f"{where}: no `{user_crate}` functions among {len(recs)} "
+            f"({raw} names still mangled); demangling or crate attribution failed"
+        )
+    return n_user
 
 
 def first_crate(s: str) -> str | None:
@@ -114,10 +127,10 @@ def main(argv: list[str]) -> int:
             raise SystemExit(f"{profile}: .text/.rodata differ from {twin}")
         if has_symtab:
             raise SystemExit(f"{profile}: still has .symtab")
+        n_user = require_user(recs, user_crate, f"{twin}/{binary}")
         out = Path(root) / "dataset" / "truth" / target / profile / f"{binary}.jsonl"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text("".join(json.dumps(r) + "\n" for r in recs))
-        n_user = sum(r["kind"] == "user" for r in recs)
         print(json.dumps({"binary": f"{target}/{profile}/{binary}", "twin": twin,
                           "n_funcs": len(recs), "n_user": n_user}))
     return 0

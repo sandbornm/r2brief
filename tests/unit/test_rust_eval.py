@@ -19,13 +19,13 @@ report = _load("report")
 truth = _load("truth")
 
 
-def _row(p5: float, p10: float, error: str | None = None) -> dict:
+def _row(p5: float, p10: float, error: str | None = None, n_ranked: int = 10) -> dict:
     return {
         "binary": "bins/t/strip/fd",
         "n_funcs": 10,
         "quick": {
             "p@5": p5, "p@10": p10, "error": error, "first_user_rank": 1,
-            "user_main_rank": None, "user_total": 2, "n_ranked": 10, "secs": 1.0, "top": [],
+            "user_main_rank": None, "user_total": 2, "n_ranked": n_ranked, "secs": 1.0, "top": [],
         },
     }
 
@@ -72,3 +72,23 @@ def test_crate_of_attributes_trait_impls_to_the_user_type():
     assert truth.crate_of("<&T as core::fmt::Display>::fmt") == "core"
     assert truth.crate_of("<core::option::Option<T> as fd::Trait>::f") == "fd"
     assert truth.crate_of("OUTLINED_FUNCTION_12") == "llvm_outlined"
+
+
+def test_short_briefing_counts_missing_ranks_as_misses():
+    # The harness divides by the ranked count: one user region scores 1.0/1.0.
+    row = _row(1.0, 1.0, n_ranked=1)
+    problems = report.check(row, {"p@5": 1.0, "p@10": 0.8})
+    assert [p.split()[:2] for p in problems] == [["p@5", "0.20"], ["p@10", "0.10"]]
+    text, failed = report.render([row], {"bins/t/strip/fd": {"p@5": 1.0, "p@10": 0.8}})
+    assert failed and "| 0.20 | 0.10 |" in text
+
+
+def test_truth_without_user_functions_fails_loudly():
+    recs = [{"name": "_ZN2fd4main17h0123456789abcdefE", "kind": "other"}]
+    try:
+        truth.require_user(recs, "fd", "sym/fd")
+    except SystemExit as exc:
+        assert "no `fd` functions" in str(exc) and "1 names still mangled" in str(exc)
+    else:
+        raise AssertionError("expected SystemExit")
+    assert truth.require_user([{"name": "fd::main", "kind": "user"}], "fd", "sym/fd") == 1

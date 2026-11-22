@@ -5,6 +5,10 @@ A binary fails when its user-code p@5 drops more than one hit (0.2) below
 baseline, its p@10 drops more than one hit (0.1) below baseline, or r2b did
 not produce a briefing. Scores above baseline never fail.
 
+p@k here always divides by k. eval_ground_truth.py divides by the number of
+ranked regions when fewer than k were ranked, so a briefing that stops after
+one user region would score 1.0 there; the floor must not accept that.
+
 usage: report.py <results.json> <baseline.json> [--summary PATH]
 """
 
@@ -19,6 +23,12 @@ TOLERANCE = {"p@5": 0.2, "p@10": 0.1}
 EPS = 1e-9
 
 
+def strict(res: dict, key: str) -> float:
+    """p@k with denominator k, from the harness value and the ranked count."""
+    k = int(key.split("@")[1])
+    return res.get(key, 0.0) * min(k, res.get("n_ranked") or 0) / k
+
+
 def check(row: dict, base: dict | None, mode: str = "quick") -> list[str]:
     res = row[mode]
     problems = []
@@ -26,8 +36,9 @@ def check(row: dict, base: dict | None, mode: str = "quick") -> list[str]:
         problems.append(f"r2b error: {res['error'][-200:]}")
     if base:
         for k, tol in TOLERANCE.items():
-            if res[k] < base[k] - tol - EPS:
-                problems.append(f"{k} {res[k]:.2f} < baseline {base[k]:.2f} - {tol}")
+            got = strict(res, k)
+            if got < base[k] - tol - EPS:
+                problems.append(f"{k} {got:.2f} < baseline {base[k]:.2f} - {tol}")
     return problems
 
 
@@ -36,7 +47,8 @@ def render(rows: list[dict], baseline: dict, mode: str = "quick") -> tuple[str, 
         "## Stripped Rust eval: fd-find 10.5.2, aarch64",
         "",
         f"`r2b brief --{mode}` user-code precision against symbol ground truth from the "
-        "unstripped twin. Soft floor: fails only on a drop of more than one hit below baseline.",
+        "unstripped twin, out of k (fewer than k ranked regions count as misses). Soft floor: "
+        "fails only on a drop of more than one hit below baseline.",
         "",
         "| binary | p@5 | p@10 | baseline p@5/p@10 | first user rank | `fd::main` rank "
         "| user fns | ranked | secs | status |",
@@ -51,7 +63,7 @@ def render(rows: list[dict], baseline: dict, mode: str = "quick") -> tuple[str, 
         status = "fail: " + "; ".join(problems) if problems else "ok"
         base_cell = f"{base['p@5']:.2f}/{base['p@10']:.2f}" if base else "none"
         lines.append(
-            f"| `{row['binary']}` | {res['p@5']:.2f} | {res['p@10']:.2f} | {base_cell} "
+            f"| `{row['binary']}` | {strict(res, 'p@5'):.2f} | {strict(res, 'p@10'):.2f} | {base_cell} "
             f"| {res['first_user_rank'] or '-'} | {res['user_main_rank'] or '-'} "
             f"| {res['user_total']} of {row['n_funcs']} | {res['n_ranked']} | {res['secs']} "
             f"| {status} |"

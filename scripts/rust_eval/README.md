@@ -17,12 +17,18 @@ puts a stripped Rust binary's own code at the top of its ranked regions.
   the code layout. A function is user code when its demangled path
   (independent `rust-demangler`, MIT) belongs to crate `fd`.
 - Score: `scripts/eval_ground_truth.py` p@5 and p@10 over the ranked
-  addresses, each true function counted once.
+  addresses, each true function counted once. `report.py` always divides
+  by k, so a briefing with fewer than k regions counts the missing ranks
+  as misses.
 - Soft floor: `baseline.json`. The job fails only when a score drops more
   than one hit below baseline (0.2 at k=5, 0.1 at k=10) or r2b emits no
   briefing. Raise the baseline in the PR that improves ranking. Current
-  baseline: 1.0/0.8 for `strip` and `cargostrip` (since #39; it was
-  0.2/0.2 before). A job fails below 0.8 at p@5 or 0.7 at p@10.
+  baseline: 1.0/0.8 for `strip` and `cargostrip` (since #39 and #40; it
+  was 0.2/0.2 before). A job fails below 0.8 at p@5 or 0.7 at p@10.
+- Artifact `rust-eval-fd-aarch64` (kept 3 days) holds the four binaries,
+  the truth files, and `results.json`. A local build embeds a different
+  `$CARGO_HOME` path, so its `.rodata` layout (and sometimes its score)
+  differs from CI. Debug a CI score with the artifact, not a local build.
 
 Reproduce locally (Linux, rustup, `gcc-aarch64-linux-gnu`, `libc6-dev-arm64-cross`, `make`):
 

@@ -15,6 +15,12 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   an LTO-inlined C `main`. A path-referencing function that user main
   also calls now gets a one-time +4. Thumb `sub sp, #imm` still starts a
   function. Static analysis only, no model.
+- Rust triage no longer reads the ELF and program headers as program
+  data. A load through a stale small register could read `e_shoff` from
+  the mapped ELF header. When that value matched a panic Location, it
+  counted as a false registry ref and dropped `fd::run` out of the top
+  10. That happened on the CI build of fd (p@10 0.7) but not on local
+  builds, whose file size differs.
 - v0 demangling rejects malformed punycode instead of publishing a
   `-tail` spelling, so `pretty_symbol` keeps the raw name.
 - A short ELF read (file ends before a section's declared size) raises

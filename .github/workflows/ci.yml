@@ -177,6 +177,7 @@ jobs:
         working-directory: crates/r2brief-core
         run: |
           cargo build --release
+          cargo test
           cargo test --release
           python3 eval/score.py
       - name: wasm-pack

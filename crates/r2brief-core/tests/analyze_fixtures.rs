@@ -56,3 +56,64 @@ fn clean_has_no_infection_alarm() {
         .collect::<Vec<_>>();
     assert!(bad.is_empty(), "false infection on clean binary: {bad:?}");
 }
+
+#[test]
+fn hostile_init_arraysz_does_not_abort() {
+    let path = fixture("triage-x86_64-stripped");
+    if !path.exists() {
+        require_fixture(&path);
+        return;
+    }
+    let mut data = std::fs::read(&path).unwrap();
+    // Locate PT_DYNAMIC and set DT_INIT_ARRAYSZ to u64::MAX.
+    assert_eq!(&data[0..4], b"\x7fELF");
+    let phoff = u64::from_le_bytes(data[32..40].try_into().unwrap()) as usize;
+    let phentsize = u16::from_le_bytes(data[54..56].try_into().unwrap()) as usize;
+    let phnum = u16::from_le_bytes(data[56..58].try_into().unwrap()) as usize;
+    let mut dyn_off = None;
+    let mut dyn_sz = 0usize;
+    for i in 0..phnum {
+        let o = phoff + i * phentsize;
+        let ptype = u32::from_le_bytes(data[o..o + 4].try_into().unwrap());
+        if ptype == 2 {
+            dyn_off = Some(u64::from_le_bytes(data[o + 8..o + 16].try_into().unwrap()) as usize);
+            dyn_sz = u64::from_le_bytes(data[o + 32..o + 40].try_into().unwrap()) as usize;
+            break;
+        }
+    }
+    let dyn_off = dyn_off.expect("PT_DYNAMIC");
+    let mut off = dyn_off;
+    while off + 16 <= dyn_off + dyn_sz {
+        let tag = i64::from_le_bytes(data[off..off + 8].try_into().unwrap());
+        if tag == 27 {
+            data[off + 8..off + 16].copy_from_slice(&u64::MAX.to_le_bytes());
+            break;
+        }
+        if tag == 0 {
+            break;
+        }
+        off += 16;
+    }
+    let report = r2brief_core::analyze("hostile-init", &data).expect("must not abort");
+    assert!(report.findings.len() >= 1);
+}
+
+#[test]
+fn handoff_keeps_supplied_path() {
+    let path = fixture("triage-x86_64-stripped");
+    if !path.exists() {
+        require_fixture(&path);
+        return;
+    }
+    let data = std::fs::read(&path).unwrap();
+    let supplied = format!("/tmp/outside/{}", path.file_name().unwrap().to_string_lossy());
+    let report = r2brief_core::analyze(&supplied, &data).unwrap();
+    assert_eq!(report.subject.name, path.file_name().unwrap().to_string_lossy());
+    let argv = report.briefing["handoff"]["next_argv"].as_array().unwrap();
+    if let Some(first) = argv.iter().find(|c| c.as_str().unwrap_or("").contains("verify")) {
+        assert!(
+            first.as_str().unwrap().contains("/tmp/outside/"),
+            "handoff lost path: {first}"
+        );
+    }
+}

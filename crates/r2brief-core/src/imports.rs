@@ -39,22 +39,29 @@ pub fn list_imports(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<ImportS
         } else {
             sec.sh_entsize
         };
-        let n = if entsize == 0 { 0 } else { sec.sh_size / entsize };
+        if entsize == 0 {
+            return out;
+        }
+        // Only walk bytes that actually exist in the file.
+        let readable = elf.len().saturating_sub(sec.sh_offset);
+        let span = sec.sh_size.min(readable);
+        let n = (span / entsize).min(65_536);
         let r = elf.rd();
         for i in 0..n {
             let o = sec.sh_offset + i * entsize;
+            if r.bytes(o, entsize).is_none() {
+                break;
+            }
             let (name_off, info, shndx) = if elf.hdr.class64 {
-                (
-                    r.u32(o).unwrap_or(0),
-                    r.u8(o + 4).unwrap_or(0),
-                    r.u16(o + 6).unwrap_or(0),
-                )
+                match (r.u32(o), r.u8(o + 4), r.u16(o + 6)) {
+                    (Some(a), Some(b), Some(c)) => (a, b, c),
+                    _ => break,
+                }
             } else {
-                (
-                    r.u32(o).unwrap_or(0),
-                    r.u8(o + 12).unwrap_or(0),
-                    r.u16(o + 14).unwrap_or(0),
-                )
+                match (r.u32(o), r.u8(o + 12), r.u16(o + 14)) {
+                    (Some(a), Some(b), Some(c)) => (a, b, c),
+                    _ => break,
+                }
             };
             // STB_GLOBAL/WEAK + STT_FUNC/NOTYPE + SHN_UNDEF → import.
             if shndx != 0 {

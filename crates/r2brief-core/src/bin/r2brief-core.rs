@@ -47,11 +47,7 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let name = std::path::Path::new(&path)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(&path);
-    let report = match r2brief_core::analyze(name, &data) {
+    let report = match r2brief_core::analyze(&path, &data) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("analyze: {e}");

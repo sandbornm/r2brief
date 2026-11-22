@@ -98,6 +98,10 @@ pub struct Report {
 }
 
 pub fn analyze(name: &str, data: &[u8]) -> Result<Report, String> {
+    // `name` may be a path (CLI) or a basename (browser). Display uses the
+    // final component; handoff.next_argv keeps the supplied path so verify
+    // targets the same file the operator passed.
+
     let sha = {
         let mut h = Sha256::new();
         h.update(data);
@@ -145,8 +149,14 @@ pub fn analyze(name: &str, data: &[u8]) -> Result<Report, String> {
         4 => "ET_CORE",
         _ => "ET_OTHER",
     };
+    let display_name = std::path::Path::new(name)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(name)
+        .to_string();
+    let handoff_path = name.to_string();
     let subject = Subject {
-        name: name.to_string(),
+        name: display_name.clone(),
         sha256: sha.clone(),
         size: data.len() as u64,
         format: "elf".into(),
@@ -188,7 +198,7 @@ pub fn analyze(name: &str, data: &[u8]) -> Result<Report, String> {
         })
         .collect();
 
-    let briefing = build_briefing(&subject, &findings, &funcs);
+    let briefing = build_briefing(&subject, &findings, &funcs, &handoff_path);
     let analysis = build_analysis(&subject, &findings, &funcs, &segments, &imports);
     let tools = serde_json::json!({
         "r2brief-core": { "available": true, "version": env!("CARGO_PKG_VERSION"), "mode": "wasm-or-native" }
@@ -221,6 +231,7 @@ fn build_briefing(
     subject: &Subject,
     findings: &[Finding],
     funcs: &FuncRecovery,
+    handoff_path: &str,
 ) -> serde_json::Value {
     let regions: Vec<serde_json::Value> = findings
         .iter()
@@ -269,12 +280,12 @@ fn build_briefing(
     let mut next_argv = Vec::new();
     for name in subject.dangerous_imports.iter().filter(|n| imports::VERIFY.contains(&n.as_str())).take(4)
     {
-        next_argv.push(format!("r2b verify {} --import {name} --json", subject.name));
+        next_argv.push(format!("r2b verify {} --import {name} --json", handoff_path));
     }
 
     serde_json::json!({
         "schema_version": "r2b.briefing.v1",
-        "binary": subject.name,
+        "binary": handoff_path,
         "subject": {
             "name": subject.name,
             "sha256": subject.sha256,
@@ -297,7 +308,7 @@ fn build_briefing(
         ],
         "handoff": {
             "schema_version": "r2b.handoff.v1",
-            "binary": subject.name,
+            "binary": handoff_path,
             "record_id": null,
             "summary": summary,
             "subject": {

@@ -142,6 +142,17 @@ jobs:
           uv pip install --require-hashes -r scripts/rust_eval/requirements.txt
       - name: Build, rank and score
         run: scripts/rust_eval/run.sh "$RUNNER_TEMP/rust-eval" "$GITHUB_STEP_SUMMARY"
+      - name: Upload eval binaries and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-eval-fd-aarch64
+          path: |
+            ${{ runner.temp }}/rust-eval/results.json
+            ${{ runner.temp }}/rust-eval/bins/
+            ${{ runner.temp }}/rust-eval/dataset/truth/
+          if-no-files-found: ignore
+          retention-days: 3
 
   package:
     name: Package

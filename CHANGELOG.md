@@ -57,15 +57,18 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   budget raises instead of returning a short or empty read, and optional
   Rust triage records a skip note rather than aborting the briefing; v0
   punycode keeps underscores in the ASCII prefix (`α_ω`).
-  Cortex-M follow-ups: the `main` trampoline unwrap follows a tail
-  `b` / `b.n` / `b.w` to the user function
-  (also after a pre-init `bl`, and when the target is the next
-  function) and treats `mov r7, sp` as frame setup; a Reset that ends in
-  `b main` hands off to `main`; a `b.w` tail stub is a thunk; Thumb-2
-  `push.w` / `sub.w`
-  prologues are recognized; a bare `sub sp` after straight-line code is a
-  stack adjustment, not a function start; callee discovery no longer
-  accepts a non-prologue `sub` head.
+  Cortex-M user main uses one rule, the call that never returns: from
+  Reset, take the first call or tail branch whose callee provably never
+  returns (falling back to the last call when none does), then step
+  through short forwarding stubs the same way. It replaces the
+  trampoline-unwrap and Reset-tail heuristics and is tested against 26
+  real rustc / cortex-m-rt images in `tests/fixtures/cortex_m` (v6m,
+  v7m, v7em; `-O0`, release, `-Oz`; with and without `#[pre_init]`;
+  plus hand-written Reset/`main` edge shapes). A `b.w` tail stub is a
+  thunk; Thumb-2 `push.w` / `sub.w` prologues are recognized; a bare
+  `sub sp` after straight-line code is a stack adjustment, not a
+  function start; callee discovery no longer accepts a non-prologue
+  `sub` head.
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

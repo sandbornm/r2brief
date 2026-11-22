@@ -7,6 +7,7 @@ Capstone is optional. Without it the toolchain fields still report.
 
 from __future__ import annotations
 
+import heapq
 import re
 import struct
 import zlib
@@ -860,6 +861,11 @@ def _iter_insns(image: _Image, start: int, thumb: bool, max_bytes: int):
 def _branch_target(insn: Any) -> int | None:
     if insn.op_str.startswith("#"):
         return _imm(insn.op_str)
+    # Thumb `cbz r0, #target` / `cbnz r0, #target`.
+    if insn.mnemonic.lower() in {"cbz", "cbnz"}:
+        ops = _split_ops(insn.op_str)
+        if len(ops) == 2 and ops[1].startswith("#"):
+            return _imm(ops[1])
     return None
 
 
@@ -1058,49 +1064,14 @@ def _cortex_reset(image: _Image) -> tuple[int, int] | None:
     return None
 
 
-def _unwrap_trampoline(image: _Image, addr: int) -> int:
-    """Follow the `cortex-m-rt` `main` trampoline to the user's entry function.
-
-    The trampoline is either `bl user` followed by a trap or return, or a tail
-    branch (`b` / `b.n` / `b.w`) to the user function, possibly after a
-    `#[pre_init]`-style `bl`. A tail branch wins over an earlier call.
-    """
-    calls: list[int] = []
-    in_opening = True
-    for index, insn in enumerate(_iter_insns(image, addr, True, 0x20)):
-        if in_opening and _is_frame_setup(insn):
-            pass
-        else:
-            in_opening = False
-            if index > 0 and _starts_function(insn):
-                return calls[0] if len(calls) == 1 else addr
-        mnem = _base_mnemonic(insn)
-        if mnem == "bl":
-            target = _branch_target(insn)
-            code = image.code_addr(target) if target is not None else None
-            if code is not None:
-                calls.append(code)
-        if _is_unconditional_b(insn):
-            target = _branch_target(insn)
-            # A self-spin or backward branch is this function's own loop
-            # (``push; bl init; b .``), not a forwarding trampoline.
-            if target is None or target <= insn.address:
-                return addr
-            # An unconditional forward branch in the trampoline is the tail
-            # call, including `b.w` to the very next function (`-Oz` stubs).
-            code = image.code_addr(target)
-            if code is not None:
-                return code
-            if len(calls) == 1 and index <= 6:
-                return calls[0]
-            return addr
-        if mnem in {"udf", "bkpt", "bx", "pop"} or _is_return(insn):
-            if len(calls) == 1 and index <= 6:
-                return calls[0]
-            return addr
-        if index >= 8:
-            break
-    return addr
+_COND_BRANCHES = frozenset(
+    {"beq", "bne", "bcs", "bhs", "bcc", "blo", "bmi", "bpl", "bvs", "bvc",
+     "bhi", "bls", "bge", "blt", "bgt", "ble", "cbz", "cbnz"}
+)
+_FLOW_BUDGET = 512  # instructions walked per function
+_FLOW_DEPTH = 6  # nested "does this callee return?" questions
+_MAX_FORWARDS = 4  # trampoline hops after Reset's `main`
+_FORWARDER_MAX = 12  # instructions in a trampoline
 
 
 def _is_unconditional_b(insn: Any) -> bool:
@@ -1110,90 +1081,191 @@ def _is_unconditional_b(insn: Any) -> bool:
     return base == "b" and suffix in {"", "n", "w"}
 
 
-def _is_reset_tail_call(image: _Image, insn: Any, target: int) -> bool:
-    """A forward `b` out of Reset into another function, not a local skip."""
-    code = image.code_addr(target)
-    if code is None:
+def _thumb_insn(image: _Image, addr: int) -> Any | None:
+    insn = next(_iter_insns(image, addr, True, 4), None)
+    if insn is None or insn.address != addr:
+        return None
+    return insn
+
+
+def _function_like(image: _Image, addr: int) -> bool:
+    """A branch target that opens a new function rather than a local label."""
+    head = _thumb_insn(image, addr)
+    return head is not None and _is_prologue(head)
+
+
+@dataclass
+class _Flow:
+    """What one Thumb function does, from a bounded reachability walk."""
+
+    insns: list[Any] = field(default_factory=list)
+    # (site, target, "call" | "tail") in address order of the site.
+    transfers: list[tuple[int, int, str]] = field(default_factory=list)
+    returns: bool = False
+    exhausted: bool = False
+    local_branches: int = 0
+
+
+def _thumb_flow(image: _Image, start: int, noreturn: Any) -> _Flow:
+    """Walk the Thumb function at ``start`` along every reachable path.
+
+    Fall-through, conditional branches, ``cbz``/``cbnz`` and local ``b`` are
+    followed. A ``b`` into a function-like target, or to before ``start``, is
+    a tail transfer and is not followed. A path ends at a return, ``udf``,
+    ``bkpt``, a spin, or after a ``bl`` whose callee ``noreturn(target)``
+    says never returns.
+    """
+    flow = _Flow()
+    pending = [start]
+    seen: set[int] = set()
+    while pending:
+        addr = heapq.heappop(pending)
+        if addr in seen:
+            continue
+        if len(seen) >= _FLOW_BUDGET:
+            flow.exhausted = True
+            break
+        seen.add(addr)
+        insn = _thumb_insn(image, addr)
+        if insn is None:
+            continue
+        flow.insns.append(insn)
+        nxt = insn.address + insn.size
+        mnem = _base_mnemonic(insn)
+        ops = insn.op_str
+        if mnem.startswith("pop") and re.search(r"\bpc\b", ops) or (
+            mnem.startswith("bx") and re.search(r"\blr\b", ops)
+        ):
+            flow.returns = True
+            if mnem not in {"pop", "bx"}:  # conditional (IT block) return
+                heapq.heappush(pending, nxt)
+            continue
+        if mnem.startswith("bx") or (mnem in {"mov", "ldr"} and ops.startswith("pc")):
+            flow.returns = True  # indirect jump: assume it can return
+            continue
+        if mnem in {"udf", "bkpt"}:
+            continue
+        target = _branch_target(insn)
+        if mnem == "bl":
+            code = image.code_addr(target) if target is not None else None
+            if code is not None:
+                flow.transfers.append((insn.address, code, "call"))
+                if code != start and noreturn(code):
+                    continue
+            heapq.heappush(pending, nxt)
+            continue
+        if _is_unconditional_b(insn):
+            code = image.code_addr(target) if target is not None else None
+            if code is None:
+                continue
+            if code == insn.address:
+                flow.local_branches += 1  # `b .` spin: the function's own loop
+                continue
+            if code != start and (code < start or _function_like(image, code)):
+                flow.transfers.append((insn.address, code, "tail"))
+                continue
+            flow.local_branches += 1
+            heapq.heappush(pending, code)
+            continue
+        if mnem in _COND_BRANCHES or mnem.split(".")[0] in _COND_BRANCHES:
+            flow.local_branches += 1
+            code = image.code_addr(target) if target is not None else None
+            if code is not None:
+                heapq.heappush(pending, code)
+        heapq.heappush(pending, nxt)
+    flow.transfers.sort()
+    return flow
+
+
+class _NoReturn:
+    """Memoized "can this function ever return to its caller?" over Thumb code."""
+
+    def __init__(self, image: _Image) -> None:
+        self.image = image
+        self.memo: dict[int, bool] = {}
+        self.depth = 0
+
+    def flow(self, addr: int) -> _Flow:
+        return _thumb_flow(self.image, addr, self)
+
+    def __call__(self, addr: int) -> bool:
+        if addr in self.memo:
+            return not self.memo[addr]
+        if self.depth >= _FLOW_DEPTH:
+            return False
+        self.memo[addr] = True  # in progress: assume it returns
+        self.depth += 1
+        try:
+            flow = self.flow(addr)
+            returns = flow.returns or any(
+                kind == "tail" and not self(target) for _site, target, kind in flow.transfers
+            )
+            # A function too large to walk is treated as never returning.
+            if flow.exhausted and not flow.returns:
+                returns = False
+        finally:
+            self.depth -= 1
+        self.memo[addr] = returns
+        return not returns
+
+    def first(self, addr: int) -> int | None:
+        """The first transfer out of ``addr``, in address order, that never returns.
+
+        When none provably diverges (stub bodies that end in a return), fall
+        back to the last direct call, which is where control is handed off.
+        """
+        transfers = [t for t in self.flow(addr).transfers if t[1] != addr]
+        for _site, target, _kind in transfers:
+            if self(target):
+                return target
+        calls = [target for _site, target, kind in transfers if kind == "call"]
+        return calls[-1] if calls else None
+
+
+def _is_forwarder(flow: _Flow) -> bool:
+    """A trampoline: frame setup and calls only, with no loop or test of its own."""
+    if flow.local_branches or flow.exhausted or len(flow.insns) > _FORWARDER_MAX:
         return False
-    head = next(_iter_insns(image, code, True, 4), None)
-    if head is not None and head.address == code and _is_prologue(head):
-        return True
-    after = next(_iter_insns(image, insn.address + insn.size, True, 4), None)
-    return after is not None and (
-        _starts_function(after) or _base_mnemonic(after) in {"nop", "udf", "bkpt"}
-    )
+    for insn in flow.insns:
+        mnem = _base_mnemonic(insn)
+        if mnem in {"bl", "b", "udf", "bkpt", "nop"} or _is_frame_setup(insn) or _is_return(insn):
+            continue
+        return False
+    return True
 
 
 def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
+    """Cortex-M user main: the call that never returns.
+
+    From the Reset vector, ``main`` is Reset's first direct transfer (``bl``
+    or tail ``b``, in address order) whose callee never returns, or Reset's
+    last call when none provably diverges. While the current function is a
+    forwarder (only frame setup and transfers, no loop or test), make the
+    same choice inside it. The function where that stops is user main. See
+    ``docs/USAGE.md``.
+    """
     found = _cortex_reset(image)
     if found is None:
         return [], None
     _sp, reset = found
     image.force_thumb = True
     image.mark_thumb(reset | 1)
-    last: int | None = None
-    in_opening = True
-    # Forward exits as (src, dest). A backward `b` is terminal unless one of
-    # these leaves *that* loop, so a later `wfi; b wfi` still stops.
-    forward_exits: list[tuple[int, int]] = []
-    skip_until: int | None = None
-    for insn in _iter_insns(image, reset, True, 0x200):
-        if skip_until is not None and insn.address < skip_until:
-            continue
-        skip_until = None
-        if in_opening and _is_frame_setup(insn):
-            pass
-        else:
-            in_opening = False
-            if insn.address != reset and _starts_function(insn):
-                break
-        if insn.mnemonic in {"udf", "bkpt"}:
-            break
-        if insn.mnemonic == "bl":
-            target = _branch_target(insn)
-            code = image.code_addr(target) if target is not None else None
-            if code is not None:
-                last = code
-                image.mark_thumb(code | 1)
-        target = _branch_target(insn)
-        if (
-            target is not None
-            and target > insn.address
-            and insn.mnemonic.split(".")[0] != "bl"
-        ):
-            forward_exits.append((insn.address, target))
-        # `b .` is a spin. A backward `b` ends the handler unless a forward
-        # exit leaves this loop. An unconditional forward `b` skips the
-        # intervening instructions so a jumped-over `bl` is not published.
-        if _is_unconditional_b(insn):
-            if target is None or target == insn.address:
-                break
-            if target > insn.address and _is_reset_tail_call(image, insn, target):
-                # `Reset` that ends in `b main` hands off like a final `bl`.
-                last = image.code_addr(target)
-                if last is not None:
-                    image.mark_thumb(last | 1)
-                break
-            if target < insn.address:
-                loop_lo, loop_hi = target, insn.address
-                if not any(
-                    loop_lo <= src <= loop_hi and dest > loop_hi
-                    for src, dest in forward_exits
-                ):
-                    break
-            else:
-                skip_until = target
-        if _is_return(insn):
-            break
-    if last is None:
+    noreturn = _NoReturn(image)
+    main = noreturn.first(reset)
+    if main is None:
         return [reset], None
-    user = _unwrap_trampoline(image, last)
-    image.mark_thumb(user | 1)
-    chain = [reset]
-    if last != reset:
-        chain.append(last)
-    if user not in chain:
-        chain.append(user)
+    chain = [reset, main]
+    user = main
+    for _ in range(_MAX_FORWARDS):
+        if not _is_forwarder(noreturn.flow(user)):
+            break
+        nxt = noreturn.first(user)
+        if nxt is None or nxt in chain:
+            break
+        chain.append(nxt)
+        user = nxt
+    for addr in chain:
+        image.mark_thumb(addr | 1)
     return chain, user
 
 

@@ -2154,78 +2154,6 @@ def _thumb_image(start: int, body: bytes) -> _Image:
     return image
 
 
-def _trampoline_body(main: int, code: bytes, size: int = 0x100) -> bytearray:
-    body = bytearray(THUMB_BX_LR * (size // 2))
-    body[0 : len(code)] = code
-    return body
-
-
-@pytest.mark.parametrize("wide", [False, True])
-def test_trampoline_tail_branch_is_user_main(wide: bool):
-    """`main: b user` / `b.w user` (opt-level s/z) forwards to the user function."""
-    pytest.importorskip("capstone")
-    from r2b.analysis.rust import _unwrap_trampoline
-
-    main = 0x08000100
-    user = main + 0x80
-    other = main + 0xC0
-    branch = _thumb_bw(main, user) if wide else _thumb_b(main, user)
-    # A neighbor `bl other` right after the tail branch must not be picked.
-    code = branch + _thumb_bl(main + len(branch), other)
-    image = _thumb_image(main, bytes(_trampoline_body(main, code)))
-    assert _unwrap_trampoline(image, main) == user
-
-
-def test_cortex_tail_branch_trampoline_end_to_end(tmp_path: Path):
-    """Reset `bl main; udf`, `main: b.w __cortex_m_rt_main` reports the tail target."""
-    pytest.importorskip("capstone")
-    flash = 0x08000000
-    text_va = flash + 0x100
-    main = text_va + 0x20
-    user = text_va + 0x60
-    other = text_va + 0x80
-    body = bytearray(THUMB_BX_LR * 0x50)
-    body[0:4] = _thumb_bl(text_va, main)
-    body[4:6] = THUMB_UDF
-    body[0x20:0x24] = _thumb_bw(main, user)
-    body[0x24:0x28] = _thumb_bl(main + 4, other)
-    binary = tmp_path / "fw-tail-trampoline"
-    _write_cortex_text_elf(binary, bytes(body), flash)
-    info = analyze_rust(binary)
-    assert info is not None
-    assert info["user_main"] == hex(user)
-
-
-def test_trampoline_pre_init_call_then_tail_branch_picks_tail_target():
-    """`bl pre_init; b.w user` reports user, not the pre-init hook."""
-    pytest.importorskip("capstone")
-    from r2b.analysis.rust import _unwrap_trampoline
-
-    main = 0x08000100
-    pre_init = main + 0x60
-    user = main + 0x80
-    code = THUMB_PUSH_R7_LR + _thumb_bl(main + 2, pre_init) + _thumb_bw(main + 6, user)
-    image = _thumb_image(main, bytes(_trampoline_body(main, code)))
-    assert _unwrap_trampoline(image, main) == user
-
-
-def test_trampoline_thumb_frame_pointer_then_sub_sp_still_unwraps():
-    """-O0 `push {r7, lr}; mov r7, sp; sub sp, #N; bl user; udf` reaches the bl."""
-    pytest.importorskip("capstone")
-    from r2b.analysis.rust import _is_frame_setup, _iter_insns, _unwrap_trampoline
-
-    main = 0x08000100
-    user = main + 0x80
-    code = (
-        THUMB_PUSH_R7_LR + THUMB_MOV_R7_SP + THUMB_SUB_SP_8
-        + _thumb_bl(main + 6, user) + THUMB_UDF
-    )
-    image = _thumb_image(main, bytes(_trampoline_body(main, code)))
-    mov = list(_iter_insns(image, main, True, 4))[1]
-    assert _is_frame_setup(mov)
-    assert _unwrap_trampoline(image, main) == user
-
-
 def test_user_main_scan_passes_a_mid_function_sub_sp():
     """`paciasp; mov x0, x1; sub sp, sp, #0x20; adr x0, user; bl lang; ret`."""
     pytest.importorskip("capstone")
@@ -2280,48 +2208,6 @@ def test_callees_reject_a_non_prologue_sub_head():
     found = _callees(image, start)
     assert not_fn not in found
     assert real_fn in found
-
-
-@pytest.mark.parametrize("pre_init", [False, True])
-def test_trampoline_tail_branch_to_the_next_function(pre_init: bool):
-    """`-Oz` `main: b.w __cortex_m_rt_main` where the target is the next symbol."""
-    pytest.importorskip("capstone")
-    from r2b.analysis.rust import _unwrap_trampoline
-
-    main = 0x08000100
-    hook = main + 0x60
-    code = THUMB_PUSH_R7_LR + _thumb_bl(main + 2, hook) if pre_init else b""
-    user = main + len(code) + 4
-    code += _thumb_bw(main + len(code), user) + THUMB_PUSH_R7_LR
-    image = _thumb_image(main, bytes(_trampoline_body(main, code)))
-    assert _unwrap_trampoline(image, main) == user
-
-
-@pytest.mark.parametrize("init_call", [False, True])
-def test_cortex_reset_ending_in_tail_branch_to_main(tmp_path: Path, init_call: bool):
-    """Reset `[bl memset;] b.w main` hands off to main, not to the init helper."""
-    pytest.importorskip("capstone")
-    flash = 0x08000000
-    text_va = flash + 0x100
-    main = text_va + 0x20
-    user = text_va + 0x60
-    memset = text_va + 0x80
-    body = bytearray(THUMB_BX_LR * 0x50)
-    at = 0
-    if init_call:
-        body[0:4] = _thumb_bl(text_va, memset)
-        at = 4
-    body[at : at + 4] = _thumb_bw(text_va + at, main)
-    # main: push.w {r4, lr}; bl user; udf
-    body[0x20:0x24] = THUMB_PUSH_W_R4_LR
-    body[0x24:0x28] = _thumb_bl(main + 4, user)
-    body[0x28:0x2A] = THUMB_UDF
-    binary = tmp_path / f"fw-reset-tail-{int(init_call)}"
-    _write_cortex_text_elf(binary, bytes(body), flash)
-    info = analyze_rust(binary)
-    assert info is not None
-    assert info["user_main"] == hex(user)
-    assert info["user_main"] != hex(memset)
 
 
 def test_wide_thumb_tail_stub_is_a_thunk():

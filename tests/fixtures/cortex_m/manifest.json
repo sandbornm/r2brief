@@ -1,0 +1,31 @@
+{
+  "fixtures": {
+    "cmrt-thumbv6m-o0-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17hab45daec336b48b9E", "user_main": "0x80001a0"},
+    "cmrt-thumbv6m-o0-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17ha3247ee345f65bebE", "user_main": "0x80001a0"},
+    "cmrt-thumbv6m-oz-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h28c3e20d18ad6d3fE", "user_main": "0x80000fc"},
+    "cmrt-thumbv6m-oz-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h05fd11b7792597b3E", "user_main": "0x80000fc"},
+    "cmrt-thumbv6m-release-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h33d28f350c06586fE", "user_main": "0x80000fc"},
+    "cmrt-thumbv6m-release-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h92cb966d417f0cfaE", "user_main": "0x80000fc"},
+    "cmrt-thumbv7em-o0-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17hee43f00f000e9f0aE", "user_main": "0x80004fa"},
+    "cmrt-thumbv7em-o0-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h376e101ef3d2643cE", "user_main": "0x80004fa"},
+    "cmrt-thumbv7em-oz-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17hb85f1e3bb9ce9bc0E", "user_main": "0x8000458"},
+    "cmrt-thumbv7em-oz-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17hd946c9da40f4dc83E", "user_main": "0x8000458"},
+    "cmrt-thumbv7em-release-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17hc3c3e17a39f103a5E", "user_main": "0x8000458"},
+    "cmrt-thumbv7em-release-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h5c2567d0bbe922a2E", "user_main": "0x8000458"},
+    "cmrt-thumbv7m-o0-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h688ad08489ef27d4E", "user_main": "0x80004de"},
+    "cmrt-thumbv7m-o0-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h7aad2b5191d08e2aE", "user_main": "0x80004de"},
+    "cmrt-thumbv7m-oz-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17ha2428e0a72f6e56eE", "user_main": "0x800043c"},
+    "cmrt-thumbv7m-oz-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17hf7068bd58da6d615E", "user_main": "0x800043c"},
+    "cmrt-thumbv7m-release-nopre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17h523a693fe0cfac3aE", "user_main": "0x800043c"},
+    "cmrt-thumbv7m-release-pre": {"symbol": "_ZN7fw_demo18__cortex_m_rt_main17hdfe98e12e974bae8E", "user_main": "0x800043c"},
+    "edge-bw-next": {"symbol": "fw_user_loop", "user_main": "0x800001a"},
+    "edge-cbz-loop": {"symbol": "fw_user_main", "user_main": "0x8000054"},
+    "edge-inlined-loop": {"symbol": "main", "user_main": "0x8000016"},
+    "edge-local-label": {"symbol": "fw_user_main", "user_main": "0x8000054"},
+    "edge-pre-init-tail": {"symbol": "fw_user_main", "user_main": "0x800006a"},
+    "edge-reset-b-main": {"symbol": "main", "user_main": "0x8000040"},
+    "edge-tail-exit": {"symbol": "fw_user_main", "user_main": "0x8000052"},
+    "edge-two-bl": {"symbol": "fw_user_main", "user_main": "0x800006e"}
+  },
+  "note": "Expected user main per fixture, from the symbol twin bin/<name>.sym. Regenerate with build.sh."
+}

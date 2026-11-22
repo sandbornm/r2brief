@@ -134,7 +134,7 @@ pub fn recover(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>, eh: &EhFrame) -> Fu
         let load_end = elf
             .loads()
             .find(|p| p.exec() && p.contains_vaddr(*start))
-            .map(|p| p.p_vaddr + p.p_memsz)
+            .and_then(|p| p.p_vaddr.checked_add(p.p_memsz))
             .unwrap_or(*start);
         let next = merged.get(i + 1).map(|(s, _, _)| *s).unwrap_or(load_end);
         let end = next.min(load_end).max(*start);
@@ -185,7 +185,7 @@ fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>) {
         let mut i = 0usize;
         while i + 4 <= slice.len() {
             if slice[i..i + 4] == [0xf3, 0x0f, 0x1e, 0xfa] {
-                prologues.push(ph.p_vaddr + i as u64);
+                if let Some(va) = ph.p_vaddr.checked_add(i as u64) { prologues.push(va); }
                 i += 4;
                 continue;
             }
@@ -199,7 +199,7 @@ fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>) {
                         || matches!(slice[i - 1], 0x90 | 0xcc | 0xc3 | 0xc2 | 0x00)
                         || (i >= 4 && slice[i - 4..i] == [0xf3, 0x0f, 0x1e, 0xfa]);
                     if ok {
-                        prologues.push(ph.p_vaddr + i as u64);
+                        if let Some(va) = ph.p_vaddr.checked_add(i as u64) { prologues.push(va); }
                     }
                 }
             }
@@ -231,7 +231,7 @@ fn scan_aarch64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>) 
             } else {
                 u32::from_be_bytes(slice[i..i + 4].try_into().unwrap())
             };
-            let pc = ph.p_vaddr + i as u64;
+            let Some(pc) = ph.p_vaddr.checked_add(i as u64) else { break; };
             // BL imm26: 1001 01ii iiii iiii iiii iiii iiii iiii
             if w & 0xfc00_0000 == 0x9400_0000 {
                 let imm26 = (w & 0x03ff_ffff) as i32;

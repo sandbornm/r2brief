@@ -117,3 +117,33 @@ fn handoff_keeps_supplied_path() {
         );
     }
 }
+
+#[test]
+fn hostile_load_vaddr_does_not_panic() {
+    // Minimal ELF64 LE with one PF_X PT_LOAD whose vaddr+memsz overflows.
+    let mut data = vec![0u8; 128];
+    data[0..4].copy_from_slice(b"\x7fELF");
+    data[4] = 2; // class64
+    data[5] = 1; // LE
+    data[6] = 1; // version
+    // e_type ET_DYN, e_machine x86_64
+    data[16] = 3;
+    data[18] = 62;
+    // e_entry = 0xfffffffffffff000
+    data[24..32].copy_from_slice(&0xfffffffffffff000u64.to_le_bytes());
+    // e_phoff = 64
+    data[32..40].copy_from_slice(&64u64.to_le_bytes());
+    data[52] = 64; // ehsize
+    data[54] = 56; // phentsize
+    data[56] = 1; // phnum
+    // phdr at 64
+    let o = 64;
+    data[o..o + 4].copy_from_slice(&1u32.to_le_bytes()); // PT_LOAD
+    data[o + 4..o + 8].copy_from_slice(&5u32.to_le_bytes()); // PF_R|PF_X
+    data[o + 8..o + 16].copy_from_slice(&0u64.to_le_bytes()); // offset
+    data[o + 16..o + 24].copy_from_slice(&0xfffffffffffff000u64.to_le_bytes()); // vaddr
+    data[o + 32..o + 40].copy_from_slice(&0x1000u64.to_le_bytes()); // filesz
+    data[o + 40..o + 48].copy_from_slice(&0x2000u64.to_le_bytes()); // memsz overflows with vaddr
+    let report = r2brief_core::analyze("hostile-overflow", &data).expect("must not panic");
+    assert!(!report.subject.sha256.is_empty());
+}

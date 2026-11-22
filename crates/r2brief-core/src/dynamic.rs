@@ -76,18 +76,20 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
     let ent = r.word_size() * 2;
     let mut info = DynamicInfo::default();
     let mut off = ph.p_offset;
-    let end = ph.file_end();
-    while off + ent <= end {
-        let _tag = r.word(off)? as i64;
-        // On ELFCLASS64 Dyn.d_tag is signed; treat the raw word as i64 via cast.
+    let end = ph.file_end()?;
+    let mut n_entries = 0u32;
+    while off.checked_add(ent).map(|x| x <= end).unwrap_or(false) {
+        if n_entries >= 4096 {
+            break; // hostile PT_DYNAMIC without DT_NULL
+        }
+        n_entries += 1;
         let tag = if r.c64 {
-            // reinterpret
             let raw = r.u64(off)?;
             raw as i64
         } else {
             r.u32(off)? as i32 as i64
         };
-        let val = r.word(off + r.word_size())?;
+        let val = r.word(off.checked_add(r.word_size())?)?;
         info.entries.push((tag, val));
         if tag == DT_NULL {
             break;
@@ -126,7 +128,7 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             DT_FLAGS_1 if val & 0x1 != 0 => info.bind_now = true, // DF_1_NOW
             _ => {}
         }
-        off += ent;
+        off = off.checked_add(ent)?;
     }
     // Resolve string-table references.
     if let (Some(strtab), Some(strsz)) = (info.strtab, info.strsz) {
@@ -134,7 +136,8 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             if off >= strsz {
                 return None;
             }
-            let (b, _) = elf.rd().cstr(elf.va_to_off(strtab + off)?, 4096)?;
+            let abs = strtab.checked_add(off)?;
+            let (b, _) = elf.rd().cstr(elf.va_to_off(abs)?, 4096)?;
             Some(String::from_utf8_lossy(b).into_owned())
         };
         for &(tag, val) in &info.entries {
@@ -166,7 +169,10 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
         }
         let mut v = Vec::with_capacity(n);
         for i in 0..n {
-            if let Some(w) = elf.word_at_va(addr + (i as u64) * ws) {
+            let Some(slot) = (i as u64).checked_mul(ws).and_then(|d| addr.checked_add(d)) else {
+                break;
+            };
+            if let Some(w) = elf.word_at_va(slot) {
                 v.push(w);
             } else {
                 break;

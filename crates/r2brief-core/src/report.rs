@@ -227,6 +227,19 @@ pub fn analyze(name: &str, data: &[u8]) -> Result<Report, String> {
     })
 }
 
+fn shell_quote(s: &str) -> String {
+    // Minimal POSIX single-quote escaping (matches Python shlex.quote for our needs).
+    if s.is_empty() {
+        return "''".into();
+    }
+    if s.bytes().all(|b| matches!(b,
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'/' | b'.' | b'_' | b'-' | b'+' | b',' | b':' | b'@' | b'%'
+    )) {
+        return s.to_string();
+    }
+    format!("'{}'", s.replace('\'', "'\''"))
+}
+
 fn build_briefing(
     subject: &Subject,
     findings: &[Finding],
@@ -280,7 +293,11 @@ fn build_briefing(
     let mut next_argv = Vec::new();
     for name in subject.dangerous_imports.iter().filter(|n| imports::VERIFY.contains(&n.as_str())).take(4)
     {
-        next_argv.push(format!("r2b verify {} --import {name} --json", handoff_path));
+        next_argv.push(format!(
+            "r2b verify {} --import {} --json",
+            shell_quote(handoff_path),
+            shell_quote(name)
+        ));
     }
 
     serde_json::json!({

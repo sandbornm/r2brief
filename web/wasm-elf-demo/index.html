@@ -150,6 +150,10 @@ function analyze(name, buffer) {
 async function loadSample(file) {
   const res = await fetch(`./samples/${file}`);
   const buf = await res.arrayBuffer();
+  if (buf.byteLength > 64 * 1024 * 1024) {
+    statusEl.textContent = 'refused: sample larger than 64 MiB';
+    return;
+  }
   analyze(file, buf);
 }
 
@@ -160,12 +164,16 @@ drop.addEventListener('drop', async (e) => {
   e.preventDefault(); drop.classList.remove('drag');
   const f = e.dataTransfer.files[0];
   if (!f) return;
-  analyze(f.name, await f.arrayBuffer());
+  const buf = await f.arrayBuffer();
+  if (buf.byteLength > 64 * 1024 * 1024) { statusEl.textContent = 'refused: ELF larger than 64 MiB'; return; }
+  analyze(f.name, buf);
 });
 fileInput.addEventListener('change', async () => {
   const f = fileInput.files[0];
   if (!f) return;
-  analyze(f.name, await f.arrayBuffer());
+  const buf = await f.arrayBuffer();
+  if (buf.byteLength > 64 * 1024 * 1024) { statusEl.textContent = 'refused: ELF larger than 64 MiB'; return; }
+  analyze(f.name, buf);
 });
 
 const catalog = await fetch('./samples/catalog.json').then(r => r.json());
@@ -185,7 +193,7 @@ function render(r) {
   const high = (f) => f.score >= 85 ? 'high' : f.score >= 60 ? 'mid' : 'low';
   outEl.innerHTML = `
     <div class="summary">
-      <div><code>${escapeHtml(s.name)}</code> · ${s.arch} · ${s.etype} · entry <code>0x${Number(s.entry).toString(16)}</code>
+      <div><code>${escapeHtml(s.name)}</code> · ${s.arch} · ${s.etype} · entry <code>${fmtAddr(s.entry)}</code>
         · sha256 <code>${s.sha256.slice(0,16)}…</code></div>
       <div class="grid">
         <div class="stat"><b>Findings</b>${findings.length}</div>
@@ -208,8 +216,8 @@ function render(r) {
         <div class="tags">${(f.tags||[]).map(t=>`<span>${escapeHtml(t)}</span>`).join('')}</div>
         ${(f.evidence||[]).map(e => {
           const bits=[escapeHtml(e.detail || JSON.stringify(e))];
-          if (e.offset!=null) bits.push('offset=0x'+Number(e.offset).toString(16));
-          if (e.address!=null) bits.push('va=0x'+Number(e.address).toString(16));
+          if (e.offset!=null) bits.push('offset='+fmtAddr(e.offset));
+          if (e.address!=null) bits.push('va='+fmtAddr(e.address));
           return '<div class="ev">'+bits.join(' · ')+'</div>';
         }).join('')}
       </article>
@@ -219,8 +227,8 @@ function render(r) {
       <thead><tr><th>start</th><th>end</th><th>confidence</th><th>sources</th></tr></thead>
       <tbody>
         ${funcs.slice(0,80).map(f => `<tr>
-          <td>0x${Number(f.start).toString(16)}</td>
-          <td>0x${Number(f.end).toString(16)}</td>
+          <td>${fmtAddr(f.start)}</td>
+          <td>${fmtAddr(f.end)}</td>
           <td>${f.confidence}</td>
           <td>${(f.sources||[]).join(', ')}</td>
         </tr>`).join('')}
@@ -240,6 +248,11 @@ function render(r) {
   };
 }
 
+function fmtAddr(v) {
+  if (v == null) return '—';
+  if (typeof v === 'string') return v.startsWith('0x') ? v : ('0x' + v);
+  return '0x' + Number(v).toString(16);
+}
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }

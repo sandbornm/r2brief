@@ -77,13 +77,19 @@ impl Phdr {
         self.p_flags & PF_X != 0
     }
     pub fn contains_vaddr(&self, va: u64) -> bool {
-        va >= self.p_vaddr && va < self.p_vaddr.saturating_add(self.p_memsz)
+        match self.p_vaddr.checked_add(self.p_memsz) {
+            Some(end) => va >= self.p_vaddr && va < end,
+            None => false,
+        }
     }
     pub fn contains_file_vaddr(&self, va: u64) -> bool {
-        va >= self.p_vaddr && va < self.p_vaddr.saturating_add(self.p_filesz)
+        match self.p_vaddr.checked_add(self.p_filesz) {
+            Some(end) => va >= self.p_vaddr && va < end,
+            None => false,
+        }
     }
-    pub fn file_end(&self) -> u64 {
-        self.p_offset.saturating_add(self.p_filesz)
+    pub fn file_end(&self) -> Option<u64> {
+        self.p_offset.checked_add(self.p_filesz)
     }
     pub fn flags_str(&self) -> String {
         let mut s = String::new();
@@ -121,7 +127,13 @@ impl Shdr {
         self.sh_type != SHT_NOBITS && self.sh_type != 0
     }
     pub fn contains_vaddr(&self, va: u64) -> bool {
-        self.alloc() && va >= self.sh_addr && va < self.sh_addr.saturating_add(self.sh_size)
+        if !self.alloc() {
+            return false;
+        }
+        match self.sh_addr.checked_add(self.sh_size) {
+            Some(end) => va >= self.sh_addr && va < end,
+            None => false,
+        }
     }
 }
 
@@ -393,8 +405,10 @@ impl<'a> Elf<'a> {
         for (mut s, name_off) in raw {
             if let Some((so, ss)) = strtab {
                 if (name_off as u64) < ss {
-                    if let Some((b, _)) = r.cstr(so + name_off as u64, (ss - name_off as u64) as usize) {
-                        s.name = String::from_utf8_lossy(b).into_owned();
+                    if let Some(name_abs) = so.checked_add(name_off as u64) {
+                        if let Some((b, _)) = r.cstr(name_abs, (ss - name_off as u64) as usize) {
+                            s.name = String::from_utf8_lossy(b).into_owned();
+                        }
                     }
                 }
             }
@@ -416,22 +430,27 @@ impl<'a> Elf<'a> {
 
     /// Map a virtual address to a file offset through PT_LOAD file ranges.
     pub fn va_to_off(&self, va: u64) -> Option<u64> {
-        self.loads()
-            .find(|p| p.contains_file_vaddr(va))
-            .map(|p| p.p_offset + (va - p.p_vaddr))
+        let p = self.loads().find(|p| p.contains_file_vaddr(va))?;
+        let delta = va.checked_sub(p.p_vaddr)?;
+        p.p_offset.checked_add(delta)
     }
 
     pub fn off_to_va(&self, off: u64) -> Option<u64> {
-        self.loads()
-            .find(|p| off >= p.p_offset && off < p.file_end())
-            .map(|p| p.p_vaddr + (off - p.p_offset))
+        let p = self.loads().find(|p| {
+            p.file_end()
+                .map(|end| off >= p.p_offset && off < end)
+                .unwrap_or(false)
+        })?;
+        let delta = off.checked_sub(p.p_offset)?;
+        p.p_vaddr.checked_add(delta)
     }
 
     pub fn read_va(&self, va: u64, len: u64) -> Option<&'a [u8]> {
         let off = self.va_to_off(va)?;
-        // The whole range must stay inside the same segment's file bytes.
         let seg = self.loads().find(|p| p.contains_file_vaddr(va))?;
-        if va.checked_add(len)? > seg.p_vaddr + seg.p_filesz {
+        let end = va.checked_add(len)?;
+        let seg_end = seg.p_vaddr.checked_add(seg.p_filesz)?;
+        if end > seg_end {
             return None;
         }
         self.rd().bytes(off, len)

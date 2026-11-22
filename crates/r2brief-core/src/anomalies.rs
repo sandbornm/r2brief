@@ -131,8 +131,8 @@ fn check_overlapping_loads(elf: &Elf<'_>) -> Vec<Finding> {
         for j in (i + 1)..loads.len() {
             let a = loads[i];
             let b = loads[j];
-            let a_end = a.p_vaddr.saturating_add(a.p_memsz);
-            let b_end = b.p_vaddr.saturating_add(b.p_memsz);
+            let Some(a_end) = a.p_vaddr.checked_add(a.p_memsz) else { continue };
+            let Some(b_end) = b.p_vaddr.checked_add(b.p_memsz) else { continue };
             if a.p_vaddr < b_end && b.p_vaddr < a_end {
                 out.push(finding(
                     &format!("elf:overlap_load:{}:{}", a.index, b.index),
@@ -226,8 +226,8 @@ fn check_text_padding(elf: &Elf<'_>) -> Vec<Finding> {
             let a = texts[i];
             let b = texts[j];
             // b sits in the file-gap / page-pad of a.
-            let a_file_end = a.file_end();
-            let a_page_end = (a_file_end + 0xfff) & !0xfff;
+            let Some(a_file_end) = a.file_end() else { continue };
+            let Some(a_page_end) = a_file_end.checked_add(0xfff).map(|x| x & !0xfff) else { continue };
             if b.p_offset >= a_file_end && b.p_offset < a_page_end && b.p_filesz > 0 && b.p_filesz <= 0x1000 {
                 out.push(finding(
                     &format!("elf:text_padding:{}:{}", a.index, b.index),
@@ -319,7 +319,17 @@ fn check_sections(elf: &Elf<'_>) -> Vec<Finding> {
     }
     for s in &elf.shdrs {
         if s.has_file_bytes() && s.sh_size > 0 {
-            let end = s.sh_offset.saturating_add(s.sh_size);
+            let Some(end) = s.sh_offset.checked_add(s.sh_size) else {
+                out.push(finding(
+                    &format!("elf:section_oob:{}", s.index),
+                    "Section size overflows",
+                    &format!("Section '{}' offset+size overflows u64.", s.name),
+                    80.0,
+                    &["section", "anomaly"],
+                    vec![],
+                ));
+                continue;
+            };
             if end > elf.len() {
                 out.push(finding(
                     &format!("elf:section_oob:{}", s.index),
@@ -344,7 +354,10 @@ fn check_sections(elf: &Elf<'_>) -> Vec<Finding> {
         if s.alloc() && s.has_file_bytes() && s.sh_size > 0 {
             // Allocated section whose file bytes are not covered by any PT_LOAD.
             let covered = elf.loads().any(|p| {
-                s.sh_offset >= p.p_offset && s.sh_offset + s.sh_size.min(1) <= p.file_end()
+                match (p.file_end(), s.sh_offset.checked_add(s.sh_size.min(1))) {
+                    (Some(pend), Some(send)) => s.sh_offset >= p.p_offset && send <= pend,
+                    _ => false,
+                }
             });
             if !covered {
                 out.push(finding(
@@ -376,7 +389,8 @@ fn check_interp(elf: &Elf<'_>) -> Vec<Finding> {
     let Some(p) = elf.phdrs.iter().find(|p| p.p_type == PT_INTERP) else {
         return out;
     };
-    let Some(raw) = elf.rd().bytes(p.p_offset, p.p_filesz) else {
+    let interp_len = p.p_filesz.min(4096);
+    let Some(raw) = elf.rd().bytes(p.p_offset, interp_len) else {
         out.push(finding(
             "elf:interp_oob",
             "PT_INTERP points outside the file",
@@ -414,7 +428,7 @@ fn check_interp(elf: &Elf<'_>) -> Vec<Finding> {
                 offset: Some(p.p_offset),
                 address: Some(p.p_vaddr),
                 length: Some(p.p_filesz),
-                bytes_hex: Some(hex(raw)),
+                bytes_hex: Some(hex(&raw[..raw.len().min(256)])),
                 detail: Some(path),
             }],
         ));
@@ -432,7 +446,7 @@ fn check_interp(elf: &Elf<'_>) -> Vec<Finding> {
                 offset: Some(p.p_offset),
                 address: Some(p.p_vaddr),
                 length: Some(p.p_filesz),
-                bytes_hex: Some(hex(raw)),
+                bytes_hex: Some(hex(&raw[..raw.len().min(256)])),
                 detail: Some(path),
             }],
         ));

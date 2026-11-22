@@ -7,7 +7,9 @@ Capstone is optional. Without it the toolchain fields still report.
 
 from __future__ import annotations
 
+import heapq
 import re
+import struct
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,6 +42,7 @@ _MAX_SWEEP = 8 * 1024 * 1024
 _MAX_IMAGE = 16 * 1024 * 1024
 _MAX_RELOCS = 100_000
 _ZERO_REGS = frozenset({"wzr", "xzr", "zr"})
+_VECTOR_SECTIONS = frozenset({".isr_vector", ".vectors", ".vector_table", ".intvec"})
 
 
 def classify_path(path: str) -> tuple[str, str | None]:
@@ -164,6 +167,7 @@ class _Image:
         return code
 
     _thumb: set[int] = field(default_factory=set)
+
 
 
 class ElfReadBudgetExceeded(ValueError):
@@ -857,6 +861,11 @@ def _iter_insns(image: _Image, start: int, thumb: bool, max_bytes: int):
 def _branch_target(insn: Any) -> int | None:
     if insn.op_str.startswith("#"):
         return _imm(insn.op_str)
+    # Thumb `cbz r0, #target` / `cbnz r0, #target`.
+    if insn.mnemonic.lower() in {"cbz", "cbnz"}:
+        ops = _split_ops(insn.op_str)
+        if len(ops) == 2 and ops[1].startswith("#"):
+            return _imm(ops[1])
     return None
 
 
@@ -870,8 +879,15 @@ def _direct_call_target(image: _Image, insn: Any, thumb: bool) -> int | None:
     return image.mark_thumb(target)
 
 
+def _base_mnemonic(insn: Any) -> str:
+    """Mnemonic without a Thumb-2 width suffix: `push.w` -> `push`, `sub.w` -> `sub`."""
+    mnem = insn.mnemonic.lower()
+    base, dot, suffix = mnem.partition(".")
+    return base if dot and suffix in {"w", "n"} else mnem
+
+
 def _is_prologue(insn: Any) -> bool:
-    mnem = insn.mnemonic
+    mnem = _base_mnemonic(insn)
     text = insn.op_str
     if mnem in {"paciasp", "pacibsp"}:
         return True
@@ -889,6 +905,16 @@ def _is_prologue(insn: Any) -> bool:
         if ops[0] in {"sp", "wsp"} and (len(ops) == 2 or ops[1] in {"sp", "wsp"}):
             return True
     return False
+
+
+def _is_frame_alloc(insn: Any) -> bool:
+    """A bare `sub sp, #imm`: a frame allocation that also appears mid-function."""
+    return _base_mnemonic(insn) == "sub" and _is_prologue(insn)
+
+
+def _starts_function(insn: Any) -> bool:
+    """A prologue that cannot be a mid-function stack adjustment."""
+    return _is_prologue(insn) and not _is_frame_alloc(insn)
 
 
 def _is_spill(insn: Any) -> bool:
@@ -924,7 +950,7 @@ def _is_frame_setup(insn: Any) -> bool:
     text = insn.op_str
     if mnem in {"sub", "add"} and re.search(r"\bsp\b", text):
         return True
-    if mnem == "mov" and re.search(r"\b(x29|fp)\b", text) and re.search(r"\bsp\b", text):
+    if mnem == "mov" and re.search(r"\b(x29|fp|r7|r11)\b", text) and re.search(r"\bsp\b", text):
         return True
     # Callee-saved spills into the new frame (`stp x28, x27, [sp, #0x10]`).
     if _is_spill(insn):
@@ -943,6 +969,12 @@ def _is_return(insn: Any) -> bool:
     if mnem == "pop" and re.search(r"\bpc\b", insn.op_str):
         return True
     return False
+
+
+def _ends_block(insn: Any) -> bool:
+    """A return, trap or unconditional branch: nothing falls through it."""
+    mnem = _base_mnemonic(insn)
+    return _is_return(insn) or mnem in {"udf", "bkpt"} or _is_unconditional_b(insn)
 
 
 def _recover_libc_main(image: _Image) -> int | None:
@@ -968,6 +1000,7 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     seen: list[int] = []
     last: int | None = None
     in_opening = True
+    after_end = False
     for count, insn in enumerate(_iter_insns(image, c_main, thumb, 0x1000)):
         if count >= 1024:
             break
@@ -975,8 +1008,11 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
             pass
         else:
             in_opening = False
-            if insn.address != c_main and _is_prologue(insn):
+            if insn.address != c_main and (
+                _starts_function(insn) or (after_end and _is_frame_alloc(insn))
+            ):
                 break
+        after_end = _ends_block(insn)
         values, _refs, is_call = machine.feed(insn)
         for value in values:
             code = image.mark_thumb(value)
@@ -998,6 +1034,283 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     return None
 
 
+def _vector_bases(image: _Image) -> list[int]:
+    """Candidate vector-table addresses: VA 0, named sections, then load bases."""
+    bases: list[int] = [0]
+    for sec in getattr(image, "sections", []) or ():
+        if sec.name in _VECTOR_SECTIONS or sec.name.startswith(".isr_vector"):
+            bases.append(sec.addr)
+    for base, _blob in getattr(image, "loads", []) or ():
+        bases.append(base)
+    seen: set[int] = set()
+    ordered: list[int] = []
+    for base in bases:
+        if base in seen:
+            continue
+        seen.add(base)
+        ordered.append(base)
+    return ordered
+
+
+def _cortex_reset(image: _Image) -> tuple[int, int] | None:
+    if image.arch != "arm":
+        return None
+    for base in _vector_bases(image):
+        raw = image.read(base, 8)
+        if len(raw) < 8 or raw.startswith(b"\x7fELF"):
+            continue
+        sp, reset = struct.unpack_from("<II", raw)
+        # SRAM is often at 0x20000000, but some maps (STM32 CCM) use 0x10000000.
+        if sp % 8 or sp < 0x10000000 or not reset & 1:
+            continue
+        if image.code_addr(sp & ~1) is not None:
+            continue
+        code = image.code_addr(reset)
+        if code is None:
+            continue
+        # e_entry, when set, names Reset or the vector table itself.
+        if image.entry and (image.entry | 1) != (reset | 1) and (image.entry & ~1) != base:
+            continue
+        return sp, code
+    return None
+
+
+_COND_BRANCHES = frozenset(
+    {"beq", "bne", "bcs", "bhs", "bcc", "blo", "bmi", "bpl", "bvs", "bvc",
+     "bhi", "bls", "bge", "blt", "bgt", "ble", "cbz", "cbnz"}
+)
+_FLOW_BUDGET = 512  # instructions walked per function
+_FLOW_DEPTH = 6  # nested "does this callee return?" questions
+_MAX_FORWARDS = 4  # trampoline hops after Reset's `main`
+_FORWARDER_MAX = 12  # instructions in a trampoline
+
+
+def _is_unconditional_b(insn: Any) -> bool:
+    """True for an unconditional `b` / `b.n` / `b.w`, not `beq` or `b.eq`."""
+    mnem = insn.mnemonic.lower()
+    base, _, suffix = mnem.partition(".")
+    return base == "b" and suffix in {"", "n", "w"}
+
+
+def _thumb_insn(image: _Image, addr: int) -> Any | None:
+    insn = next(_iter_insns(image, addr, True, 4), None)
+    if insn is None or insn.address != addr:
+        return None
+    return insn
+
+
+def _function_like(image: _Image, addr: int) -> bool:
+    """A branch target that opens a new function rather than a local label.
+
+    It opens with a prologue that cannot sit mid-function (``push {.., lr}``),
+    or nothing falls into it: the instruction ending at ``addr``, after any
+    ``nop`` padding, is a return, trap or unconditional branch.
+    """
+    head = _thumb_insn(image, addr)
+    if head is None:
+        return False
+    if _starts_function(head):
+        return True
+    end = addr
+    for _ in range(4):
+        prev = next(
+            (
+                insn
+                for size in (2, 4)
+                if (insn := _thumb_insn(image, end - size)) is not None and insn.size == size
+            ),
+            None,
+        )
+        if prev is None:
+            return False
+        if _base_mnemonic(prev) != "nop":
+            return _ends_block(prev)
+        end = prev.address
+    return False
+
+
+@dataclass
+class _Flow:
+    """What one Thumb function does, from a bounded reachability walk."""
+
+    insns: list[Any] = field(default_factory=list)
+    # (site, target, "call" | "tail") in address order of the site.
+    transfers: list[tuple[int, int, str]] = field(default_factory=list)
+    returns: bool = False
+    exhausted: bool = False
+    local_branches: int = 0
+
+
+def _thumb_flow(image: _Image, start: int, noreturn: Any) -> _Flow:
+    """Walk the Thumb function at ``start`` along every reachable path.
+
+    Fall-through, conditional branches, ``cbz``/``cbnz`` and local ``b`` are
+    followed. A ``b`` into a function-like target (see ``_function_like``), or
+    to before ``start``, is a tail transfer and is not followed. A conditional
+    branch to before ``start`` leaves the function and counts as a return. A path ends at a return, ``udf``,
+    ``bkpt``, a spin, or after a ``bl`` whose callee ``noreturn(target)``
+    says never returns.
+    """
+    flow = _Flow()
+    pending = [start]
+    seen: set[int] = set()
+    while pending:
+        addr = heapq.heappop(pending)
+        if addr in seen:
+            continue
+        if len(seen) >= _FLOW_BUDGET:
+            flow.exhausted = True
+            break
+        seen.add(addr)
+        insn = _thumb_insn(image, addr)
+        if insn is None:
+            continue
+        flow.insns.append(insn)
+        nxt = insn.address + insn.size
+        mnem = _base_mnemonic(insn)
+        ops = insn.op_str
+        if mnem.startswith("pop") and re.search(r"\bpc\b", ops) or (
+            mnem.startswith("bx") and re.search(r"\blr\b", ops)
+        ):
+            flow.returns = True
+            if mnem not in {"pop", "bx"}:  # conditional (IT block) return
+                heapq.heappush(pending, nxt)
+            continue
+        if mnem.startswith("bx") or (mnem in {"mov", "ldr"} and ops.startswith("pc")):
+            flow.returns = True  # indirect jump: assume it can return
+            continue
+        if mnem in {"udf", "bkpt"}:
+            continue
+        target = _branch_target(insn)
+        if mnem == "bl":
+            code = image.code_addr(target) if target is not None else None
+            if code is not None:
+                flow.transfers.append((insn.address, code, "call"))
+                if code != start and noreturn(code):
+                    continue
+            heapq.heappush(pending, nxt)
+            continue
+        if _is_unconditional_b(insn):
+            code = image.code_addr(target) if target is not None else None
+            if code is None:
+                continue
+            if code == insn.address:
+                flow.local_branches += 1  # `b .` spin: the function's own loop
+                continue
+            if code != start and (code < start or _function_like(image, code)):
+                flow.transfers.append((insn.address, code, "tail"))
+                continue
+            flow.local_branches += 1
+            heapq.heappush(pending, code)
+            continue
+        if mnem in _COND_BRANCHES or mnem.split(".")[0] in _COND_BRANCHES:
+            flow.local_branches += 1
+            code = image.code_addr(target) if target is not None else None
+            if code is not None and code < start:
+                flow.returns = True  # leaves the function: cannot prove it diverges
+            elif code is not None:
+                heapq.heappush(pending, code)
+        heapq.heappush(pending, nxt)
+    flow.transfers.sort()
+    return flow
+
+
+class _NoReturn:
+    """Memoized "can this function ever return to its caller?" over Thumb code."""
+
+    def __init__(self, image: _Image) -> None:
+        self.image = image
+        self.memo: dict[int, bool] = {}
+        self.depth = 0
+
+    def flow(self, addr: int) -> _Flow:
+        return _thumb_flow(self.image, addr, self)
+
+    def __call__(self, addr: int) -> bool:
+        if addr in self.memo:
+            return not self.memo[addr]
+        if self.depth >= _FLOW_DEPTH:
+            return False
+        self.memo[addr] = True  # in progress: assume it returns
+        self.depth += 1
+        try:
+            flow = self.flow(addr)
+            # Never returning must be proven: a walk cut short by the budget
+            # may have missed the epilogue, so it counts as returning.
+            returns = (
+                flow.returns
+                or flow.exhausted
+                or any(
+                    kind == "tail" and not self(target)
+                    for _site, target, kind in flow.transfers
+                )
+            )
+        finally:
+            self.depth -= 1
+        self.memo[addr] = returns
+        return not returns
+
+    def first(self, addr: int) -> int | None:
+        """The first transfer out of ``addr``, in address order, that never returns.
+
+        When none provably diverges (stub bodies that end in a return), fall
+        back to the last direct call, which is where control is handed off.
+        """
+        transfers = [t for t in self.flow(addr).transfers if t[1] != addr]
+        for _site, target, _kind in transfers:
+            if self(target):
+                return target
+        calls = [target for _site, target, kind in transfers if kind == "call"]
+        return calls[-1] if calls else None
+
+
+def _is_forwarder(flow: _Flow) -> bool:
+    """A trampoline: frame setup and calls only, with no loop or test of its own."""
+    if flow.local_branches or flow.exhausted or len(flow.insns) > _FORWARDER_MAX:
+        return False
+    for insn in flow.insns:
+        mnem = _base_mnemonic(insn)
+        if mnem in {"bl", "b", "udf", "bkpt", "nop"} or _is_frame_setup(insn) or _is_return(insn):
+            continue
+        return False
+    return True
+
+
+def _recover_cortex(image: _Image) -> tuple[list[int], int | None]:
+    """Cortex-M user main: the call that never returns.
+
+    From the Reset vector, ``main`` is Reset's first direct transfer (``bl``
+    or tail ``b``, in address order) whose callee never returns, or Reset's
+    last call when none provably diverges. While the current function is a
+    forwarder (only frame setup and transfers, no loop or test), make the
+    same choice inside it. The function where that stops is user main. See
+    ``docs/USAGE.md``.
+    """
+    found = _cortex_reset(image)
+    if found is None:
+        return [], None
+    _sp, reset = found
+    image.force_thumb = True
+    image.mark_thumb(reset | 1)
+    noreturn = _NoReturn(image)
+    main = noreturn.first(reset)
+    if main is None:
+        return [reset], None
+    chain = [reset, main]
+    user = main
+    for _ in range(_MAX_FORWARDS):
+        if not _is_forwarder(noreturn.flow(user)):
+            break
+        nxt = noreturn.first(user)
+        if nxt is None or nxt in chain:
+            break
+        chain.append(nxt)
+        user = nxt
+    for addr in chain:
+        image.mark_thumb(addr | 1)
+    return chain, user
+
+
 def _is_thunk(image: _Image, addr: int) -> bool:
     thumb = image.thumb_at(addr)
     insns = []
@@ -1008,7 +1321,7 @@ def _is_thunk(image: _Image, addr: int) -> bool:
     body = [insn for insn in insns if insn.mnemonic not in {"paciasp", "pacibsp", "bti", "nop"}]
     if not body:
         return True
-    return body[0].mnemonic in {"b", "br", "bx", "ret", "retaa", "retab"}
+    return _base_mnemonic(body[0]) in {"b", "br", "bx", "ret", "retaa", "retab"}
 
 
 def _snippet(image: _Image, addr: int) -> str:
@@ -1025,15 +1338,19 @@ def _callees(image: _Image, start: int) -> list[int]:
     machine = _Machine(image, thumb)
     found: list[int] = []
     in_opening = True
+    after_end = False
     for insn in _iter_insns(image, start, thumb, 0x800):
         if in_opening and _is_frame_setup(insn):
             pass
         else:
             in_opening = False
-            if insn.address != start and _is_prologue(insn):
+            if insn.address != start and (
+                _starts_function(insn) or (after_end and _is_frame_alloc(insn))
+            ):
                 break
             if insn.address != start and _is_return(insn):
                 break
+        after_end = _ends_block(insn)
         values, _refs, is_call = machine.feed(insn)
         if is_call:
             code = _direct_call_target(image, insn, thumb)
@@ -1048,7 +1365,7 @@ def _callees(image: _Image, start: int) -> list[int]:
                 if (
                     head is not None
                     and head.address == code
-                    and (_is_prologue(head) or head.mnemonic in {"sub", "stp", "push"})
+                    and (_is_prologue(head) or _base_mnemonic(head) == "push")
                 ):
                     found.append(code)
         if not in_opening and _is_return(insn):
@@ -1080,13 +1397,23 @@ def _sweep_xrefs(
         machine = _Machine(image, thumb)
         in_prologue = False
         spilled = False
+        # True at the section start and after a return, trap, unconditional
+        # branch or padding. A bare `sub sp` starts a function only there;
+        # after straight-line code it is a mid-function stack adjustment.
+        boundary = True
         for insn in _iter_insns(image, sec.addr, thumb, data_len):
+            at_boundary = boundary
+            mnem = _base_mnemonic(insn)
+            if _ends_block(insn):
+                boundary = True
+            elif mnem not in {"nop", "hint"}:
+                boundary = False
             if _is_return(insn):
                 machine.reset()
                 in_prologue = False
             # After frame spills, `sub sp, sp` still belongs to the same
             # opening, but PAC/BTI or a pre-decrement `stp` starts a new one.
-            if _is_prologue(insn) and (
+            if _is_prologue(insn) and (_starts_function(insn) or at_boundary or in_prologue) and (
                 not in_prologue or (spilled and _is_entry_marker(insn))
             ):
                 machine.reset()
@@ -1167,13 +1494,18 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
     user_main: int | None = None
     c_main: int | None = None
     if _capstone() is not None:
-        c_main = _recover_libc_main(image)
-        entry = image.entry & ~1
-        if c_main is not None:
-            user_main = _recover_user_main(image, c_main)
-        if image.arch == "arm" and image.entry & 1:
-            image.mark_thumb(image.entry)
-        chain = [addr for addr in (entry, c_main, user_main) if addr is not None]
+        cortex_chain, cortex_main = _recover_cortex(image)
+        if cortex_main is not None:
+            chain = cortex_chain
+            user_main = cortex_main
+        else:
+            c_main = _recover_libc_main(image)
+            entry = image.entry & ~1
+            if c_main is not None:
+                user_main = _recover_user_main(image, c_main)
+            if image.arch == "arm" and image.entry & 1:
+                image.mark_thumb(image.entry)
+            chain = [addr for addr in (entry, c_main, user_main) if addr is not None]
 
     xrefs, starts = _sweep_xrefs(image, interesting)
     if user_main is not None:
@@ -1202,7 +1534,11 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
             ranked[addr] = (score, role, why)
 
     if user_main is not None:
-        how = "C main loads this pointer and passes it to lang_start."
+        how = (
+            "Reset vector reaches this function through the cortex-m-rt main trampoline."
+            if image.force_thumb
+            else "C main loads this pointer and passes it to lang_start."
+        )
         add(user_main, 240, "user_main", how)
     for func, count in ref_user.items():
         std = ref_std.get(func, 0)

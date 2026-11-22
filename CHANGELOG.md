@@ -42,12 +42,13 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   (`rustc_version`, `rustc_commit`, `user_crates`, `user_main`,
   `entry_chain`, `functions`) and ranks user functions, with real
   addresses, above entry and imports. Recovery is static. It follows
-  the `lang_start` pointer, reads panic `Location` paths, and an in-tree
-  demangler. Non-Rust binaries are unchanged. `handoff.decompile_addrs`
-  is still not a decompile queue. Review follow-ups: consecutive PAC
-  prologues are one function start, AArch64 ADR uses the absolute
-  Capstone operand, callee discovery stops at `ret`, Thumb-2 Linux is
-  decoded as Thumb, and a bad mangled name can no longer abort
+  the `lang_start` pointer or the Cortex-M reset trampoline, reads panic
+  `Location` paths, and an in-tree demangler. Non-Rust binaries are
+  unchanged. `handoff.decompile_addrs` is still not a decompile queue.
+  Review follow-ups: Cortex-M vectors are read at the ELF load address,
+  consecutive PAC prologues are one function start, AArch64 ADR uses the
+  absolute Capstone operand, callee discovery stops at `ret`, Thumb-2
+  Linux is decoded as Thumb, and a bad mangled name can no longer abort
   `build_briefing`. The extractor sandbox binds the tool itself, not a
   home directory.
   Later review follow-ups: AArch64 `stp`/`ldp` uses a 4-byte stride for `w`
@@ -56,6 +57,24 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   budget raises instead of returning a short or empty read, and optional
   Rust triage records a skip note rather than aborting the briefing; v0
   punycode keeps underscores in the ASCII prefix (`α_ω`).
+  Cortex-M user main uses one rule, the call that never returns: from
+  Reset, take the first call or tail branch whose callee provably never
+  returns (falling back to the last call when none does), then step
+  through short forwarding stubs the same way. It replaces the
+  trampoline-unwrap and Reset-tail heuristics and is tested against 26
+  real rustc / cortex-m-rt images in `tests/fixtures/cortex_m` (v6m,
+  v7m, v7em; `-O0`, release, `-Oz`; with and without `#[pre_init]`;
+  plus hand-written Reset/`main` edge shapes). A `b.w` tail stub is a
+  thunk; Thumb-2 `push.w` / `sub.w` prologues are recognized; a bare
+  `sub sp` after straight-line code is a stack adjustment, not a
+  function start; callee discovery no longer accepts a non-prologue
+  `sub` head.
+  Never returning must be proven: a callee whose walk hits the budget
+  counts as returning, a `b` to a bare `sub sp` or other mid-function
+  label is local, and a `b` to a prologue-less function that nothing
+  falls into is a tail call. An ELF entry at the vector table is
+  accepted, and the C `main` and callee scans stop at a `sub sp` that
+  follows a return or unconditional branch.
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

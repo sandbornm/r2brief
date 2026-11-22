@@ -1,0 +1,32 @@
+[package]
+name = "fw_edge"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "fw_edge"
+test = false
+bench = false
+
+# Exactly one shape feature per build. Each one defines `Reset` and `main`
+# in assembly; the Rust functions below are shared.
+[features]
+tail_exit = []
+two_bl = []
+cbz_loop = []
+reset_b_main = []
+bw_next = []
+inlined_loop = []
+pre_init_tail = []
+local_label = []
+
+[profile.dev]
+debug = 0
+panic = "abort"
+
+[profile.release]
+debug = 0
+panic = "abort"
+codegen-units = 1

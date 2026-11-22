@@ -60,17 +60,7 @@ def score_findings(report: dict, truth: dict) -> dict:
     expected = set(truth.get("expected_finding_ids") or [])
     found_ids = {f["id"] for f in report["findings"]}
     # Also allow prefix / any match where expected id is contained.
-    hits = set()
-    for e in expected:
-        if e in found_ids:
-            hits.add(e)
-            continue
-        # soft: any found id that shares the technique prefix
-        tech = e.split(":")[1] if ":" in e else e
-        for fid in found_ids:
-            if tech in fid:
-                hits.add(e)
-                break
+    hits = expected & found_ids  # exact rule ids only; no substring credit
     infection_findings = [
         f for f in report["findings"]
         if set(f.get("tags") or []) & INFECTION_TAGS
@@ -170,10 +160,12 @@ def main() -> int:
             bad = True
     for name, s in summary.get("infection_detection", {}).items():
         if s["hit_rate"] is not None and s["hit_rate"] < 1.0:
-            # soft fail print; pad may hit either text_padding or pt_note_to_load
-            if not s["hits"]:
-                print(f"FAIL infection undetected: {name} {s}", file=sys.stderr)
-                bad = True
+            print(f"FAIL infection rule missed: {name} {s}", file=sys.stderr)
+            bad = True
+    for r in results:
+        if r.get("false_infection_findings"):
+            print(f"FAIL false infection finding on clean {r['name']}: {r['false_infection_findings']}", file=sys.stderr)
+            bad = True
     return 1 if bad else 0
 
 

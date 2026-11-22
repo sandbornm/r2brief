@@ -107,3 +107,7 @@ Tolerance: ±4 bytes for function-start matching.
 ```
 
 Clean (non-infected) samples produced **zero** infection-tagged findings.
+
+ET_EXEC / non-PIE: FDE `DW_EH_PE_pcrel` is resolved against the field's
+virtual address (not its file offset), so `.eh_frame` starts land in the
+executable `PT_LOAD` on both PIE and `-no-pie` links.

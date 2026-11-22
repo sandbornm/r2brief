@@ -115,8 +115,14 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             DT_RUNPATH => {}
             DT_TEXTREL => info.textrel = true,
             DT_BIND_NOW => info.bind_now = true,
-            DT_FLAGS if val & 0x4 != 0 => info.textrel = true, // DF_TEXTREL
-            DT_FLAGS if val & 0x8 != 0 => info.bind_now = true, // DF_BIND_NOW
+            DT_FLAGS => {
+                if val & 0x4 != 0 {
+                    info.textrel = true; // DF_TEXTREL
+                }
+                if val & 0x8 != 0 {
+                    info.bind_now = true; // DF_BIND_NOW
+                }
+            }
             DT_FLAGS_1 if val & 0x1 != 0 => info.bind_now = true, // DF_1_NOW
             _ => {}
         }
@@ -150,11 +156,20 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             return Vec::new();
         };
         let ws = r.word_size();
+        if ws == 0 || sz > 1_048_576 {
+            // Cap at 1 MiB of pointer entries; hostile DT_*SZ must not OOM/abort.
+            return Vec::new();
+        }
         let n = (sz / ws) as usize;
+        if n > 65_536 {
+            return Vec::new();
+        }
         let mut v = Vec::with_capacity(n);
         for i in 0..n {
             if let Some(w) = elf.word_at_va(addr + (i as u64) * ws) {
                 v.push(w);
+            } else {
+                break;
             }
         }
         v

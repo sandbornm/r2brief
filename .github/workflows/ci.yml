@@ -184,6 +184,9 @@ jobs:
         run: |
           wasm-pack build --target web --out-dir ../../web/wasm-elf-demo/pkg \
             --release -- --features wasm --no-default-features
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
       - name: Bundle round-trip
         run: |
           crates/r2brief-core/target/release/r2brief-core \

@@ -49,7 +49,9 @@ fn eh_frame_from_hdr(elf: &Elf<'_>, off: u64, size: u64) -> Option<(u64, u64)> {
     }
     let enc = r.u8(off + 1)?;
     let ptr_off = off + 4;
-    let (ptr, _) = read_encoded(elf, ptr_off, enc, ptr_off)?;
+    // DW_EH_PE_pcrel is relative to the *address* of the field, not its file offset.
+    let ptr_va = elf.off_to_va(ptr_off).unwrap_or(ptr_off);
+    let (ptr, _) = read_encoded(elf, ptr_off, enc, ptr_va)?;
     // We don't know the size of .eh_frame from the header alone; walk until
     // a zero-length CIE terminator, capped by remaining file bytes.
     let start_off = elf.va_to_off(ptr)?;
@@ -110,7 +112,8 @@ fn walk_eh_frame(elf: &Elf<'_>, start: u64, size: u64, out: &mut EhFrame) {
                     .unwrap_or(0);
                 // pc_begin starts right after the CIE pointer.
                 let pc_off = id_off + 4;
-                if let Some((pc, _)) = read_encoded(elf, pc_off, enc, pc_off) {
+                let pc_va = elf.off_to_va(pc_off).unwrap_or(pc_off);
+                if let Some((pc, _)) = read_encoded(elf, pc_off, enc, pc_va) {
                     if pc != 0 {
                         out.fde_starts.push(pc);
                     }
@@ -165,7 +168,8 @@ fn parse_cie_aug(elf: &Elf<'_>, mut off: u64, end: u64) -> Option<u8> {
                 // personality encoding + pointer
                 let enc = r.u8(off)?;
                 off += 1;
-                let (_, n) = read_encoded(elf, off, enc, off)?;
+                let base = elf.off_to_va(off).unwrap_or(off);
+                let (_, n) = read_encoded(elf, off, enc, base)?;
                 off += n;
             }
             b'R' => {

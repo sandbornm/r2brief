@@ -13,7 +13,8 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   function start. The epilogue `sub sp, x29, #imm` was taken as a start
   too. The user-main scan stopped before the `lang_start` pointer load in
   an LTO-inlined C `main`. A path-referencing function that user main
-  also calls now gets a small boost. Static analysis only, no model.
+  also calls now gets a one-time +4. Thumb `sub sp, #imm` still starts a
+  function. Static analysis only, no model.
 - v0 demangling rejects malformed punycode instead of publishing a
   `-tail` spelling, so `pretty_symbol` keeps the raw name.
 - A short ELF read (file ends before a section's declared size) raises

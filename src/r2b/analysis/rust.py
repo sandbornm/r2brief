@@ -866,11 +866,36 @@ def _is_prologue(insn: Any) -> bool:
         return True
     if mnem == "sub" and "#" in text:
         ops = [op.strip() for op in text.split(",")]
-        # `sub sp, sp, #imm` allocates a frame. `sub sp, x29, #imm` restores
-        # SP in an epilogue and is not a function start.
-        if ops[0] in {"sp", "wsp"} and len(ops) >= 3 and ops[1] in {"sp", "wsp"}:
+        # `sub sp, sp, #imm` (A64) and Thumb `sub sp, #imm` allocate a frame.
+        # `sub sp, x29, #imm` restores SP in an epilogue and is not a start.
+        if ops[0] in {"sp", "wsp"} and (len(ops) == 2 or ops[1] in {"sp", "wsp"}):
             return True
     return False
+
+
+def _is_spill(insn: Any) -> bool:
+    """A callee-saved spill or stack probe into the new frame, without writeback."""
+    text = insn.op_str
+    if insn.mnemonic not in {"stp", "str", "stur"} or not re.search(r"\[sp\b", text):
+        return False
+    regs = _split_ops(text)
+    regs = regs[:2] if insn.mnemonic == "stp" else regs[:1]
+    return (
+        bool(regs)
+        # Callee-saved x19-x30 / d8-d15, or `str xzr, [sp]` stack probes.
+        and all(re.fullmatch(r"x(?:19|2[0-9]|30)|d(?:[89]|1[0-5])|xzr", r) for r in regs)
+        and "!" not in text
+        and "#-" not in text
+    )
+
+
+def _is_entry_marker(insn: Any) -> bool:
+    """Prologue instructions that never continue an earlier frame's spills."""
+    if insn.mnemonic in {"paciasp", "pacibsp", "bti"}:
+        return _is_prologue(insn)
+    if insn.mnemonic == "push":
+        return _is_prologue(insn)
+    return insn.mnemonic == "stp" and _is_prologue(insn)
 
 
 def _is_frame_setup(insn: Any) -> bool:
@@ -884,7 +909,7 @@ def _is_frame_setup(insn: Any) -> bool:
     if mnem == "mov" and re.search(r"\b(x29|fp)\b", text) and re.search(r"\bsp\b", text):
         return True
     # Callee-saved spills into the new frame (`stp x28, x27, [sp, #0x10]`).
-    if mnem in {"stp", "str", "stur"} and re.search(r"\[sp\b", text):
+    if _is_spill(insn):
         return True
     if mnem in {"nop", "hint"}:
         return True
@@ -1036,20 +1061,27 @@ def _sweep_xrefs(
         thumb = image.force_thumb or (image.arch == "arm" and bool(image.entry & 1))
         machine = _Machine(image, thumb)
         in_prologue = False
+        spilled = False
         for insn in _iter_insns(image, sec.addr, thumb, data_len):
             if _is_return(insn):
                 machine.reset()
                 in_prologue = False
-            if _is_prologue(insn) and not in_prologue:
+            # After frame spills, `sub sp, sp` still belongs to the same
+            # opening, but PAC/BTI or a pre-decrement `stp` starts a new one.
+            if _is_prologue(insn) and (
+                not in_prologue or (spilled and _is_entry_marker(insn))
+            ):
                 machine.reset()
                 starts.append(insn.address)
                 if thumb and image.arch == "arm":
                     image.mark_thumb(insn.address | 1)
                 in_prologue = True
+                spilled = False
             elif in_prologue and _is_frame_setup(insn):
-                pass
+                spilled = spilled or _is_spill(insn)
             else:
                 in_prologue = False
+                spilled = False
             if insn.mnemonic in {"bl", "blx"}:
                 code = _direct_call_target(image, insn, thumb)
                 if code is not None:
@@ -1164,6 +1196,7 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
             "user",
             "Code references a user-crate source path.",
         )
+    boosted: set[int] = set()
     if user_main is not None:
         for index, callee in enumerate(_callees(image, user_main)):
             snapped = _snap(starts, callee)
@@ -1178,7 +1211,10 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
             current = ranked.get(snapped)
             if current is not None and current[1] == "user" and user_n:
                 # Two independent signals agree: a user source path and a
-                # direct call from user main.
+                # direct call from user main. Boost once per function.
+                if snapped in boosted:
+                    continue
+                boosted.add(snapped)
                 ranked[snapped] = (
                     current[0] + 4,
                     "user",

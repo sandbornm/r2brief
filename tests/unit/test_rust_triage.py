@@ -1534,8 +1534,8 @@ def test_path_ref_called_from_user_main_outranks_path_ref_alone(tmp_path: Path):
     """A user path ref plus a direct call from user main beats a path ref alone."""
     pytest.importorskip("capstone")
     text = bytearray(_text())
-    # USER: paciasp; bl REF; ret
-    text[0x80:0x8C] = PAC + _bl(USER + 4, REF) + RET
+    # USER: paciasp; bl REF; bl REF; ret. The boost applies once.
+    text[0x80:0x90] = PAC + _bl(USER + 4, REF) + _bl(USER + 8, REF) + RET
     binary = tmp_path / "rust-aarch64-callee"
     rela = struct.pack("<QQq", GOT, 1027, C_MAIN)
     _elf64(binary, bytes(text), _rodata(), _comment(), rela)
@@ -1544,7 +1544,8 @@ def test_path_ref_called_from_user_main_outranks_path_ref_alone(tmp_path: Path):
     ref = next(item for item in info["functions"] if item["addr"] == hex(REF))
     assert ref["role"] == "user"
     assert "called from user main" in ref["why"]
-    assert ref["score"] > 211
+    # 210 + one user path ref, plus a single +4 for the call from user main.
+    assert ref["score"] == 215
 
 
 def test_short_read_raises_instead_of_returning_a_short_slice():
@@ -1572,3 +1573,55 @@ def test_truncated_section_is_skipped_not_read_short(tmp_path: Path):
     assert image is not None
     assert ".rodata" not in [sec.name for sec in image.sections]
     assert ".text" in [sec.name for sec in image.sections]
+
+
+def test_thumb_two_operand_sub_sp_is_a_function_start():
+    """Capstone decodes 84 b0 as `sub sp, #0x10`, not `sub sp, sp, #0x10`."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    body = bytes.fromhex("84b07047")  # sub sp, #0x10; bx lr
+    image = _Image(arch="arm", bits=32, entry=start | 1,
+                   sections=[_Sec(".text", start, body, 0x4)], loads=[(start, body)])
+    _, starts = _sweep_xrefs(image, {})
+    assert start in starts
+
+
+def test_entry_marker_after_spills_starts_a_new_function():
+    """Fall-through into a PAC-marked function cannot be swallowed by earlier spills."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    path_va = 0x20000
+    first = _sub_sp(0x20) + _stp_pair_off(20, 19, 0x10)
+    second = start + len(first)
+    body = (
+        first + PAC + _sub_sp(0x20)
+        + _adrp(1, second + 8, path_va & ~0xFFF) + _add(1, 1, path_va & 0xFFF) + RET
+    )
+    image = _aarch64_image(start, body)
+    refs, starts = _sweep_xrefs(image, {path_va: ("user", "demo")})
+    assert start in starts and second in starts
+    sites = [site for site, vas in refs.items() if path_va in vas]
+    assert sites and all(_snap(starts, site) == second for site in sites)
+
+
+def test_stack_probe_keeps_large_frame_one_function():
+    """`sub sp, sp, #1, lsl #12; str xzr, [sp]; sub sp, sp, #N` is one opening."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    sub_page = struct.pack("<I", 0xD1400000 | (1 << 10) | (31 << 5) | 31)
+    probe = struct.pack("<I", 0xF90003FF)  # str xzr, [sp]
+    body = _stp_fp_lr_pre() + _mov_fp_sp() + sub_page + probe + _sub_sp(0x220) + RET
+    image = _aarch64_image(start, body)
+    _, starts = _sweep_xrefs(image, {})
+    assert starts == [start]
+
+
+def test_non_spill_store_closes_the_prologue():
+    """An arbitrary store to SP does not keep a prologue open forever."""
+    pytest.importorskip("capstone")
+    start = 0x10000
+    first = _sub_sp(0x20) + _stp_pair_off(0, 1, 0x10)
+    second = start + len(first)
+    image = _aarch64_image(start, first + _sub_sp(0x20) + RET)
+    _, starts = _sweep_xrefs(image, {})
+    assert start in starts and second in starts

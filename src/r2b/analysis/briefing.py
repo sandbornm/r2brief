@@ -17,7 +17,7 @@ from typing import Any
 
 from ..llm.citations import evidence_block
 from ..llm.prompts import PROMPT_ID, overall_ask_header, overall_ask_tail, region_ask_tail
-from .rust import analyze_rust
+from .rust import ElfReadBudgetExceeded, analyze_rust
 from .rustdemangle import pretty_symbol
 
 BRIEFING_SCHEMA_VERSION = "r2b.briefing.v1"
@@ -1475,6 +1475,8 @@ def _rust_triage(binary: str) -> dict[str, Any] | None:
         return None
     try:
         return analyze_rust(binary)
+    except ElfReadBudgetExceeded:
+        raise
     except Exception:
         return None
 

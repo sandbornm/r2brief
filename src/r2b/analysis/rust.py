@@ -162,6 +162,10 @@ class _Image:
 
 
 
+class ElfReadBudgetExceeded(ValueError):
+    """Raised when a section or segment read would exceed the shared file budget."""
+
+
 class _ReadBudget:
     """A single per-file byte budget shared by every section and segment read."""
 
@@ -195,10 +199,12 @@ class _ReadBudget:
 def _bounded_elf_read(
     stream: Any, offset: int, size: int, budget: _ReadBudget | None = None
 ) -> bytes:
-    """Read at most the remaining budget from ``stream`` at ``offset``.
+    """Read ``size`` bytes from ``stream`` at ``offset``, charged to ``budget``.
 
     Overlapping reads of a range already in the budget are reused and do not
-    consume additional budget.
+    consume additional budget. A request that cannot be satisfied in full
+    raises ``ElfReadBudgetExceeded`` instead of returning an empty or short
+    slice.
     """
     if budget is None:
         budget = _ReadBudget()
@@ -206,14 +212,17 @@ def _bounded_elf_read(
         return b""
     offset = int(offset)
     size = int(size)
-    cached = budget.lookup(offset, min(size, budget.cap))
+    cached = budget.lookup(offset, size)
     if cached is not None:
         return cached
-    want = min(size, budget.remaining())
-    if want <= 0:
-        return b""
+    if size > budget.remaining():
+        raise ElfReadBudgetExceeded(
+            f"ELF read of {size} bytes at offset {offset} exceeds remaining "
+            f"budget {budget.remaining()} (cap {budget.cap})"
+        )
     stream.seek(offset)
-    return budget.store(offset, stream.read(want))
+    data = stream.read(size)
+    return budget.store(offset, data)
 
 
 def _bounded_section_blob(sec: Any, budget: _ReadBudget | None = None) -> bytes:
@@ -228,7 +237,12 @@ def _bounded_section_blob(sec: Any, budget: _ReadBudget | None = None) -> bytes:
             return b""
         hdr_size = sec.structs.Elf_Chdr.sizeof()
         remaining = int(sec["sh_size"]) - hdr_size
-        dest = min(int(sec.data_size), budget.remaining())
+        dest = int(sec.data_size)
+        if dest > budget.remaining():
+            raise ElfReadBudgetExceeded(
+                f"compressed ELF section of {dest} bytes exceeds remaining "
+                f"budget {budget.remaining()} (cap {budget.cap})"
+            )
         if remaining <= 0 or dest <= 0:
             return b""
         sec.stream.seek(int(sec["sh_offset"]) + hdr_size)
@@ -275,6 +289,8 @@ def _open_image(path: Path) -> _Image | None:
                 continue
             try:
                 blob = _bounded_section_blob(sec, budget)
+            except ElfReadBudgetExceeded:
+                raise
             except Exception:
                 continue
             sections.append(_Sec(name, int(sec["sh_addr"]), blob, int(sec["sh_flags"])))
@@ -284,6 +300,8 @@ def _open_image(path: Path) -> _Image | None:
                 continue
             try:
                 blob = _bounded_segment_blob(seg, budget)
+            except ElfReadBudgetExceeded:
+                raise
             except Exception:
                 continue
             loads.append((int(seg["p_vaddr"]), blob))
@@ -293,6 +311,8 @@ def _open_image(path: Path) -> _Image | None:
                     continue
                 try:
                     blob = _bounded_segment_blob(seg, budget)
+                except ElfReadBudgetExceeded:
+                    raise
                 except Exception:
                     continue
                 sections.append(_Sec(".load", int(seg["p_vaddr"]), blob, 0x4))
@@ -481,6 +501,16 @@ def _canon(name: str, aarch64: bool) -> str:
     if aarch64 and len(token) >= 2 and token[0] == "w" and token[1].isdigit():
         return "x" + token[1:]
     return token
+
+
+def _pair_stride(reg: str, aarch64: bool) -> int:
+    """Byte stride between the two registers of an ``stp`` / ``ldp`` pair."""
+    if not aarch64:
+        return 4
+    token = reg.strip().lower()
+    if token.startswith("w"):
+        return 4
+    return 8
 
 
 class _Machine:
@@ -710,16 +740,27 @@ class _Machine:
             mem = _parse_mem(mem_tok) if mem_tok else None
             if mem is not None:
                 base_r, _index, disp = mem
-                writeback = "!" in mem_tok
+                pre_index = "!" in mem_tok
+                mem_i = next(i for i, op in enumerate(ops) if "[" in op)
+                post_imm = None
+                if (
+                    not pre_index
+                    and mem_i + 1 < len(ops)
+                    and ops[mem_i + 1].startswith("#")
+                ):
+                    post_imm = _imm(ops[mem_i + 1]) or 0
                 base_v = self._val(base_r, pc)
                 addr_stk = None
                 if base_v and base_v[0] == "stk":
-                    # Offset addressing ([sp, #16]) must keep the displacement.
-                    # Writeback only updates SP; it does not decide the slot.
+                    # Offset and pre-index use the displacement inside [...].
+                    # Post-index ([sp], #imm) addresses at the original SP.
                     addr_stk = base_v[1] + disp
-                if writeback and _canon(base_r, self.aarch64) == "sp":
-                    self.sp += disp
-                step = 8 if self.aarch64 else 4
+                if _canon(base_r, self.aarch64) == "sp":
+                    if pre_index:
+                        self.sp += disp
+                    elif post_imm is not None:
+                        self.sp += post_imm
+                step = _pair_stride(ops[0], self.aarch64)
                 if base == "stp" and addr_stk is not None:
                     src0 = self._val(ops[0], pc)
                     src1 = self._val(ops[1], pc) if len(ops) > 1 else None
@@ -1184,6 +1225,8 @@ def analyze_rust(path: str | Path) -> dict[str, Any] | None:
         return None
     try:
         image = _open_image(file_path)
+    except ElfReadBudgetExceeded:
+        raise
     except Exception:
         return None
     if image is None:

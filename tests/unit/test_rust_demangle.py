@@ -85,5 +85,9 @@ def test_v0_integer_const_generics_decode_hex():
 def test_v0_punycode_and_unsafe_fn_types():
     """Rust punycode uses '_' and the RFC 3492 digit alphabet; unsafe is kept."""
     assert demangle("_RCu7caf_dma") == "café"
+    # RFC 2603: α_ω -> punycode _-ylb7e -> __ylb7e (7 bytes). A separator '_'
+    # is required because the encoding starts with '_'. Prefix '_' stays '_'.
+    assert demangle("_RCu7___ylb7e") == "α_ω"
+    assert demangle("_RCu6f_5gaa") == "føø"
     assert demangle("_RIC3fooFUEuE") == "foo::<unsafe fn()>"
     assert demangle("_RIC3fooFEuE") == "foo::<fn()>"

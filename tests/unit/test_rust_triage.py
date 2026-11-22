@@ -9,6 +9,7 @@ import pytest
 
 from r2b.analysis.briefing import build_briefing
 from r2b.analysis.rust import (
+    ElfReadBudgetExceeded,
     _Image,
     _ReadBudget,
     _Sec,
@@ -1035,10 +1036,55 @@ def test_stp_offset_addressing_keeps_displacement():
     machine.feed(insns[0])
     assert 16 in machine.stack
     assert machine.stack[16] == ("imm", 0x1111)
+    assert machine.stack[24] == ("imm", 0x2222)
     assert 0 not in machine.stack or machine.stack.get(0) != ("imm", 0x1111)
     machine.feed(insns[1])
     assert machine.regs["x2"] == ("imm", 0x1111)
     assert machine.regs["x3"] == ("imm", 0x2222)
+    assert machine.sp == 0
+
+
+def test_stp_w_pair_uses_4_byte_stride():
+    """AArch64 32-bit stp/ldp steps 4 bytes, not 8."""
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _Machine, _iter_insns
+
+    # stp w0, w1, [sp, #4]
+    stp = struct.pack("<I", 0x290087E0)
+    image = _aarch64_image(0x1000, stp)
+    machine = _Machine(image, False)
+    machine.sp = 0
+    machine.regs["x0"] = ("imm", 0x1111)
+    machine.regs["x1"] = ("imm", 0x2222)
+    insns = list(_iter_insns(image, 0x1000, False, 4))
+    assert len(insns) == 1
+    assert insns[0].mnemonic == "stp"
+    machine.feed(insns[0])
+    assert machine.stack[4] == ("imm", 0x1111)
+    assert machine.stack[8] == ("imm", 0x2222)
+    assert 12 not in machine.stack
+    assert machine.sp == 0
+
+
+def test_ldp_post_index_writeback_updates_sp():
+    """ldp x2, x3, [sp], #0x10 loads at the old SP, then SP += 16."""
+    pytest.importorskip("capstone")
+    from r2b.analysis.rust import _Machine, _iter_insns
+
+    ldp = struct.pack("<I", 0xA8C10FE2)  # ldp x2, x3, [sp], #16
+    image = _aarch64_image(0x1000, ldp)
+    machine = _Machine(image, False)
+    machine.sp = 0
+    machine.stack[0] = ("imm", 0x1111)
+    machine.stack[8] = ("imm", 0x2222)
+    insns = list(_iter_insns(image, 0x1000, False, 4))
+    assert len(insns) == 1
+    assert insns[0].mnemonic == "ldp"
+    assert "]," in insns[0].op_str or "], #" in insns[0].op_str
+    machine.feed(insns[0])
+    assert machine.regs["x2"] == ("imm", 0x1111)
+    assert machine.regs["x3"] == ("imm", 0x2222)
+    assert machine.sp == 16
 
 
 def test_user_main_skips_helper_call_before_lang_start(tmp_path: Path):
@@ -1499,15 +1545,26 @@ def test_std_or_registry_rs_path_alone_is_not_rust(tmp_path: Path):
 
 
 def test_bounded_elf_read_stops_at_cap():
+    """A request that cannot fit in the remaining budget raises, not a short read."""
     from io import BytesIO
 
     stream = BytesIO(b"A" * 100)
     budget = _ReadBudget(cap=16)
-    assert _bounded_elf_read(stream, 0, 10**12, budget) == b"A" * 16
+    assert _bounded_elf_read(stream, 0, 16, budget) == b"A" * 16
     assert budget.used == 16
+    # Cached overlap is reused and does not re-charge or raise.
+    assert _bounded_elf_read(stream, 0, 16, budget) == b"A" * 16
+    assert budget.used == 16
+    with pytest.raises(ElfReadBudgetExceeded, match="exceeds remaining budget"):
+        _bounded_elf_read(stream, 16, 1, budget)
+    assert budget.used == 16
+
     stream = BytesIO(b"B" * 64)
     budget = _ReadBudget(cap=8)
-    assert _bounded_elf_read(stream, 8, 10**9, budget) == b"B" * 8
+    with pytest.raises(ElfReadBudgetExceeded, match="exceeds remaining budget"):
+        _bounded_elf_read(stream, 0, 16, budget)
+    assert budget.used == 0
+    assert _bounded_elf_read(stream, 8, 8, budget) == b"B" * 8
     assert budget.used == 8
 
 

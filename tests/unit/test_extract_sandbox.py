@@ -227,6 +227,8 @@ def test_bwrap_argv_does_not_bind_symlink_to_home(tmp_path: Path, monkeypatch) -
     home_s = str(home.resolve())
     assert ("--ro-bind", home_s, home_s) not in triples
     assert ("--bind", home_s, home_s) not in triples
+    assert ("--ro-bind", str(link), str(link)) not in triples
+    assert ("--bind", str(link), str(link)) not in triples
 
 
 
@@ -285,3 +287,76 @@ def test_bwrap_argv_does_not_bind_symlink_to_root(tmp_path: Path) -> None:
     resolved = str(Path("/").resolve())
     if resolved != "/":
         assert ("--ro-bind", resolved, resolved) not in triples
+    # The raw symlink path must not be bound either; bwrap would follow it.
+    assert ("--ro-bind", str(link), str(link)) not in triples
+    assert ("--bind", str(link), str(link)) not in triples
+
+
+
+def _bind_triples(argv: list[str]) -> list[tuple[str, str, str]]:
+    return list(zip(argv, argv[1:], argv[2:]))
+
+
+def _assert_not_bound(argv: list[str], *paths: str) -> None:
+    triples = _bind_triples(argv)
+    for folder in paths:
+        assert ("--ro-bind", folder, folder) not in triples
+        assert ("--bind", folder, folder) not in triples
+
+
+def test_bwrap_argv_does_not_bind_tmp_or_var_alias_or_extra(tmp_path: Path) -> None:
+    """Do not ro-bind /tmp, /var, or their resolved Darwin aliases, including extra_ro_binds."""
+    from r2b.extract.sandbox import _bwrap_argv
+
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+    aliases = {
+        "/tmp": str(Path("/tmp").resolve()),
+        "/var": str(Path("/var").resolve()),
+    }
+    for raw, resolved in aliases.items():
+        argv = _bwrap_argv(
+            "bwrap", [raw], input_file=subject, output_dir=out, extra_ro_binds=None
+        )
+        _assert_not_bound(argv, raw, resolved)
+
+    dummy = tmp_path / "extractor"
+    dummy.write_text("#!/bin/sh\n", encoding="utf-8")
+    argv = _bwrap_argv(
+        "bwrap",
+        [str(dummy)],
+        input_file=subject,
+        output_dir=out,
+        extra_ro_binds=[Path("/tmp"), Path("/var"), Path("/private/tmp"), Path("/private/var")],
+    )
+    _assert_not_bound(
+        argv, "/tmp", "/var", "/private/tmp", "/private/var",
+        str(Path("/tmp").resolve()), str(Path("/var").resolve()),
+    )
+    # The dummy tool itself may still be bound.
+    tool_s = str(dummy.resolve())
+    assert ("--ro-bind", tool_s, tool_s) in _bind_triples(argv)
+
+
+def test_bwrap_argv_does_not_bind_symlink_to_tmp(tmp_path: Path) -> None:
+    """A tool symlink into /tmp must not bind the link path or the temp root."""
+    from r2b.extract.sandbox import _bwrap_argv
+
+    link = tmp_path / "extractor"
+    link.symlink_to("/tmp")
+    subject = tmp_path / "subject.bin"
+    subject.write_bytes(b"fixture")
+    out = tmp_path / "out"
+    out.mkdir()
+    argv = _bwrap_argv(
+        "bwrap", [str(link)], input_file=subject, output_dir=out, extra_ro_binds=None
+    )
+    _assert_not_bound(
+        argv,
+        str(link),
+        "/tmp",
+        "/private/tmp",
+        str(Path("/tmp").resolve()),
+    )

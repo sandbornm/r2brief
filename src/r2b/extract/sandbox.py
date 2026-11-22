@@ -372,6 +372,8 @@ def _bwrap_argv(
             cmd.extend(_bind_or_symlink(path))
     # Interpreter and dynamic linker live here on Debian usrmerge hosts.
     for extra in extra_ro_binds or ():
+        if _too_broad_bind(extra):
+            continue
         resolved = extra.resolve()
         if resolved.exists():
             cmd.extend(["--ro-bind", str(resolved), str(resolved)])
@@ -383,7 +385,10 @@ def _bwrap_argv(
         # Also mount the original symlink path so a caller can still see it,
         # but execute the resolved pathname so the sandbox can find the tool.
         raw = Path(argv[0]).expanduser()
-        if raw.is_absolute() and raw.is_symlink():
+        # Never mount a symlink whose resolved target is denylisted
+        # (Darwin /tmp -> /private/tmp, /var -> /private/var, or a
+        # tool symlink into $HOME / /).
+        if raw.is_absolute() and raw.is_symlink() and not _too_broad_bind(raw):
             raw_s = str(raw)
             if ("--ro-bind", raw_s) not in zip(cmd, cmd[1:]):
                 cmd.extend(["--ro-bind", raw_s, raw_s])

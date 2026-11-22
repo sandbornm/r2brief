@@ -254,8 +254,10 @@ class _V0:
             # Rust v0 uses '_' as the punycode delimiter, not RFC 3492 '-'.
             # No delimiter means the whole ident is punycode (empty prefix).
             if "_" in raw:
+                # Last '_' is the RFC 3492 '-' delimiter (Rust substitutes '_').
+                # The ASCII prefix keeps its underscores: α_ω encodes as __ylb7e.
                 head, _, tail = raw.rpartition("_")
-                raw = _punycode(tail, head.replace("_", " "))
+                raw = _punycode(tail, head)
             else:
                 raw = _punycode(raw, "")
         return raw

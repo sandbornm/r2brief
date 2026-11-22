@@ -104,6 +104,9 @@ class _Image:
     loads: list[tuple[int, bytes]]
     relocs: dict[int, int] = field(default_factory=dict)
     force_thumb: bool = False
+    # VA ranges that map the ELF and program headers. They are loaded but
+    # are not program data, so a pointer into them is a stale register.
+    headers: list[tuple[int, int]] = field(default_factory=list)
 
     @property
     def ptr(self) -> int:
@@ -114,6 +117,8 @@ class _Image:
         return (1 << self.bits) - 1
 
     def read(self, va: int, size: int) -> bytes:
+        if any(lo <= va < hi for lo, hi in self.headers):
+            return b""
         for base, blob in self.loads:
             if base <= va < base + len(blob):
                 off = va - base
@@ -302,6 +307,12 @@ def _open_image(path: Path) -> _Image | None:
                 continue
             sections.append(_Sec(name, int(sec["sh_addr"]), blob, int(sec["sh_flags"])))
         loads: list[tuple[int, bytes]] = []
+        headers: list[tuple[int, int]] = []
+        header_files = [(0, int(elf.header["e_ehsize"]))]
+        phoff = int(elf.header["e_phoff"])
+        if phoff:
+            phsize = int(elf.header["e_phnum"]) * int(elf.header["e_phentsize"])
+            header_files.append((phoff, phoff + phsize))
         for seg in elf.iter_segments():
             if seg["p_type"] != "PT_LOAD":
                 continue
@@ -311,7 +322,13 @@ def _open_image(path: Path) -> _Image | None:
                 raise
             except Exception:
                 continue
-            loads.append((int(seg["p_vaddr"]), blob))
+            vaddr = int(seg["p_vaddr"])
+            offset = int(seg["p_offset"])
+            loads.append((vaddr, blob))
+            for lo, hi in header_files:
+                lo, hi = max(lo, offset), min(hi, offset + len(blob))
+                if lo < hi:
+                    headers.append((vaddr + lo - offset, vaddr + hi - offset))
         if not any(sec.executable for sec in sections):
             for seg in elf.iter_segments():
                 if seg["p_type"] != "PT_LOAD" or not int(seg["p_flags"]) & 1:
@@ -329,6 +346,7 @@ def _open_image(path: Path) -> _Image | None:
             entry=int(elf.header["e_entry"]),
             sections=sections,
             loads=loads,
+            headers=headers,
         )
         for sec in elf.iter_sections():
             if not isinstance(sec, RelocationSection):

@@ -9,7 +9,7 @@
 use crate::dynamic::DynamicInfo;
 use crate::elf::{
     hex, ptype_name, Elf, Phdr, PF_W, PF_X, PT_INTERP,
-    PT_NOTE, SHT_DYNSYM, SHT_SYMTAB,
+    SHT_DYNSYM, SHT_SYMTAB,
 };
 use crate::report::{Evidence, Finding};
 
@@ -153,60 +153,40 @@ fn check_overlapping_loads(elf: &Elf<'_>) -> Vec<Finding> {
 }
 
 /// PT_NOTE whose type was rewritten to PT_LOAD (ElfMaster note infection).
-/// Heuristic: a small executable PT_LOAD whose virtual address is isolated
-/// from every other PT_LOAD by more than 1 MiB. Normal link editors place
-/// LOADs within a few pages of each other; note-infection parks the
-/// parasite at a distant VA. File-offset "after image" alone is too weak
-/// (it false-fires on PIE text LOADs that start at the next page).
+///
+/// Structural rule, independent of address layout: GNU ld, gold and lld emit
+/// exactly one PF_X PT_LOAD and keep all PT_LOAD entries contiguous and
+/// ascending in the program header table. A converted note sits where the
+/// PT_NOTE was (after PT_DYNAMIC), so it is an executable PT_LOAD that is
+/// out of the contiguous LOAD run, while another executable LOAD exists.
 fn check_note_to_load(elf: &Elf<'_>) -> Vec<Finding> {
     let mut out = Vec::new();
-    let loads: Vec<&Phdr> = elf.loads().collect();
-    if loads.len() < 2 {
+    let exec_loads = elf.loads().filter(|p| p.exec()).count();
+    if exec_loads < 2 {
         return out;
     }
-    for p in &loads {
-        if !p.exec() || p.p_filesz == 0 || p.p_filesz > 0x2000 {
+    let Some(first) = elf.phdrs.iter().position(|p| p.is_load()) else { return out };
+    let mut run_end = first;
+    while run_end + 1 < elf.phdrs.len() && elf.phdrs[run_end + 1].is_load() {
+        run_end += 1;
+    }
+    for p in elf.phdrs.iter().skip(run_end + 1) {
+        if !(p.is_load() && p.exec()) {
             continue;
         }
-        let isolated = loads.iter().filter(|o| o.index != p.index).all(|o| {
-            let gap = if p.p_vaddr >= o.p_vaddr.saturating_add(o.p_memsz) {
-                p.p_vaddr - o.p_vaddr.saturating_add(o.p_memsz)
-            } else if o.p_vaddr >= p.p_vaddr.saturating_add(p.p_memsz) {
-                o.p_vaddr - p.p_vaddr.saturating_add(p.p_memsz)
-            } else {
-                0 // overlap
-            };
-            gap > 0x100_000
-        });
-        if !isolated {
-            continue;
-        }
+        let prev = &elf.phdrs[p.index - 1];
         out.push(finding(
             &format!("elf:pt_note_to_load:{}", p.index),
             "Suspected PT_NOTE→PT_LOAD infection",
             &format!(
-                "PT_LOAD[{}] is a small (filesz=0x{:x}) executable mapping at file 0x{:x} / VA 0x{:x}, isolated by >1MiB from every other PT_LOAD. This matches the classic ElfMaster note-infection pattern where a PT_NOTE is rewritten to PT_LOAD and the parasite lives at a distant VA.",
-                p.index, p.p_filesz, p.p_offset, p.p_vaddr
+                "PT_LOAD[{}] (flags {}, file 0x{:x}+0x{:x}, VA 0x{:x}) is executable but sits outside the contiguous PT_LOAD run [{}..={}], after PT_{}[{}]. Link editors emit one executable LOAD and keep LOADs contiguous; a rewritten PT_NOTE lands exactly here.",
+                p.index, p.flags_str(), p.p_offset, p.p_filesz, p.p_vaddr, first, run_end,
+                ptype_name(prev.p_type), prev.index
             ),
             90.0,
             &["infection", "pt_note", "anomaly"],
             vec![ph_evidence(p)],
         ));
-    }
-    for p in &elf.phdrs {
-        if p.p_type == PT_NOTE && p.p_filesz == 0 && p.p_memsz > 0 {
-            out.push(finding(
-                &format!("elf:empty_note:{}", p.index),
-                "Empty PT_NOTE with nonzero memsz",
-                &format!(
-                    "PT_NOTE[{}] has filesz=0 but memsz=0x{:x}; possible leftover from a note rewrite.",
-                    p.index, p.p_memsz
-                ),
-                60.0,
-                &["infection", "pt_note"],
-                vec![ph_evidence(p)],
-            ));
-        }
     }
     out
 }
@@ -502,6 +482,9 @@ fn check_init_hijack(elf: &Elf<'_>, d: &DynamicInfo) -> Vec<Finding> {
     // DT_INIT / DT_FINI point outside executable LOADs.
     for (tag, va) in [("DT_INIT", d.dt_init), ("DT_FINI", d.dt_fini)] {
         let Some(va) = va else { continue };
+        if va == 0 {
+            continue; // same convention as zero .init_array slots
+        }
         if elf.exec_load_at_va(va).is_none() {
             out.push(finding(
                 &format!("elf:{}:outside_text", tag.to_lowercase()),

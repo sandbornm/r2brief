@@ -19,6 +19,18 @@
       "truth": "triage-x86_64-stripped.json"
     },
     {
+      "name": "triage-x86_64-nopie",
+      "kind": "clean-nopie",
+      "arch": "x86-64",
+      "truth": "triage-x86_64-nopie.json"
+    },
+    {
+      "name": "triage-x86_64-noeh",
+      "kind": "stripped-noeh",
+      "arch": "x86-64",
+      "truth": "triage-x86_64-noeh.json"
+    },
+    {
       "name": "triage-x86_64-note",
       "kind": "infected",
       "arch": "x86-64",
@@ -54,6 +66,19 @@
       "truth": "triage-x86_64-init.json"
     },
     {
+      "name": "triage-x86_64-sstrip",
+      "kind": "sectionless",
+      "arch": "x86-64",
+      "truth": "triage-x86_64-sstrip.json"
+    },
+    {
+      "name": "triage-x86_64-note-sstrip",
+      "kind": "infected",
+      "arch": "x86-64",
+      "technique": "pt_note_to_load+sstrip",
+      "truth": "triage-x86_64-note-sstrip.json"
+    },
+    {
       "name": "triage-aarch64",
       "kind": "normal",
       "arch": "aarch64",
@@ -64,6 +89,18 @@
       "kind": "stripped",
       "arch": "aarch64",
       "truth": "triage-aarch64-stripped.json"
+    },
+    {
+      "name": "triage-aarch64-nopie",
+      "kind": "clean-nopie",
+      "arch": "aarch64",
+      "truth": "triage-aarch64-nopie.json"
+    },
+    {
+      "name": "triage-aarch64-noeh",
+      "kind": "stripped-noeh",
+      "arch": "aarch64",
+      "truth": "triage-aarch64-noeh.json"
     },
     {
       "name": "triage-aarch64-note",
@@ -99,6 +136,19 @@
       "arch": "aarch64",
       "technique": "init_array_hijack",
       "truth": "triage-aarch64-init.json"
+    },
+    {
+      "name": "triage-aarch64-sstrip",
+      "kind": "sectionless",
+      "arch": "aarch64",
+      "truth": "triage-aarch64-sstrip.json"
+    },
+    {
+      "name": "triage-aarch64-note-sstrip",
+      "kind": "infected",
+      "arch": "aarch64",
+      "technique": "pt_note_to_load+sstrip",
+      "truth": "triage-aarch64-note-sstrip.json"
     }
   ]
 }

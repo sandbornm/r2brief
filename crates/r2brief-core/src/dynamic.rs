@@ -67,6 +67,11 @@ pub struct DynamicInfo {
     pub fini_array: Vec<u64>,
     pub preinit_array: Vec<u64>,
     pub textrel: bool,
+    pub rela: Option<u64>,
+    pub relasz: Option<u64>,
+    pub relaent: Option<u64>,
+    /// r_offset -> addend for R_X86_64_RELATIVE / R_AARCH64_RELATIVE (RELA).
+    pub relative: std::collections::HashMap<u64, u64>,
     pub bind_now: bool,
 }
 
@@ -104,6 +109,9 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             DT_JMPREL => info.jmprel = Some(val),
             DT_PLTRELSZ => info.pltrelsz = Some(val),
             DT_PLTREL => info.pltrel = Some(val),
+            DT_RELA => info.rela = Some(val),
+            DT_RELASZ => info.relasz = Some(val),
+            DT_RELAENT => info.relaent = Some(val),
             DT_INIT => info.dt_init = Some(val),
             DT_FINI => info.dt_fini = Some(val),
             DT_INIT_ARRAY => info.init_array_addr = Some(val),
@@ -154,6 +162,28 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             }
         }
     }
+    // RELA RELATIVE relocations: for these slots the loader writes base+addend
+    // and ignores the in-file word, so array checks must read the addend.
+    let rel_type = match elf.hdr.e_machine {
+        crate::elf::EM_X86_64 => Some(8u32),
+        crate::elf::EM_AARCH64 => Some(1027u32),
+        _ => None,
+    };
+    if let (Some(rt), Some(rela), Some(relasz), true) = (rel_type, info.rela, info.relasz, r.c64) {
+        let ent = info.relaent.unwrap_or(24);
+        if ent == 24 {
+            let n = (relasz / 24).min(262_144);
+            for i in 0..n {
+                let Some(va) = i.checked_mul(24).and_then(|d| rela.checked_add(d)) else { break };
+                let Some(o) = elf.va_to_off(va) else { break };
+                let (Some(off), Some(inf), Some(add)) = (r.u64(o), r.u64(o + 8), r.u64(o + 16)) else { break };
+                if (inf & 0xffff_ffff) as u32 == rt {
+                    info.relative.insert(off, add);
+                }
+            }
+        }
+    }
+    let relative = info.relative.clone();
     let read_array = |addr: Option<u64>, sz: Option<u64>| -> Vec<u64> {
         let (Some(addr), Some(sz)) = (addr, sz) else {
             return Vec::new();
@@ -170,7 +200,9 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             let Some(slot) = (i as u64).checked_mul(ws).and_then(|d| addr.checked_add(d)) else {
                 break;
             };
-            if let Some(w) = elf.word_at_va(slot) {
+            if let Some(&add) = relative.get(&slot) {
+                v.push(add);
+            } else if let Some(w) = elf.word_at_va(slot) {
                 v.push(w);
             } else {
                 break;

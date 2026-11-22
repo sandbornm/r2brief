@@ -164,3 +164,47 @@ fn aarch64_backward_bl_does_not_panic() {
     assert!(report.functions.call_targets > 0);
     assert!(report.functions.eh_frame_starts > 0);
 }
+
+fn ids_for(name: &str) -> Option<Vec<String>> {
+    let path = fixture(name);
+    if !path.exists() {
+        require_fixture(&path);
+        return None;
+    }
+    let data = std::fs::read(&path).unwrap();
+    let report = r2brief_core::analyze(name, &data).unwrap();
+    Some(report.findings.iter().map(|f| f.id.clone()).collect())
+}
+
+/// Legacy non-PIE layout (one RX LOAD at the start of the phdr run) must not
+/// look like PT_NOTE→PT_LOAD; that was the round-5 false positive.
+#[test]
+fn nopie_layout_is_not_note_infection() {
+    for name in ["triage-x86_64-nopie", "triage-aarch64-nopie"] {
+        let Some(ids) = ids_for(name) else { return };
+        assert!(
+            !ids.iter().any(|i| i.contains("pt_note") || i.contains("text_padding")),
+            "{name}: {ids:?}"
+        );
+    }
+}
+
+/// The structural rule needs only program headers.
+#[test]
+fn note_infection_survives_sstrip() {
+    let Some(ids) = ids_for("triage-x86_64-note-sstrip") else { return };
+    assert!(ids.iter().any(|i| i == "elf:pt_note_to_load:7"), "{ids:?}");
+    assert!(ids.iter().any(|i| i == "elf:no_section_headers"), "{ids:?}");
+    let Some(clean) = ids_for("triage-x86_64-sstrip") else { return };
+    assert!(!clean.iter().any(|i| i.contains("pt_note")), "{clean:?}");
+}
+
+/// Fixture patches only the R_*_RELATIVE addend; the .init_array file bytes
+/// still hold the original pointer. The finding must come from the addend.
+#[test]
+fn init_array_hijack_via_rela_addend() {
+    for name in ["triage-x86_64-init", "triage-aarch64-init"] {
+        let Some(ids) = ids_for(name) else { return };
+        assert!(ids.iter().any(|i| i == "elf:dt_init_array:entry0:outside_text"), "{name}: {ids:?}");
+    }
+}

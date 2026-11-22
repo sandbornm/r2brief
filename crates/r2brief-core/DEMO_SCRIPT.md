@@ -1,6 +1,7 @@
 # Suggested walkthrough for the recorded demo
 
-Audience: ELF / binary-RE experts (e.g. ElfMaster). No marketing voice.
+Audience: ELF / binary-RE experts. No marketing voice. Every claim on screen
+is checkable with `readelf` in a second pane.
 Record against `web/wasm-elf-demo/` served locally. Do not use r2brief.com.
 
 ## Setup (before record)
@@ -10,50 +11,63 @@ python3 -m http.server 8765 --directory web/wasm-elf-demo
 # open http://127.0.0.1:8765/
 ```
 
-Confirm the status line reads `wasm ready · r2brief-core 0.1.0 · nothing uploaded`.
+Have a terminal open in `web/wasm-elf-demo/samples/` with binutils available.
+Open DevTools → Network and leave it visible: after the page loads, analyzing
+a file produces no requests.
 
-## Script (~3–4 minutes)
+## Script (~4 minutes)
 
-1. **State the constraint.** “Everything runs in this tab. The ELF is not
-   uploaded. Findings have to cite offsets I can check with readelf.”
+1. **Constraint.** "This runs in the tab as wasm in a Web Worker. The file is
+   not uploaded. Every finding cites an offset you can check."
 
-2. **Clean stripped baseline.** Click `triage-x86_64-stripped`.
-   - Point at: `stripped: yes`, recovered function count, `eh_frame` count.
-   - Open the function table: starts come from `.eh_frame` FDEs and call
-     targets. Say the measured numbers out loud:
-     x86-64 stripped precision ≈ 0.62, recall ≈ 0.94 (±4-byte tolerance
-     against the unstripped twin). Same fixture, aarch64 ≈ 0.62 / 0.97.
-   - Note there is **no** infection finding on the clean binary.
+2. **Lead with the hard case: `triage-x86_64-note-sstrip`.**
+   - Findings: `elf:pt_note_to_load:7` and `elf:no_section_headers`.
+   - Evidence line: `PT_LOAD[7] flags=R E file=0x338+0x30 va=0x204000+0x30`.
+   - Terminal: `readelf -lW triage-x86_64-note-sstrip`. Point at LOAD[7]: it
+     comes after `DYNAMIC`, outside the LOAD run at indices 2–5, and there are
+     no section headers at all. The rule uses phdr order alone.
+   - Say what it is: the fixture is a structural rewrite of the note phdr.
+     It does not carry a working parasite, and the entry point is not redirected.
 
-3. **PT_NOTE → PT_LOAD.** Click `triage-x86_64-note`.
-   - Finding `elf:pt_note_to_load:N` should be top-ranked.
-   - Read the evidence line: phdr index, flags `R E`, file offset, VA.
-   - Switch to a terminal (or a second pane) and show:
-     `readelf -l samples/triage-x86_64-note` — the small executable LOAD at
-     the cited VA, isolated from the others.
-   - Optional: same click path on `triage-aarch64-note` to show arch parity.
+3. **Control: `triage-x86_64-nopie`.**
+   - Single RX LOAD from file offset 0 (`-no-pie -z noseparate-code`). That
+     layout tripped a naive "small exec LOAD" heuristic. It produces no
+     infection finding here.
+   - `readelf -lW triage-x86_64-nopie` shows the one RX LOAD.
 
-4. **Text-padding.** Click `triage-x86_64-pad`.
-   - Finding `elf:text_padding:A:B` — executable LOAD in the page slack
-     after the text segment’s filesz.
-   - Cite both offsets from the evidence block.
+4. **Clean stripped baseline: `triage-x86_64-stripped`.**
+   - Function table: each start lists its sources (eh_frame, call_target,
+     address_taken, ...). PLT stubs are listed separately.
+   - State the numbers: 37 of 38 functions at precision 1.000 on this
+     fixture. The miss is `register_tm_clones`, which has no FDE and is reached
+     only by a tail jump. AArch64 build: 39/39. "One synthetic program, so read
+     this as a regression floor, not a benchmark."
 
-5. **init_array hijack.** Click `triage-x86_64-init`.
-   - Finding `elf:dt_init_array:entry0:outside_text`.
-   - Evidence shows the bogus VA. Confirm with
-     `readelf -d` + hex dump of `.init_array` if time allows.
+5. **init_array hijack via relocation: `triage-x86_64-init`.**
+   - Finding `elf:dt_init_array:entry0:outside_text`, value `0x7fff00000000`.
+   - Terminal:
+     `readelf -x .init_array triage-x86_64-init` shows `0x1340` in slot 0
+     (the original `frame_dummy`, inside .text).
+     `readelf -rW triage-x86_64-init | head` shows `R_X86_64_RELATIVE` at
+     `0x3c80` with addend `7fff00000000`.
+   - Point: in a PIE, ld.so writes the addend. A reader that trusts the
+     section bytes misses this.
 
-6. **Evidence bundle.** Click **Download .r2br**.
-   - In the terminal: `r2b bundle inspect ./triage-x86_64-note.r2br`
-   - Show `schema_version r2b.bundle.v1`, subject sha256, members. Emphasize
-     the target bytes are **not** embedded by default.
+6. **Text padding: `triage-x86_64-pad`.** `elf:text_padding:3:7`: an exec
+   LOAD in the page slack after the text segment. Check with `readelf -lW`.
 
-7. **What you deliberately left out.** One sentence: reverse-text and
-   PLT/GOT graph claims are not in this demo because they are not fixture-
-   verified yet. No fluff.
+7. **Arch parity: `triage-aarch64-note`.** `elf:pt_note_to_load:5`.
+
+8. **Evidence bundle.** Click **Download .r2br**, then:
+   `r2b bundle inspect ./triage-x86_64-note-sstrip.r2br`
+   Shows `r2b.bundle.v1`, the subject sha256 and the members. The target bytes
+   are not embedded.
+
+9. **Left out, one sentence.** "Reverse-text, PLT/GOT hijack, DT_NEEDED
+   injection and RELR aren't shown because no fixture verifies them yet."
 
 ## Do not
 
-- Claim 100% function recovery.
-- Open any network tab that suggests an upload.
+- Claim 100% function recovery or generality beyond the fixture corpus.
+- Claim the infected fixtures are working malware.
 - Deploy or mention a public URL.

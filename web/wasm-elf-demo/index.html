@@ -236,7 +236,8 @@ function render(r) {
       </tbody>
     </table>
     ${funcs.length > 80 ? `<p class="note">Showing 80 of ${funcs.length}.</p>` : ''}
-    <p class="note">Function-boundary precision/recall on these fixtures (stripped twins, ±4-byte tolerance): see <code>crates/r2brief-core/eval/results.json</code>. Anomaly rules that could not be verified against a fixture are not shown in this demo.</p>
+    ${(r.functions.plt_stubs||[]).length ? `<div class="ev">PLT stubs (not counted as functions): ${escapeHtml(r.functions.plt_stubs.map(fmtAddr).join(' '))}</div>` : ''}
+    <p class="note">Function-start precision/recall per fixture (±4 bytes vs. STT_FUNC in the unstripped twin): <code>crates/r2brief-core/eval/RESULTS.md</code>. One synthetic program; a regression floor, not a benchmark. Rules without a verifying fixture are not claimed.</p>
   `;
   document.getElementById('dl').onclick = () => {
     const b64 = r.bundle_base64;

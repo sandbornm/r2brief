@@ -20,12 +20,16 @@
         ]
       },
       "functions": {
-        "truth_funcs": 36,
-        "pred_funcs": 55,
-        "tp": 34,
-        "precision": 0.6182,
-        "recall": 0.9444,
-        "f1": 0.7473,
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 37,
+        "tp": 37,
+        "precision": 1.0,
+        "recall": 0.9737,
+        "f1": 0.9867,
         "eh_frame_starts": 35,
         "call_targets": 36,
         "prologue_hits": 73
@@ -50,13 +54,87 @@
         ]
       },
       "functions": {
-        "truth_funcs": 36,
-        "pred_funcs": 55,
-        "tp": 34,
-        "precision": 0.6182,
-        "recall": 0.9444,
-        "f1": 0.7473,
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 37,
+        "tp": 37,
+        "precision": 1.0,
+        "recall": 0.9737,
+        "f1": 0.9867,
         "eh_frame_starts": 35,
+        "call_targets": 36,
+        "prologue_hits": 73
+      },
+      "false_infection_findings": []
+    },
+    {
+      "name": "triage-x86_64-nopie",
+      "kind": "clean-nopie",
+      "arch": "x86-64",
+      "technique": null,
+      "subject": {
+        "arch": "x86-64",
+        "stripped": true,
+        "entry": "0x400b00",
+        "dangerous_imports": [
+          "memcpy",
+          "memmove",
+          "strcat",
+          "strcpy",
+          "system"
+        ]
+      },
+      "functions": {
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 38,
+        "tp": 38,
+        "precision": 1.0,
+        "recall": 0.9744,
+        "f1": 0.987,
+        "eh_frame_starts": 35,
+        "call_targets": 35,
+        "prologue_hits": 73
+      },
+      "false_infection_findings": []
+    },
+    {
+      "name": "triage-x86_64-noeh",
+      "kind": "stripped-noeh",
+      "arch": "x86-64",
+      "technique": null,
+      "subject": {
+        "arch": "x86-64",
+        "stripped": true,
+        "entry": "0x1260",
+        "dangerous_imports": [
+          "memcpy",
+          "memmove",
+          "strcat",
+          "strcpy",
+          "system"
+        ]
+      },
+      "functions": {
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [
+          "0x13e0"
+        ],
+        "truth_funcs": 38,
+        "pred_funcs": 38,
+        "tp": 37,
+        "precision": 0.9737,
+        "recall": 0.9737,
+        "f1": 0.9737,
+        "eh_frame_starts": 4,
         "call_targets": 36,
         "prologue_hits": 73
       },
@@ -80,12 +158,16 @@
         ]
       },
       "functions": {
-        "truth_funcs": 36,
-        "pred_funcs": 55,
-        "tp": 34,
-        "precision": 0.6182,
-        "recall": 0.9444,
-        "f1": 0.7473,
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 37,
+        "tp": 37,
+        "precision": 1.0,
+        "recall": 0.9737,
+        "f1": 0.9867,
         "eh_frame_starts": 35,
         "call_targets": 36,
         "prologue_hits": 73
@@ -131,12 +213,16 @@
         ]
       },
       "functions": {
-        "truth_funcs": 36,
-        "pred_funcs": 55,
-        "tp": 34,
-        "precision": 0.6182,
-        "recall": 0.9444,
-        "f1": 0.7473,
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 37,
+        "tp": 37,
+        "precision": 1.0,
+        "recall": 0.9737,
+        "f1": 0.9867,
         "eh_frame_starts": 35,
         "call_targets": 36,
         "prologue_hits": 73
@@ -151,9 +237,11 @@
         "misses": [],
         "hit_rate": 1.0,
         "anomaly_findings": [
-          "elf:text_padding:3:7"
+          "elf:text_padding:3:7",
+          "elf:pt_note_to_load:7"
         ],
         "all_finding_ids": [
+          "elf:pt_note_to_load:7",
           "elf:stripped_symbols",
           "elf:text_padding:3:7",
           "import:dangerous:memcpy",
@@ -182,12 +270,16 @@
         ]
       },
       "functions": {
-        "truth_funcs": 36,
-        "pred_funcs": 55,
-        "tp": 34,
-        "precision": 0.6182,
-        "recall": 0.9444,
-        "f1": 0.7473,
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 37,
+        "tp": 37,
+        "precision": 1.0,
+        "recall": 0.9737,
+        "f1": 0.9867,
         "eh_frame_starts": 35,
         "call_targets": 36,
         "prologue_hits": 73
@@ -233,12 +325,16 @@
         ]
       },
       "functions": {
-        "truth_funcs": 36,
-        "pred_funcs": 55,
-        "tp": 34,
-        "precision": 0.6182,
-        "recall": 0.9444,
-        "f1": 0.7473,
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 37,
+        "tp": 37,
+        "precision": 1.0,
+        "recall": 0.9737,
+        "f1": 0.9867,
         "eh_frame_starts": 35,
         "call_targets": 36,
         "prologue_hits": 73
@@ -284,12 +380,17 @@
         ]
       },
       "functions": {
-        "truth_funcs": 36,
-        "pred_funcs": 54,
-        "tp": 33,
-        "precision": 0.6111,
-        "recall": 0.9167,
-        "f1": 0.7333,
+        "missed": [
+          "frame_dummy",
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 36,
+        "tp": 36,
+        "precision": 1.0,
+        "recall": 0.9474,
+        "f1": 0.973,
         "eh_frame_starts": 35,
         "call_targets": 36,
         "prologue_hits": 73
@@ -318,6 +419,99 @@
       }
     },
     {
+      "name": "triage-x86_64-sstrip",
+      "kind": "sectionless",
+      "arch": "x86-64",
+      "technique": null,
+      "subject": {
+        "arch": "x86-64",
+        "stripped": true,
+        "entry": "0x1260",
+        "dangerous_imports": [
+          "memcpy",
+          "memmove",
+          "strcat",
+          "strcpy",
+          "system"
+        ]
+      },
+      "functions": {
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 37,
+        "tp": 37,
+        "precision": 1.0,
+        "recall": 0.9737,
+        "f1": 0.9867,
+        "eh_frame_starts": 35,
+        "call_targets": 36,
+        "prologue_hits": 73
+      },
+      "false_infection_findings": []
+    },
+    {
+      "name": "triage-x86_64-note-sstrip",
+      "kind": "infected",
+      "arch": "x86-64",
+      "technique": "pt_note_to_load+sstrip",
+      "subject": {
+        "arch": "x86-64",
+        "stripped": true,
+        "entry": "0x1260",
+        "dangerous_imports": [
+          "memcpy",
+          "memmove",
+          "strcat",
+          "strcpy",
+          "system"
+        ]
+      },
+      "functions": {
+        "missed": [
+          "register_tm_clones"
+        ],
+        "extra": [],
+        "truth_funcs": 38,
+        "pred_funcs": 37,
+        "tp": 37,
+        "precision": 1.0,
+        "recall": 0.9737,
+        "f1": 0.9867,
+        "eh_frame_starts": 35,
+        "call_targets": 36,
+        "prologue_hits": 73
+      },
+      "findings": {
+        "expected": [
+          "elf:no_section_headers",
+          "elf:pt_note_to_load:7"
+        ],
+        "hits": [
+          "elf:no_section_headers",
+          "elf:pt_note_to_load:7"
+        ],
+        "misses": [],
+        "hit_rate": 1.0,
+        "anomaly_findings": [
+          "elf:pt_note_to_load:7",
+          "elf:no_section_headers"
+        ],
+        "all_finding_ids": [
+          "elf:no_section_headers",
+          "elf:pt_note_to_load:7",
+          "elf:stripped_symbols",
+          "import:dangerous:memcpy",
+          "import:dangerous:memmove",
+          "import:dangerous:strcat",
+          "import:dangerous:strcpy",
+          "import:dangerous:system"
+        ]
+      }
+    },
+    {
       "name": "triage-aarch64",
       "kind": "normal",
       "arch": "aarch64",
@@ -335,12 +529,14 @@
         ]
       },
       "functions": {
-        "truth_funcs": 37,
-        "pred_funcs": 58,
-        "tp": 36,
-        "precision": 0.6207,
-        "recall": 0.973,
-        "f1": 0.7579,
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
         "eh_frame_starts": 36,
         "call_targets": 39,
         "prologue_hits": 15
@@ -365,13 +561,83 @@
         ]
       },
       "functions": {
-        "truth_funcs": 37,
-        "pred_funcs": 58,
-        "tp": 36,
-        "precision": 0.6207,
-        "recall": 0.973,
-        "f1": 0.7579,
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
         "eh_frame_starts": 36,
+        "call_targets": 39,
+        "prologue_hits": 15
+      },
+      "false_infection_findings": []
+    },
+    {
+      "name": "triage-aarch64-nopie",
+      "kind": "clean-nopie",
+      "arch": "aarch64",
+      "technique": null,
+      "subject": {
+        "arch": "aarch64",
+        "stripped": true,
+        "entry": "0x400ac0",
+        "dangerous_imports": [
+          "memcpy",
+          "memmove",
+          "strcat",
+          "strcpy",
+          "system"
+        ]
+      },
+      "functions": {
+        "missed": [],
+        "extra": [
+          "0x400af4"
+        ],
+        "truth_funcs": 40,
+        "pred_funcs": 41,
+        "tp": 40,
+        "precision": 0.9756,
+        "recall": 1.0,
+        "f1": 0.9877,
+        "eh_frame_starts": 37,
+        "call_targets": 38,
+        "prologue_hits": 16
+      },
+      "false_infection_findings": []
+    },
+    {
+      "name": "triage-aarch64-noeh",
+      "kind": "stripped-noeh",
+      "arch": "aarch64",
+      "technique": null,
+      "subject": {
+        "arch": "aarch64",
+        "stripped": true,
+        "entry": "0xdc0",
+        "dangerous_imports": [
+          "memcpy",
+          "memmove",
+          "strcat",
+          "strcpy",
+          "system"
+        ]
+      },
+      "functions": {
+        "missed": [],
+        "extra": [
+          "0xfc0"
+        ],
+        "truth_funcs": 39,
+        "pred_funcs": 40,
+        "tp": 39,
+        "precision": 0.975,
+        "recall": 1.0,
+        "f1": 0.9873,
+        "eh_frame_starts": 5,
         "call_targets": 39,
         "prologue_hits": 15
       },
@@ -395,12 +661,14 @@
         ]
       },
       "functions": {
-        "truth_funcs": 37,
-        "pred_funcs": 58,
-        "tp": 36,
-        "precision": 0.6207,
-        "recall": 0.973,
-        "f1": 0.7579,
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
         "eh_frame_starts": 36,
         "call_targets": 39,
         "prologue_hits": 15
@@ -446,12 +714,14 @@
         ]
       },
       "functions": {
-        "truth_funcs": 37,
-        "pred_funcs": 58,
-        "tp": 36,
-        "precision": 0.6207,
-        "recall": 0.973,
-        "f1": 0.7579,
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
         "eh_frame_starts": 36,
         "call_targets": 39,
         "prologue_hits": 15
@@ -466,9 +736,11 @@
         "misses": [],
         "hit_rate": 1.0,
         "anomaly_findings": [
-          "elf:text_padding:2:5"
+          "elf:text_padding:2:5",
+          "elf:pt_note_to_load:5"
         ],
         "all_finding_ids": [
+          "elf:pt_note_to_load:5",
           "elf:stripped_symbols",
           "elf:text_padding:2:5",
           "import:dangerous:memcpy",
@@ -497,12 +769,14 @@
         ]
       },
       "functions": {
-        "truth_funcs": 37,
-        "pred_funcs": 58,
-        "tp": 36,
-        "precision": 0.6207,
-        "recall": 0.973,
-        "f1": 0.7579,
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
         "eh_frame_starts": 36,
         "call_targets": 39,
         "prologue_hits": 15
@@ -548,12 +822,14 @@
         ]
       },
       "functions": {
-        "truth_funcs": 37,
-        "pred_funcs": 58,
-        "tp": 36,
-        "precision": 0.6207,
-        "recall": 0.973,
-        "f1": 0.7579,
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
         "eh_frame_starts": 36,
         "call_targets": 39,
         "prologue_hits": 15
@@ -599,12 +875,14 @@
         ]
       },
       "functions": {
-        "truth_funcs": 37,
-        "pred_funcs": 58,
-        "tp": 36,
-        "precision": 0.6207,
-        "recall": 0.973,
-        "f1": 0.7579,
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
         "eh_frame_starts": 36,
         "call_targets": 39,
         "prologue_hits": 15
@@ -631,18 +909,135 @@
           "import:dangerous:system"
         ]
       }
+    },
+    {
+      "name": "triage-aarch64-sstrip",
+      "kind": "sectionless",
+      "arch": "aarch64",
+      "technique": null,
+      "subject": {
+        "arch": "aarch64",
+        "stripped": true,
+        "entry": "0xdc0",
+        "dangerous_imports": [
+          "memcpy",
+          "memmove",
+          "strcat",
+          "strcpy",
+          "system"
+        ]
+      },
+      "functions": {
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "eh_frame_starts": 36,
+        "call_targets": 39,
+        "prologue_hits": 15
+      },
+      "false_infection_findings": []
+    },
+    {
+      "name": "triage-aarch64-note-sstrip",
+      "kind": "infected",
+      "arch": "aarch64",
+      "technique": "pt_note_to_load+sstrip",
+      "subject": {
+        "arch": "aarch64",
+        "stripped": true,
+        "entry": "0xdc0",
+        "dangerous_imports": [
+          "memcpy",
+          "memmove",
+          "strcat",
+          "strcpy",
+          "system"
+        ]
+      },
+      "functions": {
+        "missed": [],
+        "extra": [],
+        "truth_funcs": 39,
+        "pred_funcs": 39,
+        "tp": 39,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "eh_frame_starts": 36,
+        "call_targets": 39,
+        "prologue_hits": 15
+      },
+      "findings": {
+        "expected": [
+          "elf:no_section_headers",
+          "elf:pt_note_to_load:5"
+        ],
+        "hits": [
+          "elf:no_section_headers",
+          "elf:pt_note_to_load:5"
+        ],
+        "misses": [],
+        "hit_rate": 1.0,
+        "anomaly_findings": [
+          "elf:pt_note_to_load:5",
+          "elf:no_section_headers"
+        ],
+        "all_finding_ids": [
+          "elf:no_section_headers",
+          "elf:pt_note_to_load:5",
+          "elf:stripped_symbols",
+          "import:dangerous:memcpy",
+          "import:dangerous:memmove",
+          "import:dangerous:strcat",
+          "import:dangerous:strcpy",
+          "import:dangerous:system"
+        ]
+      }
     }
   ],
+  "sectionless_function_recovery": {
+    "x86-64": {
+      "precision": 1.0,
+      "recall": 0.9737,
+      "f1": 0.9867,
+      "eh_frame_starts": 35
+    },
+    "aarch64": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "eh_frame_starts": 36
+    }
+  },
+  "stripped_noeh_function_recovery": {
+    "x86-64": {
+      "precision": 0.9737,
+      "recall": 0.9737,
+      "f1": 0.9737,
+      "eh_frame_starts": 4
+    },
+    "aarch64": {
+      "precision": 0.975,
+      "recall": 1.0,
+      "f1": 0.9873,
+      "eh_frame_starts": 5
+    }
+  },
   "stripped_function_recovery": {
     "aarch64": {
-      "precision": 0.6207,
-      "recall": 0.973,
-      "f1": 0.7579
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
     },
     "x86-64": {
-      "precision": 0.6182,
-      "recall": 0.9444,
-      "f1": 0.7473
+      "precision": 1.0,
+      "recall": 0.9737,
+      "f1": 0.9867
     }
   },
   "infection_detection": {
@@ -686,6 +1081,15 @@
       ],
       "misses": []
     },
+    "triage-x86_64-note-sstrip": {
+      "technique": "pt_note_to_load+sstrip",
+      "hit_rate": 1.0,
+      "hits": [
+        "elf:no_section_headers",
+        "elf:pt_note_to_load:7"
+      ],
+      "misses": []
+    },
     "triage-aarch64-note": {
       "technique": "pt_note_to_load",
       "hit_rate": 1.0,
@@ -723,6 +1127,15 @@
       "hit_rate": 1.0,
       "hits": [
         "elf:dt_init_array:entry0:outside_text"
+      ],
+      "misses": []
+    },
+    "triage-aarch64-note-sstrip": {
+      "technique": "pt_note_to_load+sstrip",
+      "hit_rate": 1.0,
+      "hits": [
+        "elf:no_section_headers",
+        "elf:pt_note_to_load:5"
       ],
       "misses": []
     }

@@ -11,184 +11,194 @@
   "source": "triage-x86_64-stripped",
   "functions": [
     {
+      "name": "_init",
+      "addr": 4096,
+      "bind": "GLOBAL"
+    },
+    {
+      "name": "_start",
+      "addr": 4704,
+      "bind": "GLOBAL"
+    },
+    {
       "name": "deregister_tm_clones",
       "addr": 4752,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "register_tm_clones",
       "addr": 4800,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "__do_global_dtors_aux",
       "addr": 4864,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "frame_dummy",
       "addr": 4928,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "fnv1a",
       "addr": 4937,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "rotl32",
       "addr": 4978,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "mix",
       "addr": 4985,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "fib",
       "addr": 5009,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "is_even",
       "addr": 5054,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "is_odd",
       "addr": 5078,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "classify",
       "addr": 5102,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "count_class",
       "addr": 5189,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "tree_height",
       "addr": 5261,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "tree_sum",
       "addr": 5316,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "cmp_int",
       "addr": 5372,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_hash",
       "addr": 5395,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_count",
       "addr": 5469,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "node_new",
       "addr": 5534,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "tree_insert",
       "addr": 5573,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "sorted_checksum",
       "addr": 5643,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "tree_free",
       "addr": 5727,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "selftest",
       "addr": 5777,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "lookup",
       "addr": 5953,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_run",
       "addr": 6043,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_parity",
       "addr": 6098,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_fib",
       "addr": 6175,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_shift",
       "addr": 6270,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_blit",
       "addr": 6350,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_format",
       "addr": 6415,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_append",
       "addr": 6510,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "h_copy",
       "addr": 6596,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "usage",
       "addr": 6669,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "fixture_ctor",
       "addr": 6714,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "fixture_dtor",
       "addr": 6778,
-      "kind": "t"
+      "bind": "LOCAL"
     },
     {
       "name": "main",
       "addr": 6800,
-      "kind": "T"
+      "bind": "GLOBAL"
     },
     {
-      "name": "data_start",
-      "addr": 16384,
-      "kind": "W"
+      "name": "_fini",
+      "addr": 7104,
+      "bind": "GLOBAL"
     }
   ]
 }

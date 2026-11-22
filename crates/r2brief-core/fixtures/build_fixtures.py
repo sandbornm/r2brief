@@ -9,6 +9,7 @@ unusual interpreter). No third-party malware is used or redistributed.
 from __future__ import annotations
 
 import json
+import re
 import os
 import shutil
 import struct
@@ -53,6 +54,26 @@ def run(cmd: list[str]) -> None:
 
 
 def nm_funcs(prefix: str, path: Path) -> list[dict]:
+    """Ground truth: every STT_FUNC in .symtab with a nonzero value that lies in
+    an SHF_EXECINSTR section other than PLT stubs (readelf is the reference)."""
+    secs = []
+    for line in subprocess.check_output([f"{prefix}readelf", "-SW", str(path)], text=True).splitlines():
+        m = re.match(r"\s*\[\s*\d+\]\s+(\S+)\s+\S+\s+([0-9a-f]+)\s+[0-9a-f]+\s+([0-9a-f]+)\s+\S+\s+(\S*)", line)
+        if m and "X" in m.group(4) and not (m.group(1).startswith(".plt") or m.group(1) == ".iplt"):
+            secs.append((int(m.group(2), 16), int(m.group(2), 16) + int(m.group(3), 16)))
+    by_addr: dict[int, dict] = {}
+    for line in subprocess.check_output([f"{prefix}readelf", "-sW", str(path)], text=True).splitlines():
+        parts = line.split()
+        if len(parts) >= 8 and parts[3] == "FUNC" and parts[6] != "UND":
+            addr = int(parts[1], 16)
+            if addr and any(s <= addr < e for s, e in secs):
+                name = parts[7].split("@")[0]
+                if addr not in by_addr or parts[4] == "GLOBAL":
+                    by_addr[addr] = {"name": name, "addr": addr, "bind": parts[4]}
+    return [by_addr[a] for a in sorted(by_addr)]
+
+
+def _old_nm_funcs(prefix: str, path: Path) -> list[dict]:
     """Return function symbols from nm -n (address ascending)."""
     out = subprocess.check_output([f"{prefix}nm", "-n", "--defined-only", str(path)], text=True)
     funcs = []
@@ -391,17 +412,67 @@ def infect_init_array(src: Path, dst: Path) -> dict:
     if file_off is None:
         raise SystemExit("init_array not in a LOAD")
     bogus = 0x7fff_0000_0000  # high VA outside any PT_LOAD on our fixtures
-    if e.c64:
-        e.wu64(file_off, bogus)
-    else:
-        e.wu32(file_off, bogus)
+    # The loader applies R_*_RELATIVE addends and ignores the in-file slot, so a
+    # real hijack on PIE patches the addend. We patch ONLY the addend (slot left
+    # intact) so a checker that reads the raw slot misses it.
+    rela = relasz = None
+    off = dyn_off
+    while off + ent <= dyn_end:
+        tag_s = struct.unpack_from("<q" if e.le else ">q", data, off)[0] if e.c64 else 0
+        val = e.word(off + (8 if e.c64 else 4))
+        if tag_s == 7:
+            rela = val
+        elif tag_s == 8:
+            relasz = val
+        elif tag_s == 0:
+            break
+        off += ent
+    rel_type = {62: 8, 183: 1027}.get(e.u16(18))
+    patched = "slot"
+    if e.c64 and rela and relasz and rel_type:
+        rela_off = None
+        for i in range(e.phnum):
+            if e.ph_type(i) != PT_LOAD:
+                continue
+            va = e.ph_field(i, "vaddr"); fo = e.ph_field(i, "offset"); fsz = e.ph_field(i, "filesz")
+            if va <= rela < va + fsz:
+                rela_off = fo + (rela - va)
+        for k in range(relasz // 24):
+            o = rela_off + k * 24
+            r_off, r_info = e.u64(o), e.u64(o + 8)
+            if r_off == init_array and (r_info & 0xffffffff) == rel_type:
+                e.wu64(o + 16, bogus)
+                patched = "rela_addend"
+                break
+    if patched == "slot":
+        if e.c64:
+            e.wu64(file_off, bogus)
+        else:
+            e.wu32(file_off, bogus)
     dst.write_bytes(data)
     return {
         "technique": "init_array_hijack",
         "init_array": init_array,
         "bogus_entry": bogus,
+        "patched": patched,
         "expected_finding_ids": ["elf:dt_init_array:entry0:outside_text"],
     }
+
+
+def sstrip(src: Path, dst: Path) -> None:
+    """Drop the section header table (sstrip-style): zero e_shoff/e_shnum/
+    e_shstrndx and truncate to the end of the last segment's file bytes."""
+    data = bytearray(src.read_bytes())
+    e = ElfMut(data)
+    end = 0
+    for i in range(e.phnum):
+        end = max(end, e.ph_field(i, "offset") + e.ph_field(i, "filesz"))
+    end = max(end, e.phoff + e.phnum * e.phentsize)
+    if e.c64:
+        e.wu64(40, 0); e.wu16(60, 0); e.wu16(62, 0)
+    else:
+        e.wu32(32, 0); e.wu16(48, 0); e.wu16(50, 0)
+    dst.write_bytes(bytes(data[:end]))
 
 
 def build_one(arch: str, prefix: str, label: str) -> list[dict]:
@@ -425,6 +496,24 @@ def build_one(arch: str, prefix: str, label: str) -> list[dict]:
         "twin": base.name,
     }, indent=2) + "\n")
     records.append({"name": stripped.name, "kind": "stripped", "arch": label, "truth": f"{stripped.name}.json"})
+
+    # Extra variants: legacy non-PIE layout (data ~2 MiB above text) must not
+    # trip layout heuristics; no-unwind-tables exercises the sparse-eh_frame path.
+    variants = [
+        ("nopie", "clean-nopie", ["-no-pie", "-Wl,-z,noseparate-code"]),
+        ("noeh", "stripped-noeh", ["-fno-asynchronous-unwind-tables", "-fno-unwind-tables"]),
+    ]
+    for suffix, kind, extra in variants:
+        vb = BIN / f"triage-{arch}-{suffix}-sym"
+        run([f"{prefix}gcc", *cflags, *extra, "-o", str(vb), str(SRC)])
+        vfuncs = nm_funcs(prefix, vb)
+        vs = BIN / f"triage-{arch}-{suffix}"
+        run([f"{prefix}strip", "-o", str(vs), str(vb)])
+        vb.unlink()
+        (TRUTH / f"{vs.name}.json").write_text(json.dumps({
+            "binary": vs.name, "arch": label, "functions": vfuncs, "flags": extra,
+        }, indent=2) + "\n")
+        records.append({"name": vs.name, "kind": kind, "arch": label, "truth": f"{vs.name}.json"})
 
     # Infections applied to the stripped twin so findings aren't masked by symbols.
     for technique, fn in [
@@ -450,6 +539,22 @@ def build_one(arch: str, prefix: str, label: str) -> list[dict]:
         (TRUTH / f"{out.name}.json").write_text(json.dumps(meta, indent=2) + "\n")
         records.append({"name": out.name, "kind": "infected", "arch": label,
                         "technique": meta["technique"], "truth": f"{out.name}.json"})
+    # Sectionless (sstrip) twins: clean and PT_NOTE-infected. This is the
+    # "stripped + infected" sample the demo opens first.
+    ss = BIN / f"triage-{arch}-sstrip"
+    sstrip(stripped, ss)
+    (TRUTH / f"{ss.name}.json").write_text(json.dumps({"binary": ss.name, "arch": label, "functions": funcs}, indent=2) + "\n")
+    records.append({"name": ss.name, "kind": "sectionless", "arch": label, "truth": f"{ss.name}.json"})
+    note = BIN / f"triage-{arch}-note"
+    if note.exists():
+        ns = BIN / f"triage-{arch}-note-sstrip"
+        sstrip(note, ns)
+        meta = json.loads((TRUTH / f"{note.name}.json").read_text())
+        meta.update({"binary": ns.name, "source": note.name, "sectionless": True})
+        meta["expected_finding_ids"] = meta["expected_finding_ids"] + ["elf:no_section_headers"]
+        (TRUTH / f"{ns.name}.json").write_text(json.dumps(meta, indent=2) + "\n")
+        records.append({"name": ns.name, "kind": "infected", "arch": label,
+                        "technique": "pt_note_to_load+sstrip", "truth": f"{ns.name}.json"})
     return records
 
 

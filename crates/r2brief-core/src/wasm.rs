@@ -43,6 +43,16 @@ fn stringify_u64_fields(v: &mut serde_json::Value) {
                         }
                     }
                 }
+                if k == "plt_stubs" {
+                    if let Some(serde_json::Value::Array(a)) = map.get_mut(&k) {
+                        for x in a.iter_mut() {
+                            if let Some(u) = x.as_u64() {
+                                *x = serde_json::Value::String(format!("0x{u:x}"));
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if let Some(child) = map.get_mut(&k) {
                     stringify_u64_fields(child);
                 }

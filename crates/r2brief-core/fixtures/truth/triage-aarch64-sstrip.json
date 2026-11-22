@@ -1,0 +1,201 @@
+{
+  "binary": "triage-aarch64-sstrip",
+  "arch": "aarch64",
+  "functions": [
+    {
+      "name": "_init",
+      "addr": 3088,
+      "bind": "GLOBAL"
+    },
+    {
+      "name": "_start",
+      "addr": 3520,
+      "bind": "GLOBAL"
+    },
+    {
+      "name": "call_weak_fn",
+      "addr": 3572,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "deregister_tm_clones",
+      "addr": 3600,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "register_tm_clones",
+      "addr": 3648,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "__do_global_dtors_aux",
+      "addr": 3712,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "frame_dummy",
+      "addr": 3792,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "fnv1a",
+      "addr": 3800,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "rotl32",
+      "addr": 3860,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "mix",
+      "addr": 3872,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "fib",
+      "addr": 3916,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "is_even",
+      "addr": 3984,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "is_odd",
+      "addr": 4020,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "classify",
+      "addr": 4056,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "count_class",
+      "addr": 4180,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "tree_height",
+      "addr": 4252,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "tree_sum",
+      "addr": 4324,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "cmp_int",
+      "addr": 4392,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_hash",
+      "addr": 4420,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_count",
+      "addr": 4496,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "node_new",
+      "addr": 4564,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "tree_insert",
+      "addr": 4612,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "sorted_checksum",
+      "addr": 4708,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "tree_free",
+      "addr": 4804,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "selftest",
+      "addr": 4864,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "lookup",
+      "addr": 5096,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_run",
+      "addr": 5196,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_parity",
+      "addr": 5256,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_fib",
+      "addr": 5340,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_shift",
+      "addr": 5436,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_blit",
+      "addr": 5536,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_format",
+      "addr": 5612,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_append",
+      "addr": 5720,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_copy",
+      "addr": 5824,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "usage",
+      "addr": 5908,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "fixture_ctor",
+      "addr": 5968,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "fixture_dtor",
+      "addr": 6036,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "main",
+      "addr": 6060,
+      "bind": "GLOBAL"
+    },
+    {
+      "name": "_fini",
+      "addr": 6272,
+      "bind": "GLOBAL"
+    }
+  ]
+}

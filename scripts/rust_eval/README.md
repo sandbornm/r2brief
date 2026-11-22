@@ -22,7 +22,7 @@ puts a stripped Rust binary's own code at the top of its ranked regions.
   than one hit below baseline (0.2 at k=5, 0.1 at k=10) or r2b emits no
   briefing. Raise the baseline in the PR that improves ranking.
 
-Reproduce locally (Linux, rustup, `gcc-aarch64-linux-gnu`, `make`):
+Reproduce locally (Linux, rustup, `gcc-aarch64-linux-gnu`, `libc6-dev-arm64-cross`, `make`):
 
 ```sh
 rustup toolchain install 1.93.0 --profile minimal --target aarch64-unknown-linux-gnu

@@ -69,6 +69,12 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   `sub sp` after straight-line code is a stack adjustment, not a
   function start; callee discovery no longer accepts a non-prologue
   `sub` head.
+  Never returning must be proven: a callee whose walk hits the budget
+  counts as returning, a `b` to a bare `sub sp` or other mid-function
+  label is local, and a `b` to a prologue-less function that nothing
+  falls into is a tail call. An ELF entry at the vector table is
+  accepted, and the C `main` and callee scans stop at a `sub sp` that
+  follows a return or unconditional branch.
 - Briefing `next_steps` / import `next_actions` emit `r2b verify` /
   `r2b decompile`, not `r2 axt`. `handoff.named_imports` lists buffer
   imports that verify can take without auto-queueing them on `next_argv`.

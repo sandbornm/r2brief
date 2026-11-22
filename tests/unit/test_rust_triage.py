@@ -1974,11 +1974,13 @@ def test_elf_header_bytes_are_not_program_data(tmp_path: Path):
     assert image.load_int(LOC, 1) is not None
     refs, _starts = _sweep_xrefs(image, {shoff: ("registry", None)})
     assert not any(shoff in vas for vas in refs.values())
-def _write_cortex_text_elf(path: Path, text: bytes, flash: int = 0x08000000) -> None:
+def _write_cortex_text_elf(
+    path: Path, text: bytes, flash: int = 0x08000000, entry: int | None = None
+) -> None:
     """Minimal Thumb Cortex-M ELF with a vector table and rustc .comment."""
     load_off = 0x100
     text_va = flash + 0x100
-    ro_va = flash + 0x200
+    ro_va = text_va + max(0x100, (len(text) + 0xFF) & ~0xFF)
     sp = 0x20004000
     path_s = b"fw_uart/src/main.rs"
     record = struct.pack("<IIII", ro_va + 16, len(path_s), 4, 2)
@@ -2024,7 +2026,7 @@ def _write_cortex_text_elf(path: Path, text: bytes, flash: int = 0x08000000) -> 
         2,
         40,
         1,
-        text_va | 1,
+        text_va | 1 if entry is None else entry,
         52,
         shoff,
         0x05000000,
@@ -2219,3 +2221,110 @@ def test_wide_thumb_tail_stub_is_a_thunk():
     body = _thumb_bw(start, start + 0x40) + THUMB_BX_LR * 0x30
     image = _thumb_image(start, body)
     assert _is_thunk(image, start)
+
+
+THUMB_NOP = b"\x00\xbf"
+THUMB_SPIN = b"\xfe\xe7"  # b .
+THUMB_PUSH_R4_LR = b"\x10\xb5"  # push {r4, lr}
+
+
+def test_cortex_large_init_that_returns_is_not_user_main(tmp_path: Path):
+    """A callee too large to walk is not proven to diverge (`bl big_init; bl main`)."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    reset = flash + 0x100
+    main = reset + 0x10
+    user = reset + 0x20
+    big = reset + 0x40
+    body = bytearray(b"\x00" * 0x40)
+    body[0:10] = _thumb_bl(reset, big) + _thumb_bl(reset + 4, main) + THUMB_UDF
+    body[0x10:0x18] = THUMB_PUSH_R7_LR + _thumb_bl(main + 2, user) + THUMB_UDF
+    body[0x20:0x24] = THUMB_PUSH_R4_LR + THUMB_SPIN
+    body += THUMB_NOP * 600 + THUMB_BX_LR  # big_init: 601 instructions, then returns
+    binary = tmp_path / "fw-big-init"
+    _write_cortex_text_elf(binary, bytes(body), flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+    assert info["entry_chain"] == [hex(reset), hex(main), hex(user)]
+
+
+def test_cortex_branch_to_mid_function_sub_sp_is_local(tmp_path: Path):
+    """`b 1f` over a literal pool to `sub sp, #8` stays inside Reset."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    reset = flash + 0x100
+    user = reset + 0x30
+    body = bytearray(b"\x00" * 0x40)
+    body[0:2] = _thumb_b(reset, reset + 8)
+    body[4:8] = b"\x00\x00\x00\x20"  # literal pool
+    body[8:10] = THUMB_SUB_SP_8
+    body[10:12] = b"\x00\x20"  # movs r0, #0
+    body[12:14] = b"\x01\x30"  # 1: adds r0, #1
+    body[14:16] = b"\x0a\x28"  # cmp r0, #10
+    body[16:18] = _thumb_beq(reset + 16, reset + 22)
+    body[18:20] = _thumb_b(reset + 18, reset + 12)
+    body[20:22] = THUMB_NOP
+    body[22:28] = _thumb_bl(reset + 22, user) + THUMB_UDF
+    body[0x30:0x34] = THUMB_PUSH_R4_LR + THUMB_SPIN
+    binary = tmp_path / "fw-b-over-pool"
+    _write_cortex_text_elf(binary, bytes(body), flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+
+
+@pytest.mark.parametrize("adjacent", [True, False])
+def test_cortex_reset_tail_branch_to_prologue_less_main(tmp_path: Path, adjacent: bool):
+    """`Reset: b.w main` reaches a `main` that opens without a push."""
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    reset = flash + 0x100
+    main = reset + 4 if adjacent else reset + 0x20
+    body = bytearray(b"\x00" * 0x40)
+    body[0:4] = _thumb_bw(reset, main)
+    if not adjacent:
+        body[0x1C:0x1E] = THUMB_BX_LR  # previous function's return
+        body[0x1E:0x20] = THUMB_NOP  # padding
+    off = main - reset
+    # main: movs r0, #0; 1: adds r0, #1; b 1b
+    body[off : off + 6] = b"\x00\x20" + b"\x01\x30" + _thumb_b(main + 4, main + 2)
+    binary = tmp_path / "fw-b-main"
+    _write_cortex_text_elf(binary, bytes(body), flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(main)
+
+
+def test_cortex_entry_at_the_vector_table_is_accepted(tmp_path: Path):
+    pytest.importorskip("capstone")
+    flash = 0x08000000
+    reset = flash + 0x100
+    user = reset + 0x10
+    body = bytearray(b"\x00" * 0x20)
+    body[0:6] = _thumb_bl(reset, user) + THUMB_UDF
+    body[0x10:0x14] = THUMB_PUSH_R4_LR + THUMB_SPIN
+    binary = tmp_path / "fw-entry-vectors"
+    _write_cortex_text_elf(binary, bytes(body), flash, entry=flash)
+    info = analyze_rust(binary)
+    assert info is not None
+    assert info["user_main"] == hex(user)
+
+
+def test_user_main_scan_stops_at_sub_sp_after_a_tail_branch():
+    """C main ending in a tail `b` is not scanned into a `sub sp` leaf after it."""
+    pytest.importorskip("capstone")
+    c_main = 0x10000
+    lang = 0x18000
+    user = 0x19000
+    other = 0x19100
+    tail = 0x17000
+    body = _adr(0, c_main, user) + _bl(c_main + 4, lang)
+    pc = c_main + len(body)
+    body += _u32(0x14000000 | (((tail - pc) >> 2) & 0x3FFFFFF))  # b tail
+    pc += 4
+    body += _sub_sp(0x10) + _adr(0, pc + 4, other) + _bl(pc + 8, lang) + RET
+    image = _aarch64_image(
+        c_main, body, extra=[(lang, RET), (user, PAC + RET), (other, PAC + RET), (tail, RET)]
+    )
+    assert _recover_user_main(image, c_main) == user

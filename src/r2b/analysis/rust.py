@@ -971,6 +971,12 @@ def _is_return(insn: Any) -> bool:
     return False
 
 
+def _ends_block(insn: Any) -> bool:
+    """A return, trap or unconditional branch: nothing falls through it."""
+    mnem = _base_mnemonic(insn)
+    return _is_return(insn) or mnem in {"udf", "bkpt"} or _is_unconditional_b(insn)
+
+
 def _recover_libc_main(image: _Image) -> int | None:
     entry = image.entry
     thumb = image.arch == "arm" and bool(entry & 1)
@@ -994,6 +1000,7 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
     seen: list[int] = []
     last: int | None = None
     in_opening = True
+    after_end = False
     for count, insn in enumerate(_iter_insns(image, c_main, thumb, 0x1000)):
         if count >= 1024:
             break
@@ -1001,8 +1008,11 @@ def _recover_user_main(image: _Image, c_main: int) -> int | None:
             pass
         else:
             in_opening = False
-            if insn.address != c_main and _starts_function(insn):
+            if insn.address != c_main and (
+                _starts_function(insn) or (after_end and _is_frame_alloc(insn))
+            ):
                 break
+        after_end = _ends_block(insn)
         values, _refs, is_call = machine.feed(insn)
         for value in values:
             code = image.mark_thumb(value)
@@ -1058,7 +1068,8 @@ def _cortex_reset(image: _Image) -> tuple[int, int] | None:
         code = image.code_addr(reset)
         if code is None:
             continue
-        if image.entry and (image.entry | 1) != (reset | 1):
+        # e_entry, when set, names Reset or the vector table itself.
+        if image.entry and (image.entry | 1) != (reset | 1) and (image.entry & ~1) != base:
             continue
         return sp, code
     return None
@@ -1089,9 +1100,33 @@ def _thumb_insn(image: _Image, addr: int) -> Any | None:
 
 
 def _function_like(image: _Image, addr: int) -> bool:
-    """A branch target that opens a new function rather than a local label."""
+    """A branch target that opens a new function rather than a local label.
+
+    It opens with a prologue that cannot sit mid-function (``push {.., lr}``),
+    or nothing falls into it: the instruction ending at ``addr``, after any
+    ``nop`` padding, is a return, trap or unconditional branch.
+    """
     head = _thumb_insn(image, addr)
-    return head is not None and _is_prologue(head)
+    if head is None:
+        return False
+    if _starts_function(head):
+        return True
+    end = addr
+    for _ in range(4):
+        prev = next(
+            (
+                insn
+                for size in (2, 4)
+                if (insn := _thumb_insn(image, end - size)) is not None and insn.size == size
+            ),
+            None,
+        )
+        if prev is None:
+            return False
+        if _base_mnemonic(prev) != "nop":
+            return _ends_block(prev)
+        end = prev.address
+    return False
 
 
 @dataclass
@@ -1110,8 +1145,9 @@ def _thumb_flow(image: _Image, start: int, noreturn: Any) -> _Flow:
     """Walk the Thumb function at ``start`` along every reachable path.
 
     Fall-through, conditional branches, ``cbz``/``cbnz`` and local ``b`` are
-    followed. A ``b`` into a function-like target, or to before ``start``, is
-    a tail transfer and is not followed. A path ends at a return, ``udf``,
+    followed. A ``b`` into a function-like target (see ``_function_like``), or
+    to before ``start``, is a tail transfer and is not followed. A conditional
+    branch to before ``start`` leaves the function and counts as a return. A path ends at a return, ``udf``,
     ``bkpt``, a spin, or after a ``bl`` whose callee ``noreturn(target)``
     says never returns.
     """
@@ -1170,7 +1206,9 @@ def _thumb_flow(image: _Image, start: int, noreturn: Any) -> _Flow:
         if mnem in _COND_BRANCHES or mnem.split(".")[0] in _COND_BRANCHES:
             flow.local_branches += 1
             code = image.code_addr(target) if target is not None else None
-            if code is not None:
+            if code is not None and code < start:
+                flow.returns = True  # leaves the function: cannot prove it diverges
+            elif code is not None:
                 heapq.heappush(pending, code)
         heapq.heappush(pending, nxt)
     flow.transfers.sort()
@@ -1197,12 +1235,16 @@ class _NoReturn:
         self.depth += 1
         try:
             flow = self.flow(addr)
-            returns = flow.returns or any(
-                kind == "tail" and not self(target) for _site, target, kind in flow.transfers
+            # Never returning must be proven: a walk cut short by the budget
+            # may have missed the epilogue, so it counts as returning.
+            returns = (
+                flow.returns
+                or flow.exhausted
+                or any(
+                    kind == "tail" and not self(target)
+                    for _site, target, kind in flow.transfers
+                )
             )
-            # A function too large to walk is treated as never returning.
-            if flow.exhausted and not flow.returns:
-                returns = False
         finally:
             self.depth -= 1
         self.memo[addr] = returns
@@ -1296,15 +1338,19 @@ def _callees(image: _Image, start: int) -> list[int]:
     machine = _Machine(image, thumb)
     found: list[int] = []
     in_opening = True
+    after_end = False
     for insn in _iter_insns(image, start, thumb, 0x800):
         if in_opening and _is_frame_setup(insn):
             pass
         else:
             in_opening = False
-            if insn.address != start and _starts_function(insn):
+            if insn.address != start and (
+                _starts_function(insn) or (after_end and _is_frame_alloc(insn))
+            ):
                 break
             if insn.address != start and _is_return(insn):
                 break
+        after_end = _ends_block(insn)
         values, _refs, is_call = machine.feed(insn)
         if is_call:
             code = _direct_call_target(image, insn, thumb)
@@ -1358,7 +1404,7 @@ def _sweep_xrefs(
         for insn in _iter_insns(image, sec.addr, thumb, data_len):
             at_boundary = boundary
             mnem = _base_mnemonic(insn)
-            if _is_return(insn) or mnem in {"udf", "bkpt"} or _is_unconditional_b(insn):
+            if _ends_block(insn):
                 boundary = True
             elif mnem not in {"nop", "hint"}:
                 boundary = False

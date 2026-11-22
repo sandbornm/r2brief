@@ -28,7 +28,8 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
   per-function truth from a byte-identical symbolized twin, and reports
   user-code p@5/p@10 for `r2b brief --quick` on the `strip` and
   `cargostrip` variants in the job summary. It fails only on a drop of
-  more than one hit below `scripts/rust_eval/baseline.json`.
+  more than one hit below `scripts/rust_eval/baseline.json`, which is set
+  to 1.0/0.8 for both variants.
 - `r2b brief` on a stripped Rust ARM ELF adds a `rust` object
   (`rustc_version`, `rustc_commit`, `user_crates`, `user_main`,
   `entry_chain`, `functions`) and ranks user functions, with real

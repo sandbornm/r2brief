@@ -20,7 +20,9 @@ puts a stripped Rust binary's own code at the top of its ranked regions.
   addresses, each true function counted once.
 - Soft floor: `baseline.json`. The job fails only when a score drops more
   than one hit below baseline (0.2 at k=5, 0.1 at k=10) or r2b emits no
-  briefing. Raise the baseline in the PR that improves ranking.
+  briefing. Raise the baseline in the PR that improves ranking. Current
+  baseline: 1.0/0.8 for `strip` and `cargostrip` (since #39; it was
+  0.2/0.2 before). A job fails below 0.8 at p@5 or 0.7 at p@10.
 
 Reproduce locally (Linux, rustup, `gcc-aarch64-linux-gnu`, `libc6-dev-arm64-cross`, `make`):
 

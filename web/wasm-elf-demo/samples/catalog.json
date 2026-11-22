@@ -1,0 +1,52 @@
+{
+  "samples": [
+    {
+      "file": "triage-x86_64-stripped",
+      "arch": "x86-64",
+      "technique": "stripped",
+      "why": "Clean stripped PIE; function-recovery baseline.",
+      "sha256": "01c93c774cfcda7766bb55c49f4f83af0d58ff96a76947596fccb02ba9b570f3",
+      "size": 14472
+    },
+    {
+      "file": "triage-x86_64-note",
+      "arch": "x86-64",
+      "technique": "pt_note_to_load",
+      "why": "PT_NOTE rewritten to a distant executable PT_LOAD.",
+      "sha256": "75784784b1623d028c3dbf304ef0c9e952f5d1582f2528b38cb2b5c29d574d11",
+      "size": 14472
+    },
+    {
+      "file": "triage-x86_64-pad",
+      "arch": "x86-64",
+      "technique": "text_padding",
+      "why": "Executable PT_LOAD parked in .text page padding.",
+      "sha256": "d26a1c43c5a6eb27809f58176108054c446ed054bd72dcc81998fccf5275be08",
+      "size": 14472
+    },
+    {
+      "file": "triage-x86_64-init",
+      "arch": "x86-64",
+      "technique": "init_array_hijack",
+      "why": "DT_INIT_ARRAY[0] pointed outside any PF_X LOAD.",
+      "sha256": "b90bcd2be254a89b5220add56dc568cc39d4f9fd7a766f24001a3073566aff62",
+      "size": 14472
+    },
+    {
+      "file": "triage-aarch64-stripped",
+      "arch": "aarch64",
+      "technique": "stripped",
+      "why": "Clean stripped PIE; function-recovery baseline.",
+      "sha256": "ace464181c8fdd767bac8464a055288759b63f683803297f8e06e1b86e51c32e",
+      "size": 67496
+    },
+    {
+      "file": "triage-aarch64-note",
+      "arch": "aarch64",
+      "technique": "pt_note_to_load",
+      "why": "PT_NOTE rewritten to a distant executable PT_LOAD.",
+      "sha256": "5b1ae51ad6a8b9fb331a5902e4811ed9c538eff67c9c45d25796f1590a4a11d9",
+      "size": 67496
+    }
+  ]
+}

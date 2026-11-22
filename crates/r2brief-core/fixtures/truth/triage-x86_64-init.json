@@ -1,0 +1,194 @@
+{
+  "technique": "init_array_hijack",
+  "init_array": 15488,
+  "bogus_entry": 140733193388032,
+  "expected_finding_ids": [
+    "elf:dt_init_array:entry0:outside_text"
+  ],
+  "binary": "triage-x86_64-init",
+  "arch": "x86-64",
+  "kind": "infected",
+  "source": "triage-x86_64-stripped",
+  "functions": [
+    {
+      "name": "deregister_tm_clones",
+      "addr": 4752,
+      "kind": "t"
+    },
+    {
+      "name": "register_tm_clones",
+      "addr": 4800,
+      "kind": "t"
+    },
+    {
+      "name": "__do_global_dtors_aux",
+      "addr": 4864,
+      "kind": "t"
+    },
+    {
+      "name": "frame_dummy",
+      "addr": 4928,
+      "kind": "t"
+    },
+    {
+      "name": "fnv1a",
+      "addr": 4937,
+      "kind": "t"
+    },
+    {
+      "name": "rotl32",
+      "addr": 4978,
+      "kind": "t"
+    },
+    {
+      "name": "mix",
+      "addr": 4985,
+      "kind": "t"
+    },
+    {
+      "name": "fib",
+      "addr": 5009,
+      "kind": "t"
+    },
+    {
+      "name": "is_even",
+      "addr": 5054,
+      "kind": "t"
+    },
+    {
+      "name": "is_odd",
+      "addr": 5078,
+      "kind": "t"
+    },
+    {
+      "name": "classify",
+      "addr": 5102,
+      "kind": "t"
+    },
+    {
+      "name": "count_class",
+      "addr": 5189,
+      "kind": "t"
+    },
+    {
+      "name": "tree_height",
+      "addr": 5261,
+      "kind": "t"
+    },
+    {
+      "name": "tree_sum",
+      "addr": 5316,
+      "kind": "t"
+    },
+    {
+      "name": "cmp_int",
+      "addr": 5372,
+      "kind": "t"
+    },
+    {
+      "name": "h_hash",
+      "addr": 5395,
+      "kind": "t"
+    },
+    {
+      "name": "h_count",
+      "addr": 5469,
+      "kind": "t"
+    },
+    {
+      "name": "node_new",
+      "addr": 5534,
+      "kind": "t"
+    },
+    {
+      "name": "tree_insert",
+      "addr": 5573,
+      "kind": "t"
+    },
+    {
+      "name": "sorted_checksum",
+      "addr": 5643,
+      "kind": "t"
+    },
+    {
+      "name": "tree_free",
+      "addr": 5727,
+      "kind": "t"
+    },
+    {
+      "name": "selftest",
+      "addr": 5777,
+      "kind": "t"
+    },
+    {
+      "name": "lookup",
+      "addr": 5953,
+      "kind": "t"
+    },
+    {
+      "name": "h_run",
+      "addr": 6043,
+      "kind": "t"
+    },
+    {
+      "name": "h_parity",
+      "addr": 6098,
+      "kind": "t"
+    },
+    {
+      "name": "h_fib",
+      "addr": 6175,
+      "kind": "t"
+    },
+    {
+      "name": "h_shift",
+      "addr": 6270,
+      "kind": "t"
+    },
+    {
+      "name": "h_blit",
+      "addr": 6350,
+      "kind": "t"
+    },
+    {
+      "name": "h_format",
+      "addr": 6415,
+      "kind": "t"
+    },
+    {
+      "name": "h_append",
+      "addr": 6510,
+      "kind": "t"
+    },
+    {
+      "name": "h_copy",
+      "addr": 6596,
+      "kind": "t"
+    },
+    {
+      "name": "usage",
+      "addr": 6669,
+      "kind": "t"
+    },
+    {
+      "name": "fixture_ctor",
+      "addr": 6714,
+      "kind": "t"
+    },
+    {
+      "name": "fixture_dtor",
+      "addr": 6778,
+      "kind": "t"
+    },
+    {
+      "name": "main",
+      "addr": 6800,
+      "kind": "T"
+    },
+    {
+      "name": "data_start",
+      "addr": 16384,
+      "kind": "W"
+    }
+  ]
+}

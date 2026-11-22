@@ -1,0 +1,104 @@
+{
+  "schema_version": "r2brief.core.fixtures.v1",
+  "source": "triage_fixture.c",
+  "arches": [
+    "x86-64",
+    "aarch64"
+  ],
+  "binaries": [
+    {
+      "name": "triage-x86_64",
+      "kind": "normal",
+      "arch": "x86-64",
+      "truth": "triage-x86_64.json"
+    },
+    {
+      "name": "triage-x86_64-stripped",
+      "kind": "stripped",
+      "arch": "x86-64",
+      "truth": "triage-x86_64-stripped.json"
+    },
+    {
+      "name": "triage-x86_64-note",
+      "kind": "infected",
+      "arch": "x86-64",
+      "technique": "pt_note_to_load",
+      "truth": "triage-x86_64-note.json"
+    },
+    {
+      "name": "triage-x86_64-pad",
+      "kind": "infected",
+      "arch": "x86-64",
+      "technique": "text_padding",
+      "truth": "triage-x86_64-pad.json"
+    },
+    {
+      "name": "triage-x86_64-rwx",
+      "kind": "infected",
+      "arch": "x86-64",
+      "technique": "rwx",
+      "truth": "triage-x86_64-rwx.json"
+    },
+    {
+      "name": "triage-x86_64-interp",
+      "kind": "infected",
+      "arch": "x86-64",
+      "technique": "interp_tamper",
+      "truth": "triage-x86_64-interp.json"
+    },
+    {
+      "name": "triage-x86_64-init",
+      "kind": "infected",
+      "arch": "x86-64",
+      "technique": "init_array_hijack",
+      "truth": "triage-x86_64-init.json"
+    },
+    {
+      "name": "triage-aarch64",
+      "kind": "normal",
+      "arch": "aarch64",
+      "truth": "triage-aarch64.json"
+    },
+    {
+      "name": "triage-aarch64-stripped",
+      "kind": "stripped",
+      "arch": "aarch64",
+      "truth": "triage-aarch64-stripped.json"
+    },
+    {
+      "name": "triage-aarch64-note",
+      "kind": "infected",
+      "arch": "aarch64",
+      "technique": "pt_note_to_load",
+      "truth": "triage-aarch64-note.json"
+    },
+    {
+      "name": "triage-aarch64-pad",
+      "kind": "infected",
+      "arch": "aarch64",
+      "technique": "text_padding",
+      "truth": "triage-aarch64-pad.json"
+    },
+    {
+      "name": "triage-aarch64-rwx",
+      "kind": "infected",
+      "arch": "aarch64",
+      "technique": "rwx",
+      "truth": "triage-aarch64-rwx.json"
+    },
+    {
+      "name": "triage-aarch64-interp",
+      "kind": "infected",
+      "arch": "aarch64",
+      "technique": "interp_tamper",
+      "truth": "triage-aarch64-interp.json"
+    },
+    {
+      "name": "triage-aarch64-init",
+      "kind": "infected",
+      "arch": "aarch64",
+      "technique": "init_array_hijack",
+      "truth": "triage-aarch64-init.json"
+    }
+  ]
+}

@@ -154,6 +154,52 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+  wasm-elf-triage:
+    name: WASM ELF triage (r2brief-core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack and cross toolchains
+        run: |
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            gcc gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu \
+            binutils-x86-64-linux-gnu binutils-aarch64-linux-gnu \
+            libc6-dev libc6-dev-amd64-cross libc6-dev-arm64-cross
+      - name: Build fixtures
+        run: python3 crates/r2brief-core/fixtures/build_fixtures.py
+      - name: Build and evaluate
+        working-directory: crates/r2brief-core
+        run: |
+          cargo build --release
+          cargo test --release
+          python3 eval/score.py
+      - name: wasm-pack
+        working-directory: crates/r2brief-core
+        run: |
+          wasm-pack build --target web --out-dir ../../web/wasm-elf-demo/pkg \
+            --release -- --features wasm --no-default-features
+      - name: Bundle round-trip
+        run: |
+          crates/r2brief-core/target/release/r2brief-core \
+            crates/r2brief-core/fixtures/bin/triage-x86_64-note \
+            --bundle "$RUNNER_TEMP/demo.r2br"
+          uv sync --locked
+          uv run python -c "from r2b.bundle import inspect_bundle; print(inspect_bundle('$RUNNER_TEMP/demo.r2br'))"
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2brief-core-eval
+          path: crates/r2brief-core/eval/results.json
+          if-no-files-found: ignore
+          retention-days: 14
+
   package:
     name: Package
     runs-on: ubuntu-latest

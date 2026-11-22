@@ -36,3 +36,6 @@ work/
 
 # Accidental local dirs
 MagicMock/
+
+# r2brief-core build
+crates/r2brief-core/target/

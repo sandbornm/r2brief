@@ -1,0 +1,5 @@
+{
+  "note": "User-code p@5/p@10 for `r2b brief --quick` on fd-find 10.5.2, aarch64, measured on this job's own build. A check fails only when a score drops more than one hit below its baseline (0.2 at k=5, 0.1 at k=10). Raise these numbers in the PR that improves ranking.",
+  "bins/aarch64-unknown-linux-gnu/strip/fd": {"p@5": 0.2, "p@10": 0.2},
+  "bins/aarch64-unknown-linux-gnu/cargostrip/fd": {"p@5": 0.2, "p@10": 0.2}
+}

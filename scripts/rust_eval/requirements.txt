@@ -1,0 +1,2 @@
+rust-demangler==1.0 \
+    --hash=sha256:2a2cdf400d1703dc73ae3aabb930dacb92772160b1dcb4ee2181a81878726948

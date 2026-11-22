@@ -159,15 +159,13 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             return Vec::new();
         };
         let ws = r.word_size();
-        if ws == 0 || sz > 1_048_576 {
-            // Cap at 1 MiB of pointer entries; hostile DT_*SZ must not OOM/abort.
+        if ws == 0 {
             return Vec::new();
         }
-        let n = (sz / ws) as usize;
-        if n > 65_536 {
-            return Vec::new();
-        }
-        let mut v = Vec::with_capacity(n);
+        // Hostile DT_*SZ must neither OOM nor hide entries: read the file-backed
+        // slots up to a fixed cap. check_init_hijack flags the oversized tag.
+        let n = (sz / ws).min(65_536) as usize;
+        let mut v = Vec::with_capacity(n.min(1024));
         for i in 0..n {
             let Some(slot) = (i as u64).checked_mul(ws).and_then(|d| addr.checked_add(d)) else {
                 break;

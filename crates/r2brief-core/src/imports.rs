@@ -93,6 +93,7 @@ pub fn list_imports(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<ImportS
         if let (Some(symtab), Some(strtab), Some(strsz)) = (d.symtab, d.strtab, d.strsz) {
             let syment = d.syment.unwrap_or(if elf.hdr.class64 { 24 } else { 16 });
             let r = elf.rd();
+            let mut bad_run = 0u32;
             for i in 0..4096u64 {
                 let Some(sym_off) = elf.va_to_off(symtab + i * syment) else { break };
                 let (name_off, info, shndx) = if elf.hdr.class64 {
@@ -109,8 +110,13 @@ pub fn list_imports(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<ImportS
                     )
                 };
                 if name_off as u64 >= strsz {
-                    break;
+                    bad_run += 1;
+                    if bad_run > 64 {
+                        break;
+                    }
+                    continue;
                 }
+                bad_run = 0;
                 if shndx != 0 {
                     continue;
                 }
@@ -118,7 +124,7 @@ pub fn list_imports(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<ImportS
                 if bind != 1 && bind != 2 {
                     continue;
                 }
-                let Some(str_off) = elf.va_to_off(strtab + name_off as u64) else { continue };
+                let Some(str_off) = strtab.checked_add(name_off as u64).and_then(|a| elf.va_to_off(a)) else { continue };
                 let Some((name_bytes, _)) = r.cstr(str_off, 512) else { continue };
                 if name_bytes.is_empty() {
                     if i == 0 {

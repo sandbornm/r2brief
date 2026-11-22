@@ -95,7 +95,11 @@ fn hostile_init_arraysz_does_not_abort() {
         off += 16;
     }
     let report = r2brief_core::analyze("hostile-init", &data).expect("must not abort");
-    assert!(report.findings.len() >= 1);
+    assert!(
+        report.findings.iter().any(|f| f.id == "elf:dt_init_arraysz:oversized"),
+        "oversized DT_INIT_ARRAYSZ not flagged: {:?}",
+        report.findings.iter().map(|f| &f.id).collect::<Vec<_>>()
+    );
 }
 
 #[test]

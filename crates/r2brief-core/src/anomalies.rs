@@ -21,6 +21,7 @@ pub fn check_all(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>) -> Vec<Finding> {
     out.extend(check_note_to_load(elf));
     out.extend(check_text_padding(elf));
     out.extend(check_reverse_text(elf));
+    out.extend(check_load_oob(elf));
     out.extend(check_sections(elf));
     out.extend(check_interp(elf));
     out.extend(check_stripped(elf));
@@ -297,6 +298,25 @@ fn check_reverse_text(elf: &Elf<'_>) -> Vec<Finding> {
     out
 }
 
+fn check_load_oob(elf: &Elf<'_>) -> Vec<Finding> {
+    elf.loads()
+        .filter(|p| p.file_end().map(|e| e > elf.len()).unwrap_or(true))
+        .map(|p| {
+            finding(
+                &format!("elf:load_oob:{}", p.index),
+                "PT_LOAD file range runs past end of file",
+                &format!(
+                    "PT_LOAD[{}] claims file 0x{:x}+0x{:x} but the file is 0x{:x} bytes. Truncated or tampered; analysis uses only the readable prefix.",
+                    p.index, p.p_offset, p.p_filesz, elf.len()
+                ),
+                80.0,
+                &["segment", "anomaly"],
+                vec![ph_evidence(p)],
+            )
+        })
+        .collect()
+}
+
 fn check_sections(elf: &Elf<'_>) -> Vec<Finding> {
     let mut out = Vec::new();
     if !elf.has_sections() {
@@ -496,6 +516,35 @@ fn check_init_hijack(elf: &Elf<'_>, d: &DynamicInfo) -> Vec<Finding> {
                     length: None,
                     bytes_hex: None,
                     detail: Some(format!("{tag}=0x{va:x}")),
+                }],
+            ));
+        }
+    }
+    // DT_*ARRAYSZ that claims more slots than the file backs.
+    let ws = if elf.hdr.class64 { 8 } else { 4 };
+    for (name, sz, got) in [
+        ("DT_INIT_ARRAYSZ", d.init_array_sz, d.init_array.len()),
+        ("DT_FINI_ARRAYSZ", d.fini_array_sz, d.fini_array.len()),
+        ("DT_PREINIT_ARRAYSZ", d.preinit_array_sz, d.preinit_array.len()),
+    ] {
+        let Some(sz) = sz else { continue };
+        if sz % ws != 0 || sz / ws > got as u64 {
+            out.push(finding(
+                &format!("elf:{}:oversized", name.to_lowercase()),
+                &format!("{name} exceeds file-backed array"),
+                &format!(
+                    "{name}=0x{sz:x} claims {} slots but only {got} are readable from PT_LOAD file bytes (or size is not a multiple of {ws}). The loader would walk past the array.",
+                    sz / ws
+                ),
+                85.0,
+                &["dynamic", "init_array", "anomaly"],
+                vec![Evidence {
+                    kind: "dynamic".into(),
+                    offset: None,
+                    address: None,
+                    length: Some(sz),
+                    bytes_hex: None,
+                    detail: Some(format!("{name}=0x{sz:x} readable_slots={got}")),
                 }],
             ));
         }

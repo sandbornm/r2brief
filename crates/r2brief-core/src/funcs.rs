@@ -160,7 +160,8 @@ fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>) {
     let mut calls = Vec::new();
     let mut prologues = Vec::new();
     for ph in elf.phdrs.iter().filter(|p| p.p_type == PT_LOAD && p.p_flags & PF_X != 0) {
-        let Some(bytes) = elf.rd().bytes(ph.p_offset, ph.p_filesz) else {
+        let avail = ph.p_filesz.min(elf.len().saturating_sub(ph.p_offset));
+        let Some(bytes) = elf.rd().bytes(ph.p_offset, avail) else {
             notes.push(format!("x86-64: PT_LOAD[{}] unreadable", ph.index));
             continue;
         };
@@ -217,7 +218,8 @@ fn scan_aarch64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>) 
     let mut calls = Vec::new();
     let mut prologues = Vec::new();
     for ph in elf.phdrs.iter().filter(|p| p.p_type == PT_LOAD && p.p_flags & PF_X != 0) {
-        let Some(bytes) = elf.rd().bytes(ph.p_offset, ph.p_filesz) else {
+        let avail = ph.p_filesz.min(elf.len().saturating_sub(ph.p_offset));
+        let Some(bytes) = elf.rd().bytes(ph.p_offset, avail) else {
             notes.push(format!("aarch64: PT_LOAD[{}] unreadable", ph.index));
             continue;
         };

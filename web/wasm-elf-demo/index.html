@@ -180,7 +180,7 @@ const catalog = await fetch('./samples/catalog.json').then(r => r.json());
 for (const s of catalog.samples) {
   const btn = document.createElement('button');
   btn.className = 'sample';
-  btn.innerHTML = `<strong>${s.file}</strong><span class="meta">${s.arch} · ${s.technique} · ${s.size} B</span>`;
+  btn.innerHTML = `<strong>${escapeHtml(s.file)}</strong><span class="meta">${escapeHtml(s.arch)} · ${escapeHtml(s.technique)} · ${escapeHtml(s.size)} B</span>`;
   btn.title = s.why;
   btn.onclick = () => loadSample(s.file);
   samplesEl.appendChild(btn);
@@ -193,31 +193,32 @@ function render(r) {
   const high = (f) => f.score >= 85 ? 'high' : f.score >= 60 ? 'mid' : 'low';
   outEl.innerHTML = `
     <div class="summary">
-      <div><code>${escapeHtml(s.name)}</code> · ${s.arch} · ${s.etype} · entry <code>${fmtAddr(s.entry)}</code>
-        · sha256 <code>${s.sha256.slice(0,16)}…</code></div>
+      <div><code>${escapeHtml(s.name)}</code> · ${escapeHtml(s.arch)} · ${escapeHtml(s.etype)} · entry <code>${escapeHtml(fmtAddr(s.entry))}</code>
+        · sha256 <code>${escapeHtml(String(s.sha256).slice(0,16))}…</code></div>
       <div class="grid">
         <div class="stat"><b>Findings</b>${findings.length}</div>
         <div class="stat"><b>Functions</b>${funcs.length}</div>
-        <div class="stat"><b>Imports</b>${s.import_count}</div>
+        <div class="stat"><b>Imports</b>${escapeHtml(s.import_count)}</div>
         <div class="stat"><b>Stripped</b>${s.stripped ? 'yes' : 'no'}</div>
-        <div class="stat"><b>Dangerous</b>${(s.dangerous_imports||[]).join(', ') || '—'}</div>
-        <div class="stat"><b>eh_frame</b>${r.functions.eh_frame_starts}</div>
+        <div class="stat"><b>Dangerous</b>${escapeHtml((s.dangerous_imports||[]).join(', ') || '—')}</div>
+        <div class="stat"><b>eh_frame</b>${escapeHtml(r.functions.eh_frame_starts)}</div>
       </div>
       <div style="margin-top:0.7rem">
         <button class="linkish" id="dl">Download .r2br evidence bundle</button>
       </div>
     </div>
+    ${(r.parse_notes||[]).length ? `<div class="ev">parse notes: ${escapeHtml(r.parse_notes.join(' · '))}</div>` : ''}
     <h2 style="font-size:0.8rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Findings</h2>
     ${findings.map(f => `
       <article class="finding ${high(f)}">
-        <div class="id">${escapeHtml(f.id)} · score ${f.score}</div>
+        <div class="id">${escapeHtml(f.id)} · score ${escapeHtml(f.score)}</div>
         <h3>${escapeHtml(f.title)}</h3>
         <p class="why">${escapeHtml(f.why)}</p>
         <div class="tags">${(f.tags||[]).map(t=>`<span>${escapeHtml(t)}</span>`).join('')}</div>
         ${(f.evidence||[]).map(e => {
           const bits=[escapeHtml(e.detail || JSON.stringify(e))];
-          if (e.offset!=null) bits.push('offset='+fmtAddr(e.offset));
-          if (e.address!=null) bits.push('va='+fmtAddr(e.address));
+          if (e.offset!=null) bits.push(escapeHtml('offset='+fmtAddr(e.offset)));
+          if (e.address!=null) bits.push(escapeHtml('va='+fmtAddr(e.address)));
           return '<div class="ev">'+bits.join(' · ')+'</div>';
         }).join('')}
       </article>
@@ -227,10 +228,10 @@ function render(r) {
       <thead><tr><th>start</th><th>end</th><th>confidence</th><th>sources</th></tr></thead>
       <tbody>
         ${funcs.slice(0,80).map(f => `<tr>
-          <td>${fmtAddr(f.start)}</td>
-          <td>${fmtAddr(f.end)}</td>
-          <td>${f.confidence}</td>
-          <td>${(f.sources||[]).join(', ')}</td>
+          <td>${escapeHtml(fmtAddr(f.start))}</td>
+          <td>${escapeHtml(fmtAddr(f.end))}</td>
+          <td>${escapeHtml(f.confidence)}</td>
+          <td>${escapeHtml((f.sources||[]).join(', '))}</td>
         </tr>`).join('')}
       </tbody>
     </table>

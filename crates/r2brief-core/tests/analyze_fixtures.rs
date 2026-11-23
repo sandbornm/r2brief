@@ -208,3 +208,56 @@ fn init_array_hijack_via_rela_addend() {
         assert!(ids.iter().any(|i| i == "elf:dt_init_array:entry0:outside_text"), "{name}: {ids:?}");
     }
 }
+
+fn import_names(name: &str) -> Option<Vec<String>> {
+    let path = fixture(name);
+    if !path.exists() {
+        require_fixture(&path);
+        return None;
+    }
+    let data = std::fs::read(&path).unwrap();
+    let report = r2brief_core::analyze(name, &data).unwrap();
+    let mut v: Vec<String> = report.analysis["imports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["name"].as_str().unwrap().to_string())
+        .collect();
+    v.sort();
+    Some(v)
+}
+
+/// Dropping section headers must not change the import list: the DT_SYMTAB
+/// walk is bounded by the hash-table count or the DT_STRTAB gap, so it does
+/// not run on into .gnu.version / .rela.dyn.
+#[test]
+fn sstrip_preserves_import_list() {
+    for arch in ["x86_64", "aarch64"] {
+        let Some(a) = import_names(&format!("triage-{arch}-stripped")) else { return };
+        let Some(b) = import_names(&format!("triage-{arch}-sstrip")) else { return };
+        assert!(!a.is_empty());
+        assert_eq!(a, b, "{arch}");
+    }
+}
+
+/// Provenance carries the fields schemas/provenance.schema.json requires.
+#[test]
+fn provenance_has_schema_fields() {
+    let path = fixture("triage-x86_64-note");
+    if !path.exists() {
+        require_fixture(&path);
+        return;
+    }
+    let data = std::fs::read(&path).unwrap();
+    let report = r2brief_core::analyze("dir/triage-x86_64-note", &data).unwrap();
+    let p = &report.analysis["provenance"];
+    assert_eq!(p["schema_version"], "r2b.provenance.v1");
+    assert_eq!(p["producer"]["name"], "r2b");
+    for k in ["input", "plan", "config", "adapter_status", "actions", "replay"] {
+        assert!(!p[k].is_null(), "missing {k}");
+    }
+    assert_eq!(p["input"]["sha256"], report.subject.sha256);
+    assert_eq!(p["input"]["path"], "dir/triage-x86_64-note");
+    assert_eq!(p["replay"]["expected_sha256"], report.subject.sha256);
+    assert_eq!(p["replay"]["input_token"], "{input}");
+}

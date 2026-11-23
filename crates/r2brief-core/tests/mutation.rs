@@ -137,3 +137,34 @@ fn eh_frame_offset_near_max_does_not_panic() {
     assert!(hit);
     let _ = r2brief_core::analyze("eh", &d);
 }
+
+/// A sectionless exec LOAD full of `call next` (e8 00 00 00 00): one call
+/// target per 5 bytes. Output must stay bounded and say it was truncated.
+#[test]
+fn dense_call_targets_are_capped() {
+    let Some(mut d) = fixture("triage-x86_64-sstrip") else { return };
+    let exec = *phdrs(&d)
+        .iter()
+        .find(|&&o| rd32(&d, o) == 1 && rd32(&d, o + 4) & 1 != 0)
+        .unwrap();
+    while d.len() % 0x1000 != 0 {
+        d.push(0);
+    }
+    let start = d.len() as u64;
+    let n = 80_000usize; // > MAX_FUNCS call targets
+    for _ in 0..n {
+        d.extend_from_slice(&[0xe8, 0, 0, 0, 0]);
+    }
+    d.push(0xc3);
+    let len = (d.len() as u64) - start;
+    wr64(&mut d, exec + 8, start);
+    wr64(&mut d, exec + 16, 0x1000_0000);
+    wr64(&mut d, exec + 24, 0x1000_0000);
+    wr64(&mut d, exec + 32, len);
+    wr64(&mut d, exec + 40, len);
+    wr64(&mut d, 24, 0x1000_0000);
+    let r = r2brief_core::analyze("dense", &d).unwrap();
+    assert!(r.functions.functions.len() <= r2brief_core::funcs::MAX_FUNCS);
+    assert!(r.functions.call_targets > r2brief_core::funcs::MAX_FUNCS, "scan should see > cap: {}", r.functions.call_targets);
+    assert!(r.parse_notes.iter().any(|n| n.contains("truncated")), "{:?}", r.parse_notes);
+}

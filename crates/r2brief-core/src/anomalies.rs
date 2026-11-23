@@ -68,7 +68,7 @@ fn check_entry(elf: &Elf<'_>) -> Vec<Finding> {
             &["entry", "anomaly"],
             vec![Evidence {
                 kind: "header".into(),
-                offset: Some(if elf.hdr.class64 { 24 } else { 24 }),
+                offset: Some(24), // e_entry is at 0x18 in both classes
                 address: Some(e),
                 length: Some(if elf.hdr.class64 { 8 } else { 4 }),
                 bytes_hex: None,
@@ -126,14 +126,21 @@ fn check_rwx(elf: &Elf<'_>) -> Vec<Finding> {
 }
 
 // Unchecked arithmetic here is bounded: indices bounded by loads.len().
-
 #[allow(clippy::arithmetic_side_effects)]
-
 fn check_overlapping_loads(elf: &Elf<'_>) -> Vec<Finding> {
-    let loads: Vec<&Phdr> = elf.loads().collect();
+    // Bound work and output on hostile phdr tables (e_phnum up to 65535).
+    const MAX_LOADS: usize = 512;
+    const MAX_FINDINGS: usize = 16;
+    let loads: Vec<&Phdr> = elf.loads().take(MAX_LOADS).collect();
     let mut out = Vec::new();
     for i in 0..loads.len() {
+        if out.len() >= MAX_FINDINGS {
+            break;
+        }
         for j in (i + 1)..loads.len() {
+            if out.len() >= MAX_FINDINGS {
+                break;
+            }
             let a = loads[i];
             let b = loads[j];
             let Some(a_end) = a.p_vaddr.checked_add(a.p_memsz) else { continue };
@@ -486,9 +493,7 @@ fn check_stripped(elf: &Elf<'_>) -> Vec<Finding> {
 }
 
 // Unchecked arithmetic here is bounded: ws is the constant 4 or 8.
-
 #[allow(clippy::arithmetic_side_effects)]
-
 fn check_init_hijack(elf: &Elf<'_>, d: &DynamicInfo) -> Vec<Finding> {
     let mut out = Vec::new();
     // DT_INIT / DT_FINI point outside executable LOADs.

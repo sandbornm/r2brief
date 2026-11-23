@@ -199,6 +199,12 @@ jobs:
             --bundle "$RUNNER_TEMP/demo.r2br"
           uv sync --locked
           uv run python -c "from r2b.bundle import inspect_bundle; print(inspect_bundle('$RUNNER_TEMP/demo.r2br'))"
+          # manifest / briefing / provenance against schemas/*.schema.json
+          uv run python crates/r2brief-core/eval/check_bundle.py "$RUNNER_TEMP/demo.r2br"
+          crates/r2brief-core/target/release/r2brief-core \
+            crates/r2brief-core/fixtures/bin/triage-aarch64-note-sstrip \
+            --bundle "$RUNNER_TEMP/sstrip.r2br"
+          uv run python crates/r2brief-core/eval/check_bundle.py "$RUNNER_TEMP/sstrip.r2br"
       - name: Upload eval results
         if: always()
         uses: actions/upload-artifact@v4

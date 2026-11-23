@@ -24,6 +24,11 @@ pub struct Func {
     pub confidence: f64,
 }
 
+/// Upper bound on reported function starts (keeps report/bundle size bounded).
+pub const MAX_FUNCS: usize = 65_536;
+/// Upper bound on reported PLT stubs.
+pub const MAX_PLT_STUBS: usize = 8_192;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct FuncRecovery {
     pub arch: String,
@@ -41,9 +46,7 @@ pub struct FuncRecovery {
 }
 
 // Unchecked arithmetic here is bounded: i indexes merged.
-
 #[allow(clippy::arithmetic_side_effects)]
-
 pub fn recover(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>, eh: &EhFrame) -> FuncRecovery {
     let mut notes = Vec::new();
     let arch = match elf.hdr.e_machine {
@@ -179,6 +182,18 @@ pub fn recover(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>, eh: &EhFrame) -> Fu
         merged.push((va, vec![src], conf));
     }
 
+    // Bound output on hostile code (e.g. a LOAD full of `call next`).
+    if merged.len() > MAX_FUNCS {
+        notes.push(format!(
+            "function starts truncated: {} candidates, kept the lowest {MAX_FUNCS}",
+            merged.len()
+        ));
+        merged.truncate(MAX_FUNCS);
+    }
+    if plt_stubs.len() > MAX_PLT_STUBS {
+        notes.push(format!("PLT stubs truncated at {MAX_PLT_STUBS}"));
+        plt_stubs.truncate(MAX_PLT_STUBS);
+    }
     // Assign end = next start, clipped to containing LOAD.
     let mut functions = Vec::with_capacity(merged.len());
     for (i, (start, sources, conf)) in merged.iter().enumerate() {
@@ -210,9 +225,7 @@ pub fn recover(elf: &Elf<'_>, dyninfo: Option<&DynamicInfo>, eh: &EhFrame) -> Fu
 }
 
 // Unchecked arithmetic here is bounded: usize index math guarded by i + 4 <= slice.len().
-
 #[allow(clippy::arithmetic_side_effects)]
-
 fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let mut taken = Vec::new();
     let mut calls = Vec::new();
@@ -256,8 +269,8 @@ fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, V
                 continue;
             }
             // 55 48 89 e5  or  55 48 8b ec
-            if slice[i] == 0x55 && i + 4 <= slice.len() {
-                if slice[i + 1..i + 4] == [0x48, 0x89, 0xe5] || slice[i + 1..i + 4] == [0x48, 0x8b, 0xec]
+            if slice[i] == 0x55 && i + 4 <= slice.len()
+                && (slice[i + 1..i + 4] == [0x48, 0x89, 0xe5] || slice[i + 1..i + 4] == [0x48, 0x8b, 0xec])
                 {
                     // Prefer positions that look like function starts: previous
                     // byte is INT3/NOP/RET or start of segment.
@@ -268,7 +281,6 @@ fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, V
                         if let Some(va) = ph.p_vaddr.checked_add(i as u64) { prologues.push(va); }
                     }
                 }
-            }
             i += 1;
         }
     }
@@ -280,9 +292,7 @@ fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, V
 }
 
 // Unchecked arithmetic here is bounded: usize index math guarded by slice.len(); imm is a 21-bit field.
-
 #[allow(clippy::arithmetic_side_effects)]
-
 fn scan_aarch64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let mut taken = Vec::new();
     let mut calls = Vec::new();

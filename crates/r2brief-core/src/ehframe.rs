@@ -63,7 +63,7 @@ fn walk_eh_frame(elf: &Elf<'_>, start: u64, size: u64, out: &mut EhFrame) {
     let r = elf.rd();
     let mut off = start;
     let end = start.saturating_add(size);
-    let mut cie_aug_enc: Vec<(u64, u8)> = Vec::new(); // cie_off -> FDE pointer encoding
+    let mut cie_aug_enc: std::collections::HashMap<u64, u8> = std::collections::HashMap::new(); // cie_off -> FDE pointer encoding
     while off.saturating_add(8) <= end {
         let Some(length) = r.u32(off) else { break };
         if length == 0 {
@@ -83,7 +83,7 @@ fn walk_eh_frame(elf: &Elf<'_>, start: u64, size: u64, out: &mut EhFrame) {
             if id == 0 {
                 out.cie_count = out.cie_count.saturating_add(1);
                 if let Some(enc) = parse_cie_aug(elf, id_off64.saturating_add(8), end_rec) {
-                    cie_aug_enc.push((off, enc));
+                    cie_aug_enc.insert(off, enc);
                 }
             } else {
                 out.fde_count = out.fde_count.saturating_add(1);
@@ -99,17 +99,13 @@ fn walk_eh_frame(elf: &Elf<'_>, start: u64, size: u64, out: &mut EhFrame) {
             if id == 0 {
                 out.cie_count = out.cie_count.saturating_add(1);
                 if let Some(enc) = parse_cie_aug(elf, id_off.saturating_add(4), end_rec) {
-                    cie_aug_enc.push((off, enc));
+                    cie_aug_enc.insert(off, enc);
                 }
             } else {
                 // FDE: id is offset back to CIE.
                 out.fde_count = out.fde_count.saturating_add(1);
                 let cie_pos = id_off.saturating_sub(id as u64);
-                let enc = cie_aug_enc
-                    .iter()
-                    .find(|(o, _)| *o == cie_pos)
-                    .map(|(_, e)| *e)
-                    .unwrap_or(0);
+                let enc = cie_aug_enc.get(&cie_pos).copied().unwrap_or(0);
                 // pc_begin starts right after the CIE pointer.
                 let pc_off = id_off.saturating_add(4);
                 let pc_va = elf.off_to_va(pc_off).unwrap_or(pc_off);
@@ -151,8 +147,9 @@ fn parse_cie_aug(elf: &Elf<'_>, mut off: u64, end: u64) -> Option<u8> {
     let (_, n) = read_uleb(elf, off, end)?;
     off = off.saturating_add(n);
     if !aug.contains(&b'z') {
-        // Look for 'R' without length prefix — uncommon; default to abs pointer.
-        return Some(if aug.contains(&b'R') { 0 } else { 0 });
+        // Without 'z' the augmentation data can't be skipped safely; assume
+        // DW_EH_PE_absptr for FDE pointers.
+        return Some(0);
     }
     let (aug_len, n) = read_uleb(elf, off, end)?;
     off = off.checked_add(n)?;
@@ -238,7 +235,7 @@ fn read_encoded(elf: &Elf<'_>, off: u64, enc: u8, pc_rel_base: u64) -> Option<(u
         _ => val,
     };
     // For signed pcrel formats, re-interpret.
-    let abs = if matches!(fmt, 0x9 | 0xa | 0xb | 0xc) && app == 0x10 {
+    let abs = if matches!(fmt, 0x9..=0xc) && app == 0x10 {
         let signed = match fmt {
             0xa => r.u16(off)? as i16 as i64,
             0xb => r.u32(off)? as i32 as i64,

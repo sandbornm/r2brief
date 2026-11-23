@@ -82,7 +82,7 @@ fn entry(path: &str, role: &str, data: &[u8]) -> E {
     E {
         path: path.into(),
         role: role.into(),
-        sha256: crate_hex(&h.finalize()),
+        sha256: crate_hex(h.finalize()),
         data: data.to_vec(),
     }
 }
@@ -114,9 +114,7 @@ fn sort_value(v: &serde_json::Value) -> serde_json::Value {
 }
 
 // Unchecked arithmetic here is bounded: len*2 of an in-memory slice.
-
 #[allow(clippy::arithmetic_side_effects)]
-
 fn crate_hex(bytes: impl AsRef<[u8]>) -> String {
     let b = bytes.as_ref();
     let mut s = String::with_capacity(b.len() * 2);

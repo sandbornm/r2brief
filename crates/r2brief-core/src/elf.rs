@@ -221,6 +221,9 @@ impl<'a> Rd<'a> {
     }
 }
 
+/// Section names longer than this are truncated (bounds memory on hostile shstrtab).
+pub const MAX_SECTION_NAME: u64 = 256;
+
 impl<'a> Elf<'a> {
     pub fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
         if data.len() < 16 {
@@ -299,9 +302,7 @@ impl<'a> Elf<'a> {
     }
 
     // Unchecked arithmetic here is bounded: i < e_phnum (u16) and want <= 64.
-
     #[allow(clippy::arithmetic_side_effects)]
-
     fn parse_phdrs(&mut self) {
         let h = &self.hdr;
         let want = if h.class64 { 56 } else { 32 };
@@ -351,9 +352,7 @@ impl<'a> Elf<'a> {
     }
 
     // Unchecked arithmetic here is bounded: i < e_shnum (u16), want <= 64; ss - name_off guarded by name_off < ss.
-
     #[allow(clippy::arithmetic_side_effects)]
-
     fn parse_shdrs(&mut self) {
         let h = &self.hdr;
         let want = if h.class64 { 64 } else { 40 };
@@ -414,7 +413,7 @@ impl<'a> Elf<'a> {
             if let Some((so, ss)) = strtab {
                 if (name_off as u64) < ss {
                     if let Some(name_abs) = so.checked_add(name_off as u64) {
-                        if let Some((b, _)) = r.cstr(name_abs, (ss - name_off as u64) as usize) {
+                        if let Some((b, _)) = r.cstr(name_abs, (ss - name_off as u64).min(MAX_SECTION_NAME) as usize) {
                             s.name = String::from_utf8_lossy(b).into_owned();
                         }
                     }
@@ -513,9 +512,7 @@ pub fn ptype_name(t: u32) -> String {
 }
 
 // Unchecked arithmetic here is bounded: len*2 of an in-memory slice.
-
 #[allow(clippy::arithmetic_side_effects)]
-
 pub fn hex(b: &[u8]) -> String {
     let mut s = String::with_capacity(b.len() * 2);
     for x in b {

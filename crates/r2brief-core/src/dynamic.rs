@@ -51,6 +51,8 @@ pub struct DynamicInfo {
     pub strsz: Option<u64>,
     pub symtab: Option<u64>,
     pub syment: Option<u64>,
+    pub hash: Option<u64>,
+    pub gnu_hash: Option<u64>,
     pub pltgot: Option<u64>,
     pub jmprel: Option<u64>,
     pub pltrelsz: Option<u64>,
@@ -76,9 +78,7 @@ pub struct DynamicInfo {
 }
 
 // Unchecked arithmetic here is bounded: word_size() is 4 or 8; ws is a nonzero constant.
-
 #[allow(clippy::arithmetic_side_effects)]
-
 pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
     let ph = elf.phdrs.iter().find(|p| p.p_type == PT_DYNAMIC)?;
     let r = elf.rd();
@@ -109,6 +109,8 @@ pub fn parse(elf: &Elf<'_>) -> Option<DynamicInfo> {
             DT_STRSZ => info.strsz = Some(val),
             DT_SYMTAB => info.symtab = Some(val),
             DT_SYMENT => info.syment = Some(val),
+            DT_HASH => info.hash = Some(val),
+            DT_GNU_HASH => info.gnu_hash = Some(val),
             DT_PLTGOT => info.pltgot = Some(val),
             DT_JMPREL => info.jmprel = Some(val),
             DT_PLTRELSZ => info.pltrelsz = Some(val),

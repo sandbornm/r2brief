@@ -199,7 +199,7 @@ pub fn analyze(name: &str, data: &[u8]) -> Result<Report, String> {
         .collect();
 
     let briefing = build_briefing(&subject, &findings, &funcs, &handoff_path);
-    let analysis = build_analysis(&subject, &findings, &funcs, &segments, &imports);
+    let analysis = build_analysis(&subject, &findings, &funcs, &segments, &imports, &handoff_path);
     let tools = serde_json::json!({
         "r2brief-core": { "available": true, "version": env!("CARGO_PKG_VERSION"), "mode": "wasm-or-native" }
     });
@@ -359,7 +359,9 @@ fn build_analysis(
     funcs: &FuncRecovery,
     segments: &[SegmentInfo],
     imports: &[ImportSym],
+    input_path: &str,
 ) -> serde_json::Value {
+    let provenance = build_provenance(subject, findings, funcs, imports, input_path);
     serde_json::json!({
         "schema_version": "r2b.analysis_result.v1",
         "tool_status": {
@@ -370,12 +372,71 @@ fn build_analysis(
         "functions": funcs,
         "segments": segments,
         "imports": imports,
-        "provenance": {
-            "schema_version": "r2b.provenance.v1",
-            "producer": format!("r2brief-core {}", env!("CARGO_PKG_VERSION")),
+        "provenance": provenance,
+    })
+}
+
+/// `r2b.provenance.v1` (schemas/provenance.schema.json): input identity,
+/// the one action this producer runs, and a replay recipe keyed on sha256.
+fn build_provenance(
+    subject: &Subject,
+    findings: &[Finding],
+    funcs: &FuncRecovery,
+    imports: &[ImportSym],
+    input_path: &str,
+) -> serde_json::Value {
+    let findings_sha = serde_json::to_vec(findings)
+        .map(|b| hex::encode(Sha256::digest(&b)))
+        .ok();
+    let argv = ["r2brief-core", "{input}", "--json"];
+    serde_json::json!({
+        "schema_version": "r2b.provenance.v1",
+        "producer": {
+            "name": "r2b",
+            "version": env!("CARGO_PKG_VERSION"),
+            "component": "r2brief-core",
+        },
+        "input": {
+            "path": input_path,
+            "name": subject.name,
+            "size_bytes": subject.size,
+            "sha256": subject.sha256,
+        },
+        "plan": {
+            "profile": "triage",
+            "deep": false,
             "mode": "static-client-side",
-            "notes": ["no network", "no upload", "deterministic"]
-        }
+            "adapters": ["r2brief-core"],
+        },
+        "config": {},
+        "adapter_status": [{
+            "adapter": "r2brief-core",
+            "available": true,
+            "actions": [1],
+            "status": "ok",
+        }],
+        "actions": [{
+            "sequence": 1,
+            "action": "elf_triage",
+            "adapter": "r2brief-core",
+            "stage": "quick",
+            "status": "ok",
+            "result_ref": "analysis.json#/findings",
+            "output_sha256": findings_sha,
+            "summary": {
+                "findings": findings.len(),
+                "functions": funcs.functions.len(),
+                "imports": imports.len(),
+            },
+        }],
+        "replay": {
+            "input_token": "{input}",
+            "expected_sha256": subject.sha256,
+            "argv": argv,
+            "shell": "r2brief-core \"$R2B_INPUT\" --json",
+            "python": "import subprocess, sys\nsubprocess.run([\"r2brief-core\", sys.argv[1], \"--json\"], check=True)\n",
+            "shell_uses_current_config": false,
+        },
     })
 }
 

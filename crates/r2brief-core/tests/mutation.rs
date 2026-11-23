@@ -168,3 +168,43 @@ fn dense_call_targets_are_capped() {
     assert!(r.functions.call_targets > r2brief_core::funcs::MAX_FUNCS, "scan should see > cap: {}", r.functions.call_targets);
     assert!(r.parse_notes.iter().any(|n| n.contains("truncated")), "{:?}", r.parse_notes);
 }
+
+/// Many PF_X phdrs aliasing one call-dense file range: the bytes are scanned
+/// once, total scan work is budgeted, and the quadratic LOAD checks stay
+/// bounded. Built by appending a fresh phdr table at EOF.
+#[test]
+fn aliased_exec_phdrs_are_bounded() {
+    let Some(mut d) = fixture("triage-x86_64-sstrip") else { return };
+    while d.len() % 0x1000 != 0 {
+        d.push(0);
+    }
+    let code = d.len() as u64;
+    for _ in 0..200_000 {
+        d.extend_from_slice(&[0xe8, 0, 0, 0, 0]); // call $+5
+    }
+    let code_len = d.len() as u64 - code;
+    while d.len() % 8 != 0 {
+        d.push(0);
+    }
+    let phoff = d.len();
+    let n: u16 = 4000;
+    for i in 0..n as u64 {
+        let mut ph = [0u8; 56];
+        ph[0..4].copy_from_slice(&1u32.to_le_bytes()); // PT_LOAD
+        ph[4..8].copy_from_slice(&5u32.to_le_bytes()); // R|X
+        ph[8..16].copy_from_slice(&code.to_le_bytes());
+        ph[16..24].copy_from_slice(&(0x1000_0000 + i * 0x10_0000).to_le_bytes());
+        ph[32..40].copy_from_slice(&code_len.to_le_bytes());
+        ph[40..48].copy_from_slice(&code_len.to_le_bytes());
+        d.extend_from_slice(&ph);
+    }
+    wr64(&mut d, 32, phoff as u64);
+    d[56..58].copy_from_slice(&n.to_le_bytes());
+    wr64(&mut d, 24, 0x1000_0000);
+    let t = std::time::Instant::now();
+    let r = r2brief_core::analyze("alias", &d).unwrap();
+    assert!(r.functions.call_targets <= r2brief_core::funcs::SCAN_BUDGET / 5 + 1, "{}", r.functions.call_targets);
+    assert!(r.functions.functions.len() <= r2brief_core::funcs::MAX_FUNCS);
+    assert!(r.findings.len() < 200, "{}", r.findings.len());
+    assert!(t.elapsed().as_secs() < 60, "took {:?}", t.elapsed());
+}

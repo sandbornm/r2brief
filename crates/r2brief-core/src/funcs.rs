@@ -14,7 +14,7 @@ use serde::Serialize;
 
 use crate::dynamic::DynamicInfo;
 use crate::ehframe::EhFrame;
-use crate::elf::{Elf, EM_AARCH64, EM_X86_64, PF_X, PT_LOAD};
+use crate::elf::{Elf, Phdr, EM_AARCH64, EM_X86_64, PF_X, PT_LOAD};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Func {
@@ -22,6 +22,43 @@ pub struct Func {
     pub end: u64,
     pub sources: Vec<String>,
     pub confidence: f64,
+}
+
+/// Total bytes linearly scanned across all executable LOADs.
+pub const SCAN_BUDGET: usize = 8 * 1024 * 1024;
+
+/// Executable LOAD bytes to scan. A file range is scanned once even if many
+/// phdrs alias it, and the total stays within SCAN_BUDGET, so hostile phdr
+/// tables (e_phnum up to 65535) can't multiply the work.
+fn exec_scan_regions<'e, 'a>(
+    elf: &'e Elf<'a>,
+    arch: &str,
+    notes: &mut Vec<String>,
+) -> Vec<(&'e Phdr, &'a [u8])> {
+    let mut seen = std::collections::HashSet::new();
+    let mut budget = SCAN_BUDGET;
+    let mut out = Vec::new();
+    for ph in elf.phdrs.iter().filter(|p| p.p_type == PT_LOAD && p.p_flags & PF_X != 0) {
+        let avail = ph.p_filesz.min(elf.len().saturating_sub(ph.p_offset));
+        if !seen.insert((ph.p_offset, avail)) {
+            continue;
+        }
+        let Some(bytes) = elf.rd().bytes(ph.p_offset, avail) else {
+            notes.push(format!("{arch}: PT_LOAD[{}] unreadable", ph.index));
+            continue;
+        };
+        if budget == 0 {
+            notes.push(format!("{arch}: scan budget exhausted before PT_LOAD[{}]", ph.index));
+            break;
+        }
+        let take = bytes.len().min(budget);
+        if take < bytes.len() {
+            notes.push(format!("{arch}: PT_LOAD[{}] scanned 0x{take:x} of 0x{:x} bytes", ph.index, bytes.len()));
+        }
+        budget = budget.saturating_sub(take);
+        out.push((ph, bytes.get(..take).unwrap_or(&[])));
+    }
+    out
 }
 
 /// Upper bound on reported function starts (keeps report/bundle size bounded).
@@ -230,15 +267,8 @@ fn scan_x86_64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, V
     let mut taken = Vec::new();
     let mut calls = Vec::new();
     let mut prologues = Vec::new();
-    for ph in elf.phdrs.iter().filter(|p| p.p_type == PT_LOAD && p.p_flags & PF_X != 0) {
-        let avail = ph.p_filesz.min(elf.len().saturating_sub(ph.p_offset));
-        let Some(bytes) = elf.rd().bytes(ph.p_offset, avail) else {
-            notes.push(format!("x86-64: PT_LOAD[{}] unreadable", ph.index));
-            continue;
-        };
-        // Cap decode to keep wasm responsive on huge binaries.
-        let take = bytes.len().min(8 * 1024 * 1024);
-        let slice = &bytes[..take];
+    for (ph, bytes) in exec_scan_regions(elf, "x86-64", notes) {
+        let slice = bytes;
         let mut decoder = Decoder::with_ip(64, slice, ph.p_vaddr, DecoderOptions::NONE);
         let mut instr = Instruction::default();
         while decoder.can_decode() {
@@ -297,14 +327,8 @@ fn scan_aarch64(elf: &Elf<'_>, notes: &mut Vec<String>) -> (Vec<u64>, Vec<u64>, 
     let mut taken = Vec::new();
     let mut calls = Vec::new();
     let mut prologues = Vec::new();
-    for ph in elf.phdrs.iter().filter(|p| p.p_type == PT_LOAD && p.p_flags & PF_X != 0) {
-        let avail = ph.p_filesz.min(elf.len().saturating_sub(ph.p_offset));
-        let Some(bytes) = elf.rd().bytes(ph.p_offset, avail) else {
-            notes.push(format!("aarch64: PT_LOAD[{}] unreadable", ph.index));
-            continue;
-        };
-        let take = bytes.len().min(8 * 1024 * 1024);
-        let slice = &bytes[..take];
+    for (ph, bytes) in exec_scan_regions(elf, "aarch64", notes) {
+        let slice = bytes;
         let le = elf.hdr.little_endian;
         let mut i = 0usize;
         while i + 4 <= slice.len() {

@@ -211,9 +211,21 @@ fn check_note_to_load(elf: &Elf<'_>) -> Vec<Finding> {
 fn check_text_padding(elf: &Elf<'_>) -> Vec<Finding> {
     let mut out = Vec::new();
     let loads: Vec<&Phdr> = elf.loads().collect();
-    let texts: Vec<&Phdr> = loads.iter().copied().filter(|p| p.exec() && p.p_filesz > 0).collect();
+    // Same bounds as check_overlapping_loads: hostile phdr tables can't make
+    // this quadratic pass or its output unbounded.
+    const MAX_LOADS: usize = 512;
+    const MAX_FINDINGS: usize = 16;
+    let texts: Vec<&Phdr> = loads
+        .iter()
+        .copied()
+        .filter(|p| p.exec() && p.p_filesz > 0)
+        .take(MAX_LOADS)
+        .collect();
     for i in 0..texts.len() {
         for j in 0..texts.len() {
+            if out.len() >= MAX_FINDINGS {
+                return out;
+            }
             if i == j {
                 continue;
             }

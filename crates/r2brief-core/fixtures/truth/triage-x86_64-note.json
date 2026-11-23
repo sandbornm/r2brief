@@ -1,0 +1,206 @@
+{
+  "technique": "pt_note_to_load",
+  "phdr_index": 7,
+  "vaddr": 2113536,
+  "offset": 824,
+  "filesz": 48,
+  "expected_finding_ids": [
+    "elf:pt_note_to_load:7"
+  ],
+  "binary": "triage-x86_64-note",
+  "arch": "x86-64",
+  "kind": "infected",
+  "source": "triage-x86_64-stripped",
+  "functions": [
+    {
+      "name": "_init",
+      "addr": 4096,
+      "bind": "GLOBAL"
+    },
+    {
+      "name": "_start",
+      "addr": 4704,
+      "bind": "GLOBAL"
+    },
+    {
+      "name": "deregister_tm_clones",
+      "addr": 4752,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "register_tm_clones",
+      "addr": 4800,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "__do_global_dtors_aux",
+      "addr": 4864,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "frame_dummy",
+      "addr": 4928,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "fnv1a",
+      "addr": 4937,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "rotl32",
+      "addr": 4978,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "mix",
+      "addr": 4985,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "fib",
+      "addr": 5009,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "is_even",
+      "addr": 5054,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "is_odd",
+      "addr": 5078,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "classify",
+      "addr": 5102,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "count_class",
+      "addr": 5189,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "tree_height",
+      "addr": 5261,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "tree_sum",
+      "addr": 5316,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "cmp_int",
+      "addr": 5372,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_hash",
+      "addr": 5395,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_count",
+      "addr": 5469,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "node_new",
+      "addr": 5534,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "tree_insert",
+      "addr": 5573,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "sorted_checksum",
+      "addr": 5643,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "tree_free",
+      "addr": 5727,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "selftest",
+      "addr": 5777,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "lookup",
+      "addr": 5953,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_run",
+      "addr": 6043,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_parity",
+      "addr": 6098,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_fib",
+      "addr": 6175,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_shift",
+      "addr": 6270,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_blit",
+      "addr": 6350,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_format",
+      "addr": 6415,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_append",
+      "addr": 6510,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "h_copy",
+      "addr": 6596,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "usage",
+      "addr": 6669,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "fixture_ctor",
+      "addr": 6714,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "fixture_dtor",
+      "addr": 6778,
+      "bind": "LOCAL"
+    },
+    {
+      "name": "main",
+      "addr": 6800,
+      "bind": "GLOBAL"
+    },
+    {
+      "name": "_fini",
+      "addr": 7104,
+      "bind": "GLOBAL"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "r2brief-core",
+  "type": "module",
+  "description": "Client-side ELF triage core for r2brief: structural anomaly checks, stripped function-boundary recovery, and r2b evidence bundles.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "r2brief_core_bg.wasm",
+    "r2brief_core.js",
+    "r2brief_core.d.ts"
+  ],
+  "main": "r2brief_core.js",
+  "types": "r2brief_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

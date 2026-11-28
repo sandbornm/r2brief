@@ -13,74 +13,18 @@ import {
   ListItemText,
   Paper,
   Stack,
-  Theme,
   Tooltip,
   Typography,
   useTheme,
 } from '@mui/material';
 import { FC, useState } from 'react';
 import type { GhidraData, GhidraDecompiledFunction, GhidraTypeInfo } from '../types';
+import { cHighlightColors, highlightCCode } from '../utils/highlightC';
 
 interface DecompilerPanelProps {
   data: GhidraData | null;
   onAskClaude?: (question: string) => void;
 }
-
-// Simple syntax highlighting for C code
-const highlightCCode = (code: string, theme: Theme): string => {
-  const isDark = theme.palette.mode === 'dark';
-
-  // Colors for syntax highlighting
-  const colors = {
-    keyword: isDark ? '#c678dd' : '#a626a4',
-    type: isDark ? '#e5c07b' : '#c18401',
-    string: isDark ? '#98c379' : '#50a14f',
-    number: isDark ? '#d19a66' : '#986801',
-    comment: isDark ? '#5c6370' : '#a0a1a7',
-    function: isDark ? '#61afef' : '#4078f2',
-    operator: isDark ? '#56b6c2' : '#0184bc',
-  };
-
-  // Keywords
-  const keywords = ['if', 'else', 'while', 'for', 'return', 'break', 'continue', 'switch', 'case', 'default', 'do', 'goto', 'sizeof', 'typedef', 'struct', 'union', 'enum', 'const', 'static', 'extern', 'register', 'volatile'];
-
-  // Types
-  const types = ['void', 'int', 'char', 'short', 'long', 'float', 'double', 'unsigned', 'signed', 'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t', 'int8_t', 'int16_t', 'int32_t', 'int64_t', 'size_t', 'bool', 'BOOL', 'DWORD', 'WORD', 'BYTE'];
-
-  let result = code;
-
-  // Escape HTML
-  result = result
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  // Comments (simple line and block comments)
-  result = result.replace(/(\/\/[^\n]*)/g, `<span style="color:${colors.comment}">$1</span>`);
-  result = result.replace(/(\/\*[\s\S]*?\*\/)/g, `<span style="color:${colors.comment}">$1</span>`);
-
-  // Strings
-  result = result.replace(/("(?:[^"\\]|\\.)*")/g, `<span style="color:${colors.string}">$1</span>`);
-  result = result.replace(/('(?:[^'\\]|\\.)*')/g, `<span style="color:${colors.string}">$1</span>`);
-
-  // Numbers (hex and decimal)
-  result = result.replace(/\b(0x[0-9a-fA-F]+)\b/g, `<span style="color:${colors.number}">$1</span>`);
-  result = result.replace(/\b(\d+)\b/g, `<span style="color:${colors.number}">$1</span>`);
-
-  // Keywords
-  for (const kw of keywords) {
-    const regex = new RegExp(`\\b(${kw})\\b`, 'g');
-    result = result.replace(regex, `<span style="color:${colors.keyword};font-weight:bold">$1</span>`);
-  }
-
-  // Types
-  for (const t of types) {
-    const regex = new RegExp(`\\b(${t})\\b`, 'g');
-    result = result.replace(regex, `<span style="color:${colors.type}">$1</span>`);
-  }
-
-  return result;
-};
 
 const FunctionListItem: FC<{
   func: GhidraDecompiledFunction;
@@ -309,10 +253,9 @@ const DecompilerPanel: FC<DecompilerPanelProps> = ({ data, onAskClaude }) => {
                 bgcolor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fafafa',
                 whiteSpace: 'pre',
               }}
-              dangerouslySetInnerHTML={{
-                __html: highlightCCode(selectedFunc.decompiled_c ?? '', theme),
-              }}
-            />
+            >
+              {highlightCCode(selectedFunc.decompiled_c ?? '', cHighlightColors(theme.palette.mode === 'dark'))}
+            </Box>
           </>
         )}
       </Box>

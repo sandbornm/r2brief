@@ -78,12 +78,12 @@ const log = (level: LogLevel, category: string, message: string, data?: unknown)
   const prefix = `[r2b] ${levelEmoji} [${category.toUpperCase()}]`;
 
   if (data !== undefined) {
-    console.groupCollapsed(`%c${prefix} ${message}`, style);
+    console.groupCollapsed('%c%s', style, `${prefix} ${message}`);
     console.log('Data:', data);
     console.log('Time:', entry.timestamp);
     console.groupEnd();
   } else {
-    console.log(`%c${prefix} ${message}`, style);
+    console.log('%c%s', style, `${prefix} ${message}`);
   }
 };
 

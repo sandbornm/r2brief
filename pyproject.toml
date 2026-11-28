@@ -11,7 +11,7 @@ dependencies = [
   "rich>=13.7,<16",
   "pydantic>=2.7,<3",
   "httpx>=0.27,<0.29",
-  "python-dotenv>=1.0,<2",
+  "python-dotenv>=1.2.2,<2",
   "pyelftools>=0.29,<0.34",
   "pefile>=2024.8.26,<2027",
   "macholib>=1.16,<2",
@@ -23,7 +23,7 @@ dependencies = [
 # instrumentation stays in the explicit `dynamic` extra.
 r2 = [
   "r2pipe>=1.9.0,<3",
-  "capstone>=5.0.1,<6",
+  "capstone>=5.0.8,<6",
   "python-magic>=0.4.27,<0.5",
 ]
 symbolic = [
@@ -36,6 +36,8 @@ dynamic = [
 ]
 analyzers = [
   "r2pipe>=1.9.0,<3",
+  # angr pins capstone==5.0.6 (vulnerable, PYSEC-2026-3544). pip users of this extra stay on
+  # the pin; uv resolves capstone>=5.0.8 through the uv override-dependencies setting below.
   "capstone>=5.0.1,<6",
   "python-magic>=0.4.27,<0.5",
   "angr>=9.2,<10",
@@ -55,7 +57,7 @@ ghidra = [
 # Product extra for a wheel: brief + web + hosted --ask. Not angr.
 std = [
   "r2pipe>=1.9.0,<3",
-  "capstone>=5.0.1,<6",
+  "capstone>=5.0.8,<6",
   "python-magic>=0.4.27,<0.5",
   "openai>=1.30,<4",
   "anthropic>=0.29,<3",
@@ -139,7 +141,7 @@ dev = [
   "ruff>=0.4.2,<0.18",
   "ty>=0.0.75,<1",
   "r2pipe>=1.9.0,<3",
-  "capstone>=5.0.1,<6",
+  "capstone>=5.0.8,<6",
   "python-magic>=0.4.27,<0.5",
   "openai>=1.30,<4",
   "anthropic>=0.29,<3",
@@ -190,3 +192,18 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 show_missing = true
+
+[tool.uv]
+# Dependency cooldown: do not resolve versions published in the last 7 days.
+exclude-newer = "7 days"
+# angr==9.2.x pins capstone==5.0.6, which has a known NULL-dereference fix in 5.0.8
+# (a patch release). Override the pin so the lock resolves the fixed version.
+override-dependencies = ["capstone>=5.0.8,<6"]
+# Floors for transitive dependencies with known advisories (idna via httpx, pygments via
+# rich, anyio via httpx/openai/anthropic). Constraints affect resolution and uv.lock only;
+# they do not add dependencies or change published package metadata.
+constraint-dependencies = [
+  "idna>=3.15",
+  "pygments>=2.20.0",
+  "anyio>=4.14.2",
+]

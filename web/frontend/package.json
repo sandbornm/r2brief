@@ -57,6 +57,12 @@
     "vitest": "^5.1.0"
   },
   "overrides": {
-    "yaml": "1.10.3"
+    "yaml": "1.10.3",
+    "minimatch": "^11.0.1",
+    "@babel/runtime": "^7.26.10",
+    "debug": "^4.4.3",
+    "mdast-util-to-hast": "^13.2.1",
+    "extend": "^3.0.2",
+    "path-parse": "^1.0.7"
   }
 }

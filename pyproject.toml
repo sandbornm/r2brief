@@ -199,11 +199,3 @@ exclude-newer = "7 days"
 # angr==9.2.x pins capstone==5.0.6, which has a known NULL-dereference fix in 5.0.8
 # (a patch release). Override the pin so the lock resolves the fixed version.
 override-dependencies = ["capstone>=5.0.8,<6"]
-# Floors for transitive dependencies with known advisories (idna via httpx, pygments via
-# rich, anyio via httpx/openai/anthropic). Constraints affect resolution and uv.lock only;
-# they do not add dependencies or change published package metadata.
-constraint-dependencies = [
-  "idna>=3.15",
-  "pygments>=2.20.0",
-  "anyio>=4.14.2",
-]

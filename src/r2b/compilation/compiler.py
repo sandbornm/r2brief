@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
+from ..utils.safety import UnsafeInputError, sanitize_log
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +45,122 @@ ARM64_COMPILERS = [
 
 X86_COMPILERS = ["gcc", "clang"]
 X86_64_COMPILERS = ["gcc", "clang"]
+
+SUPPORTED_ARCHITECTURES: tuple[str, ...] = ("arm32", "arm64", "x86", "x86_64")
+
+# Request-controlled compiler options are allowlisted: they end up in a compiler
+# argv (and, for the Docker path, a shell string), so anything outside these tables
+# is rejected instead of passed through. The validators return the *table value*,
+# not the caller's string, so only constants reach a command line.
+ALLOWED_OPTIMIZATIONS: frozenset[str] = frozenset({"-O0", "-O1", "-O2", "-O3", "-Os", "-Oz", "-Og"})
+_OPTIMIZATION_TABLE: dict[str, str] = {opt: opt for opt in sorted(ALLOWED_OPTIMIZATIONS)}
+_ARCHITECTURE_TABLE: dict[str, str] = {arch: arch for arch in SUPPORTED_ARCHITECTURES}
+
+_SAFE_FLAGS: tuple[str, ...] = (
+    "-ffreestanding",
+    "-nostartfiles",
+    "-nodefaultlibs",
+    "-nostdlib",
+    "-static",
+    "-fno-stack-protector",
+    "-fstack-protector",
+    "-fstack-protector-strong",
+    "-fno-pic",
+    "-fPIC",
+    "-fno-pie",
+    "-fpie",
+    "-no-pie",
+    "-pie",
+    "-fno-builtin",
+    "-fno-inline",
+    "-fno-omit-frame-pointer",
+    "-fomit-frame-pointer",
+    "-fno-asynchronous-unwind-tables",
+    "-g",
+    "-g0",
+    "-g1",
+    "-g2",
+    "-g3",
+    "-ggdb",
+    "-w",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+    "-Wno-unused-variable",
+    "-Wno-unused-parameter",
+    "-std=c99",
+    "-std=c11",
+    "-std=c17",
+    "-std=gnu99",
+    "-std=gnu11",
+    "-std=gnu17",
+    "-mthumb",
+    "-marm",
+)
+_FLAG_TABLE: dict[str, str] = {flag: flag for flag in _SAFE_FLAGS}
+_OUTPUT_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")
+
+
+def validate_architecture(architecture: str) -> str:
+    """Return the canonical architecture name, else raise :class:`UnsafeInputError`."""
+    try:
+        return _ARCHITECTURE_TABLE[architecture]
+    except (KeyError, TypeError):
+        raise UnsafeInputError("unsupported architecture") from None
+
+
+def validate_optimization(optimization: str) -> str:
+    """Allow only the standard ``-O`` levels."""
+    try:
+        return _OPTIMIZATION_TABLE[optimization]
+    except (KeyError, TypeError):
+        raise UnsafeInputError("unsupported optimization level") from None
+
+
+def validate_extra_flags(flags: list[str] | None) -> list[str]:
+    """Allow only known-safe compiler flags (no ``-o``, ``-specs``, ``-fplugin`` etc.)."""
+    validated: list[str] = []
+    for flag in flags or []:
+        try:
+            validated.append(_FLAG_TABLE[flag])
+        except (KeyError, TypeError):
+            raise UnsafeInputError("unsupported compiler flag") from None
+    return validated
+
+
+def validate_output_name(name: str) -> str:
+    """Output names are plain file names: no separators, no leading ``-`` or ``.``."""
+    if not isinstance(name, str) or not _OUTPUT_NAME_RE.fullmatch(name):
+        raise UnsafeInputError("unsupported output name")
+    return name
+
+
+@dataclass(frozen=True, slots=True)
+class InlineSource:
+    """Source code passed as text. Never interpreted as a file path.
+
+    Untrusted callers (the web app) wrap request-supplied code in this so a string that
+    happens to name a file is compiled as code instead of being read from disk.
+    """
+
+    code: str
+
+
+def _load_source(source: InlineSource | Path | str) -> tuple[str, Path | None]:
+    """Return ``(source_code, source_file)``; ``source_file`` is None for inline code.
+
+    ``InlineSource`` is always code. A ``Path`` is a file the caller already vetted. A bare
+    ``str`` keeps the library/CLI behavior: a file only if it exists, otherwise code.
+    """
+    if isinstance(source, InlineSource):
+        return source.code, None
+    if isinstance(source, Path):
+        if not source.exists():
+            raise FileNotFoundError(str(source))
+        return source.read_text(), source
+    if Path(source).exists():
+        return Path(source).read_text(), Path(source)
+    return str(source), None
 
 
 @dataclass(slots=True)
@@ -74,6 +194,8 @@ class Compiler:
         output: Path | None = None,
         optimization: str = "-O0",
         extra_flags: list[str] | None = None,
+        *,
+        inline: bool = False,
     ) -> CompilerResult:
         """Compile C source code to binary.
 
@@ -81,23 +203,35 @@ class Compiler:
             source: Path to C source file or C source code string
             output: Output binary path (auto-generated if None)
             optimization: Optimization level (-O0, -O1, -O2, -O3, -Os)
-            extra_flags: Additional compiler flags
+            extra_flags: Additional compiler flags (allowlisted)
+            inline: Treat a ``str`` source as code without probing the filesystem
 
         Returns:
             CompilerResult with compilation status and output
         """
-        extra_flags = extra_flags or []
+        try:
+            optimization = validate_optimization(optimization)
+            extra_flags = validate_extra_flags(extra_flags)
+        except UnsafeInputError as exc:
+            return CompilerResult(
+                success=False,
+                stderr=f"Invalid compiler option: {exc}",
+                return_code=-1,
+                architecture=self.architecture,
+                compiler_used=self.name,
+            )
 
         # Handle source as string (inline source code)
         temp_source = None
-        if isinstance(source, str) and not Path(source).exists():
+        if isinstance(source, str) and (inline or not Path(source).exists()):
             fd, temp_path = tempfile.mkstemp(suffix=".c")
             os.close(fd)
             temp_source = Path(temp_path)
             temp_source.write_text(source)
             source_path = temp_source
         else:
-            source_path = Path(source)
+            # Absolute, so the compiler can never read the file name as an option.
+            source_path = Path(source).resolve()
 
         # Generate output path if not provided
         if output is None:
@@ -128,7 +262,7 @@ class Compiler:
             # Add extra flags
             cmd.extend(extra_flags)
 
-            _LOGGER.debug("Compiling with: %s", " ".join(cmd))
+            _LOGGER.debug("Compiling with: %s", sanitize_log(" ".join(cmd)))
 
             result = subprocess.run(
                 cmd,
@@ -174,29 +308,41 @@ class Compiler:
         source: Path | str,
         output: Path | None = None,
         extra_flags: list[str] | None = None,
+        *,
+        inline: bool = False,
     ) -> CompilerResult:
         """Assemble assembly source code to binary.
 
         Args:
             source: Path to assembly file or assembly source string
             output: Output binary path (auto-generated if None)
-            extra_flags: Additional assembler flags
+            extra_flags: Additional assembler flags (allowlisted)
+            inline: Treat a ``str`` source as code without probing the filesystem
 
         Returns:
             CompilerResult with assembly status and output
         """
-        extra_flags = extra_flags or []
+        try:
+            extra_flags = validate_extra_flags(extra_flags)
+        except UnsafeInputError as exc:
+            return CompilerResult(
+                success=False,
+                stderr=f"Invalid assembler option: {exc}",
+                return_code=-1,
+                architecture=self.architecture,
+                compiler_used=self.name,
+            )
 
         # Handle source as string
         temp_source = None
-        if isinstance(source, str) and not Path(source).exists():
+        if isinstance(source, str) and (inline or not Path(source).exists()):
             fd, temp_path = tempfile.mkstemp(suffix=".s")
             os.close(fd)
             temp_source = Path(temp_path)
             temp_source.write_text(source)
             source_path = temp_source
         else:
-            source_path = Path(source)
+            source_path = Path(source).resolve()
 
         # Generate output path
         if output is None:
@@ -221,7 +367,7 @@ class Compiler:
             ])
             cmd.extend(extra_flags)
 
-            _LOGGER.debug("Assembling with: %s", " ".join(cmd))
+            _LOGGER.debug("Assembling with: %s", sanitize_log(" ".join(cmd)))
 
             result = subprocess.run(
                 cmd,
@@ -317,8 +463,21 @@ def _compile_with_docker(
     
     This is used when native ARM cross-compilers are not available (e.g., on macOS).
     """
-    extra_flags = list(extra_flags) if extra_flags else []
-    
+    try:
+        architecture = validate_architecture(architecture)
+        optimization = validate_optimization(optimization)
+        output_name = validate_output_name(output_name)
+        # Validate before the internal flags below are appended.
+        extra_flags = validate_extra_flags(extra_flags)
+    except UnsafeInputError as exc:
+        return CompilerResult(
+            success=False,
+            stderr=f"Invalid compiler option: {exc}",
+            return_code=-1,
+            architecture=architecture,
+            compiler_used="docker",
+        )
+
     if not _is_docker_available():
         return CompilerResult(
             success=False,
@@ -404,14 +563,17 @@ def _compile_with_docker(
         
         compile_flags.extend(extra_flags)
         
-        # Build the flags string for shell command
-        flags_str = " ".join(compile_flags)
+        # The image entrypoint is bash, so the command is passed as one ``-c`` string.
+        # Every token is quoted so no value can add shell syntax.
+        flags_str = " ".join(shlex.quote(flag) for flag in compile_flags)
+        quoted_compiler = shlex.quote(compiler_cmd)
+        quoted_output = shlex.quote(output_name)
         
         # First, generate assembly if requested
         asm_content = None
         if emit_asm:
             # Use -c to pass command to bash entrypoint
-            asm_shell_cmd = f"{compiler_cmd} -S {flags_str} -o {output_name}.s source.c"
+            asm_shell_cmd = f"{quoted_compiler} -S {flags_str} -o {shlex.quote(output_name + '.s')} source.c"
             asm_cmd = [
                 "docker", "run", "--rm",
                 "-v", f"{tmppath}:/compile",
@@ -421,7 +583,7 @@ def _compile_with_docker(
                 asm_shell_cmd,
             ]
             
-            _LOGGER.debug("Docker ASM command: %s", " ".join(asm_cmd))
+            _LOGGER.debug("Docker ASM command: %s", sanitize_log(" ".join(asm_cmd)))
             
             try:
                 asm_result = subprocess.run(
@@ -433,10 +595,10 @@ def _compile_with_docker(
                 if asm_result.returncode == 0 and output_asm.exists():
                     asm_content = output_asm.read_text()
             except Exception as exc:
-                _LOGGER.warning("ASM generation failed: %s", exc)
+                _LOGGER.warning("ASM generation failed: %s", sanitize_log(exc))
         
         # Compile to binary - use -c to pass command to bash entrypoint
-        compile_shell_cmd = f"{compiler_cmd} {flags_str} -o {output_name} source.c"
+        compile_shell_cmd = f"{quoted_compiler} {flags_str} -o {quoted_output} source.c"
         compile_cmd = [
             "docker", "run", "--rm",
             "-v", f"{tmppath}:/compile",
@@ -446,7 +608,7 @@ def _compile_with_docker(
             compile_shell_cmd,
         ]
         
-        _LOGGER.debug("Docker compile command: %s", " ".join(compile_cmd))
+        _LOGGER.debug("Docker compile command: %s", sanitize_log(" ".join(compile_cmd)))
         
         try:
             result = subprocess.run(
@@ -620,7 +782,7 @@ def detect_compilers(include_docker: bool = True) -> dict[Architecture, list[Com
 
 
 def compile_c_source(
-    source: Path | str,
+    source: InlineSource | Path | str,
     architecture: Architecture = "arm64",
     output: Path | None = None,
     optimization: str = "-O0",
@@ -629,33 +791,49 @@ def compile_c_source(
     """Compile C source to specified architecture.
 
     Args:
-        source: Path to C source or inline C code
+        source: Path to C source, inline C code, or ``InlineSource`` (always code)
         architecture: Target architecture
         output: Output path (auto-generated if None)
-        optimization: Optimization level
-        extra_flags: Additional compiler flags (e.g., -ffreestanding -nostdlib)
+        optimization: Optimization level (one of ``ALLOWED_OPTIMIZATIONS``)
+        extra_flags: Additional allowlisted compiler flags (e.g., -ffreestanding -nostdlib)
 
     Returns:
         CompilerResult with compilation status
     """
+    try:
+        architecture = validate_architecture(architecture)
+        optimization = validate_optimization(optimization)
+        extra_flags = validate_extra_flags(extra_flags)
+    except UnsafeInputError as exc:
+        return CompilerResult(
+            success=False,
+            stderr=f"Invalid compiler option: {exc}",
+            return_code=-1,
+            architecture=str(architecture),
+        )
+
     # Handle source - can be Path, path string, or inline code
     # Path objects are always treated as file paths
-    # Strings are treated as file paths only if the file exists
-    if isinstance(source, Path):
-        if not source.exists():
-            return CompilerResult(
-                success=False,
-                stderr=f"Source file not found: {source}",
-                return_code=-1,
-                architecture=architecture,
-            )
-        source_code = source.read_text()
-    elif isinstance(source, str) and Path(source).exists():
-        source_code = Path(source).read_text()
-    else:
-        # Treat as inline source code
-        source_code = str(source)
-    
+    # Strings are treated as file paths only if the file exists; InlineSource is always code
+    try:
+        source_code, source_file = _load_source(source)
+    except FileNotFoundError:
+        return CompilerResult(
+            success=False,
+            stderr="Source file not found",
+            return_code=-1,
+            architecture=architecture,
+        )
+    except UnsafeInputError:
+        return CompilerResult(
+            success=False,
+            stderr="Source path is not in a permitted directory",
+            return_code=-1,
+            architecture=architecture,
+        )
+    native_source: Path | str = source_file if source_file is not None else source_code
+    inline = source_file is None
+
     output_name = output.stem if output else "output"
     
     compilers = detect_compilers()
@@ -675,7 +853,7 @@ def compile_c_source(
                 c for c in compilers[architecture]
                 if not c.is_clang and not c.name.startswith("docker:")
             )
-            return compiler.compile_c(source, output, optimization, extra_flags)
+            return compiler.compile_c(native_source, output, optimization, extra_flags, inline=inline)
         
         # Use Docker for ARM compilation
         return _compile_with_docker(
@@ -690,7 +868,7 @@ def compile_c_source(
     # For x86/x86_64, use native compilers
     if compilers[architecture]:
         compiler = compilers[architecture][0]
-        return compiler.compile_c(source, output, optimization, extra_flags)
+        return compiler.compile_c(native_source, output, optimization, extra_flags, inline=inline)
     
     return CompilerResult(
         success=False,
@@ -700,7 +878,7 @@ def compile_c_source(
 
 
 def compile_to_asm(
-    source: Path | str,
+    source: InlineSource | Path | str,
     architecture: Architecture = "arm64",
     optimization: str = "-O0",
     extra_flags: list[str] | None = None,
@@ -708,34 +886,47 @@ def compile_to_asm(
     """Compile C source to assembly (not object code).
 
     Args:
-        source: Path to C source or inline C code
+        source: Path to C source, inline C code, or ``InlineSource`` (always code)
         architecture: Target architecture
-        optimization: Optimization level
-        extra_flags: Additional compiler flags
+        optimization: Optimization level (one of ``ALLOWED_OPTIMIZATIONS``)
+        extra_flags: Additional allowlisted compiler flags
 
     Returns:
         CompilerResult with assembly code in the 'assembly' field
     """
-    extra_flags = extra_flags or []
-    
+    try:
+        architecture = validate_architecture(architecture)
+        optimization = validate_optimization(optimization)
+        extra_flags = validate_extra_flags(extra_flags)
+    except UnsafeInputError as exc:
+        return CompilerResult(
+            success=False,
+            stderr=f"Invalid compiler option: {exc}",
+            return_code=-1,
+            architecture=str(architecture),
+        )
+
     # Handle source - can be Path, path string, or inline code
-    if isinstance(source, Path):
-        if not source.exists():
-            return CompilerResult(
-                success=False,
-                stderr=f"Source file not found: {source}",
-                return_code=-1,
-                architecture=architecture,
-            )
-        source_code = source.read_text()
-        source_path = source
-    elif isinstance(source, str) and Path(source).exists():
-        source_code = Path(source).read_text()
-        source_path = Path(source)
-    else:
-        source_code = str(source)
-        source_path = None
-    
+    try:
+        source_code, source_path = _load_source(source)
+    except FileNotFoundError:
+        return CompilerResult(
+            success=False,
+            stderr="Source file not found",
+            return_code=-1,
+            architecture=architecture,
+        )
+    except UnsafeInputError:
+        return CompilerResult(
+            success=False,
+            stderr="Source path is not in a permitted directory",
+            return_code=-1,
+            architecture=architecture,
+        )
+    if source_path is not None:
+        # Absolute, so the compiler can never read the file name as an option.
+        source_path = source_path.resolve()
+
     compilers = detect_compilers()
     
     # For ARM targets, use Docker unless we have a real native cross-compiler
@@ -805,7 +996,7 @@ def compile_to_asm(
         ])
         cmd.extend(extra_flags)
 
-        _LOGGER.debug("Generating assembly with: %s", " ".join(cmd))
+        _LOGGER.debug("Generating assembly with: %s", sanitize_log(" ".join(cmd)))
 
         result = subprocess.run(
             cmd,
@@ -853,20 +1044,41 @@ def compile_to_asm(
 
 
 def assemble_source(
-    source: Path | str,
+    source: InlineSource | Path | str,
     architecture: Architecture = "arm64",
     output: Path | None = None,
 ) -> CompilerResult:
     """Assemble assembly source to specified architecture.
 
     Args:
-        source: Path to assembly source or inline assembly code
+        source: Path to assembly source, inline assembly, or ``InlineSource`` (always code)
         architecture: Target architecture
         output: Output path (auto-generated if None)
 
     Returns:
         CompilerResult with assembly status
     """
+    try:
+        architecture = validate_architecture(architecture)
+        source, source_file = _load_source(source)
+        if source_file is not None:
+            source = source_file
+    except FileNotFoundError:
+        return CompilerResult(
+            success=False,
+            stderr="Source file not found",
+            return_code=-1,
+            architecture=str(architecture),
+        )
+    except UnsafeInputError:
+        return CompilerResult(
+            success=False,
+            stderr="Invalid assembler input",
+            return_code=-1,
+            architecture=str(architecture),
+        )
+    inline = source_file is None
+
     compilers = detect_compilers()
 
     if not compilers[architecture]:
@@ -888,7 +1100,7 @@ def assemble_source(
         )
     
     compiler = native_compilers[0]
-    return compiler.assemble(source, output)
+    return compiler.assemble(source, output, inline=inline)
 
 
 def get_available_architectures() -> list[Architecture]:
@@ -912,6 +1124,10 @@ def get_compile_command_preview(
         - compiler: Name of the compiler
         - available: Whether compilation is possible
     """
+    architecture = validate_architecture(architecture)
+    optimization = validate_optimization(optimization)
+    output_name = validate_output_name(output_name)
+
     compilers = detect_compilers()
     
     # Build extra flags - use nostartfiles for freestanding to avoid crt1.o conflict

@@ -5,9 +5,11 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import os
 import queue
 import secrets
+import shlex
 import threading
 import time
 import uuid
@@ -43,8 +45,32 @@ from ..tools import (
     ScriptValidator,
     ToolName,
 )
+from ..utils.safety import UnsafeInputError, resolve_within, safe_stem
 from ..utils.serialization import to_json
 from .debug import debug, setup_flask_debug
+
+_LOGGER = logging.getLogger(__name__)
+
+_GENERIC_ERROR = "Internal error; see server logs for details"
+_SOURCE_TYPES = frozenset({"c", "asm"})
+
+
+def _allowed_binary_roots(state: AppState) -> list[Path]:
+    """Directories the web API may read binaries and sources from.
+
+    The UI only ever sends paths returned by ``/api/upload``, so the upload
+    directory is always allowed; ``[web].allowed_roots`` opts in extra ones.
+    """
+    uploads = Path(state.config.output.artifacts_dir).expanduser() / "uploads"
+    return [uploads, *[Path(root) for root in state.config.web.allowed_roots]]
+
+
+def _download_filename(session: ChatSession, suffix: str) -> str:
+    """Header-safe download name derived from the session's binary name."""
+    from werkzeug.utils import secure_filename
+
+    stem = secure_filename(Path(session.binary_path).stem) or secure_filename(session.session_id) or "session"
+    return f"{stem}{suffix}"
 
 
 class Job:
@@ -784,8 +810,8 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         include_blobs = str(request.args.get("blobs", "")).lower() in {"1", "true", "yes", "on"}
         try:
             record = store.load(record_id, include_blobs=include_blobs)
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+        except ValueError:
+            return jsonify({"error": "Invalid record id"}), 400
         if not record:
             return jsonify({"error": "record not found"}), 404
         if str(request.args.get("format", "")).lower() in {"md", "markdown"}:
@@ -802,8 +828,8 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         tag = request.args.get("tag")
         try:
             insights = extract_insights(store, focus_id=focus_id, tag=tag)
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
+        except ValueError:
+            return jsonify({"error": "Invalid record_id or tag"}), 400
         if str(request.args.get("format", "")).lower() in {"md", "markdown"}:
             return Response(str(insights.get("lab_note") or insights.get("reason") or ""), mimetype="text/markdown")
         return jsonify(insights)
@@ -859,7 +885,7 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
 
         output_format = str(request.args.get("format", "json")).lower()
         if output_format in {"md", "markdown"}:
-            filename = f"{Path(session.binary_path).stem or session.session_id}-r2b-report.md"
+            filename = _download_filename(session, "-r2b-report.md")
             return Response(
                 bundle["report_markdown"],
                 mimetype="text/markdown",
@@ -870,7 +896,7 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         if output_format in {"zip", "archive"}:
             include_binary = str(request.args.get("include_binary", "")).lower() in {"1", "true", "yes", "on"}
             archive = _render_analysis_bundle_zip(bundle, state=state, include_binary=include_binary)
-            filename = f"{Path(session.binary_path).stem or session.session_id}-r2b-session.zip"
+            filename = _download_filename(session, "-r2b-session.zip")
             return Response(
                 archive.getvalue(),
                 mimetype="application/zip",
@@ -935,6 +961,9 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             try:
                 assistant_response = llm_bridge.chat(llm_messages)
             except LLMError as exc:
+                # LLMError messages are curated for the UI (missing model, bad key env var,
+                # provider unreachable); they are not tracebacks and the UI shows them verbatim.
+                _LOGGER.warning("LLM chat request failed: %s", type(exc).__name__, exc_info=True)
                 response_payload["error"] = str(exc)
                 response_payload["messages"] = [
                     _message_to_dict(message) for message in chat_dao.list_messages(session.session_id)
@@ -1475,8 +1504,9 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             else:
                 return jsonify({"error": "Could not parse LLM response", "raw_response": response}), 500
 
-        except Exception as exc:
-            return jsonify({"error": str(exc)}), 500
+        except Exception:
+            _LOGGER.exception("function name suggestion failed")
+            return jsonify({"error": _GENERIC_ERROR}), 500
 
     # Ensure uploads directory exists
     uploads_dir = Path(state.config.output.artifacts_dir).expanduser() / "uploads"
@@ -1563,9 +1593,16 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
         if not binary_path:
             return jsonify({"error": "Missing 'binary' in request body"}), 400
 
-        path = Path(binary_path)
-        if not path.exists():
-            return jsonify({"error": f"Binary path does not exist: {binary_path}"}), 404
+        # Only paths inside the upload directory (or [web].allowed_roots) are analyzed.
+        # The response is identical for missing and out-of-bounds paths so it cannot
+        # be used to probe the filesystem.
+        try:
+            path = resolve_within(str(binary_path), _allowed_binary_roots(state), field="binary")
+            path_ok = path.exists()
+        except (UnsafeInputError, OSError):
+            path_ok = False
+        if not path_ok:
+            return jsonify({"error": "Binary not found in an allowed directory"}), 404
 
         session = chat_dao.get_or_create_session(str(path), title=path.name)
         debug.session_create(session.session_id, str(path))
@@ -1744,13 +1781,13 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             architecture = body.get("architecture", "arm64")
             optimization = body.get("optimization", "-O0")
             freestanding = body.get("freestanding", False)
-            output_name = body.get("output_name", "output")
+            output_name = safe_stem(body.get("output_name") or "output")
             
             preview = preview_compile_with_capabilities(
                 architecture=architecture,
                 optimization=optimization,
                 freestanding=freestanding,
-                output_name=output_name or "output",
+                output_name=output_name,
             )
             return jsonify(preview)
         except ImportError:
@@ -1766,12 +1803,12 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
     def compile_source() -> Any:
         """Compile C source or assemble ASM source."""
         body = request.get_json(silent=True) or {}
-        source_code = body.get("source", "").strip()
-        source_path = body.get("source_path", "").strip()
+        source_code = str(body.get("source") or "").strip()
+        source_path = str(body.get("source_path") or "").strip()
         architecture = body.get("architecture", "arm64")
         source_type = body.get("type", "c")  # "c" or "asm"
         optimization = body.get("optimization", "-O0")
-        output_name = body.get("output_name", "")
+        output_name = str(body.get("output_name") or "")
         freestanding = body.get("freestanding", False)  # No libc mode
         emit_asm = body.get("emit_asm", True)  # Also generate .s file
 
@@ -1779,22 +1816,36 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             return jsonify({"error": "Either 'source' or 'source_path' required"}), 400
 
         try:
-            from ..compilation import compile_c_source, assemble_source, compile_to_asm
+            from ..compilation import InlineSource, compile_c_source, assemble_source, compile_to_asm
+            from ..compilation.compiler import (
+                ALLOWED_OPTIMIZATIONS,
+                SUPPORTED_ARCHITECTURES,
+            )
 
-            # Determine source
+            # Request-controlled compiler options are allowlisted, not passed through.
+            if architecture not in SUPPORTED_ARCHITECTURES:
+                return jsonify({"error": f"Unsupported architecture; use one of: {', '.join(SUPPORTED_ARCHITECTURES)}"}), 400
+            if optimization not in ALLOWED_OPTIMIZATIONS:
+                return jsonify({"error": f"Unsupported optimization; use one of: {', '.join(sorted(ALLOWED_OPTIMIZATIONS))}"}), 400
+            if source_type not in _SOURCE_TYPES:
+                return jsonify({"error": "Unsupported type; use 'c' or 'asm'"}), 400
+
+            # Determine source. File sources must live in the upload directory; inline
+            # source is always treated as code and never as a path.
             if source_path:
-                source = Path(source_path)
-                if not source.exists():
-                    return jsonify({"error": f"Source file not found: {source_path}"}), 404
+                try:
+                    source = resolve_within(source_path, [uploads_dir], field="source_path")
+                except UnsafeInputError:
+                    return jsonify({"error": "Source file not found"}), 404
+                if not source.is_file():
+                    return jsonify({"error": "Source file not found"}), 404
             else:
-                source = source_code
+                source = InlineSource(source_code)
 
-            # Determine output path
+            # Determine output path: a plain file name inside the upload directory
             output = None
             if output_name:
-                # Strip extension if provided, we'll add the right one
-                base_name = output_name.rsplit('.', 1)[0] if '.' in output_name else output_name
-                output = uploads_dir / base_name
+                output = uploads_dir / safe_stem(output_name)
 
             # Build extra flags for freestanding mode
             # Use -nostartfiles to avoid crt1.o conflict when code defines _start
@@ -1861,15 +1912,18 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
             return jsonify({"error": "Assembly source required"}), 400
 
         try:
-            from ..compilation import assemble_source
+            from ..compilation import InlineSource, assemble_source
 
             # Create output in uploads directory
             import hashlib
-            hash_suffix = hashlib.md5(asm_source.encode()).hexdigest()[:8]
+            hash_suffix = hashlib.md5(asm_source.encode(), usedforsecurity=False).hexdigest()[:8]
             output_name = f"modified_{hash_suffix}.o"
             output = uploads_dir / output_name
 
-            result = assemble_source(asm_source, architecture, output)
+            if architecture not in ("arm32", "arm64", "x86", "x86_64"):
+                return jsonify({"error": "Unsupported architecture"}), 400
+
+            result = assemble_source(InlineSource(asm_source), architecture, output)
 
             response = {
                 "success": result.success,
@@ -1944,7 +1998,7 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                 "-v", f"{file_path.parent}:/data:ro",
                 "-w", "/data",
                 "r2b-compiler:latest",
-                "-c", f"{objdump_cmd} -d -w /data/{safe_name}"
+                "-c", shlex.join([objdump_cmd, "-d", "-w", f"/data/{safe_name}"])
             ]
             
             result = subprocess.run(docker_cmd, capture_output=True, text=True, timeout=30)
@@ -1965,8 +2019,9 @@ def create_app(config_path: Optional[Path] = None) -> Flask:
                     capture_output=True, text=True, timeout=30
                 )
                 raw_output = native_result.stdout
-            except Exception as e:
-                return jsonify({"error": f"Failed to disassemble: {e}"}), 500
+            except Exception:
+                _LOGGER.exception("disassembly failed")
+                return jsonify({"error": "Failed to disassemble"}), 500
         
         # Parse objdump output into structured format
         current_section = ""
@@ -2131,9 +2186,9 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                 "task": task_description,
             })
 
-        except Exception as exc:
-            debug.log("ghidra_script_error", str(exc))
-            return jsonify({"error": str(exc)}), 500
+        except Exception:
+            _LOGGER.exception("Ghidra script generation failed")
+            return jsonify({"error": "Script generation failed; see server logs"}), 500
 
     @app.post("/api/ghidra/execute-script")
     def execute_ghidra_script() -> Any:
@@ -2153,9 +2208,16 @@ Generate ONLY the script code, no explanations before or after. The script shoul
         if not script.strip():
             return jsonify({"error": "script is required"}), 400
 
+        use_bridge = bool(state.config.ghidra.use_bridge and state.env.ghidra.bridge_connected)
+        if not use_bridge and binary_path:
+            try:
+                resolve_within(str(binary_path), _allowed_binary_roots(state), field="binary_path")
+            except UnsafeInputError:
+                return jsonify({"error": "binary_path must be inside an allowed directory"}), 400
+
         try:
             # Try to execute via bridge if available
-            if state.config.ghidra.use_bridge and state.env.ghidra.bridge_connected:
+            if use_bridge:
                 output = _execute_script_via_bridge(script, language, state)
             else:
                 # Fall back to headless execution
@@ -2196,7 +2258,7 @@ Generate ONLY the script code, no explanations before or after. The script shoul
             })
 
         except Exception as exc:
-            debug.log("ghidra_execute_error", str(exc))
+            _LOGGER.exception("Ghidra script execution failed")
 
             # Record failure
             _record_trajectory_action(
@@ -2205,12 +2267,12 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                 {
                     "task": task_description,
                     "language": language,
-                    "error": str(exc),
+                    "error": type(exc).__name__,
                     "success": False,
                 },
             )
 
-            return jsonify({"error": str(exc)}), 500
+            return jsonify({"error": "Script execution failed; see server logs"}), 500
 
     @app.get("/api/ghidra/status")
     def ghidra_status() -> Any:
@@ -2342,13 +2404,13 @@ Generate ONLY the script code, no explanations before or after. The script shoul
                 "result": output.result,
             })
 
-        except Exception as exc:
-            debug.log("tools_execute_error", str(exc))
+        except Exception:
+            _LOGGER.exception("tool script execution failed")
             return jsonify({
                 "validation": validation.model_dump(),
                 "execution": None,
                 "result": {},
-                "error": str(exc),
+                "error": "Script execution failed; see server logs",
             }), 500
 
     @app.get("/api/tools/status")
@@ -2475,8 +2537,9 @@ _output.getvalue()
 """
                 result = bridge.remote_eval(remote_code)
                 return str(result) if result else "Script executed successfully (no output)"
-            except Exception as e:
-                return f"Script execution error: {str(e)}"
+            except Exception:
+                _LOGGER.exception("Ghidra bridge script execution failed")
+                return "Script execution failed; see server logs"
         else:
             # For Java, we'd need to compile and run via Ghidra's script manager
             raise NotImplementedError("Java script execution via bridge not yet supported")
@@ -2499,6 +2562,15 @@ def _execute_script_headless(script: str, language: str, binary_path: str | None
     if not binary_path:
         raise RuntimeError("binary_path required for headless execution")
 
+    # Only binaries inside the upload directory (or [web].allowed_roots) may be imported;
+    # the resolved absolute path also cannot be parsed as a headless option.
+    try:
+        resolved_binary = resolve_within(str(binary_path), _allowed_binary_roots(state), field="binary_path")
+    except UnsafeInputError as exc:
+        raise RuntimeError("binary_path is not in an allowed directory") from exc
+    if not resolved_binary.is_file():
+        raise RuntimeError("binary_path is not a file")
+
     # Write script to temp file
     ext = ".py" if language == "python" else ".java"
     with tempfile.NamedTemporaryFile(mode='w', suffix=ext, delete=False) as f:
@@ -2515,7 +2587,7 @@ def _execute_script_headless(script: str, language: str, binary_path: str | None
             str(headless_path),
             str(project_dir),
             "r2b_scripting",
-            "-import", binary_path,
+            "-import", str(resolved_binary),
             "-postScript", script_path,
             "-deleteProject",  # Clean up after
         ]
@@ -3029,8 +3101,9 @@ def _artifact_file_entry(
         path = Path(source_path).expanduser()
         resolved = path.resolve()
         artifacts_root = Path(state.config.output.artifacts_dir).expanduser().resolve()
-    except Exception as exc:
-        entry["reason"] = f"path resolution failed: {exc}"
+    except Exception:
+        _LOGGER.warning("bundle source path resolution failed", exc_info=True)
+        entry["reason"] = "path resolution failed"
         return entry
 
     if not _path_within(resolved, artifacts_root):

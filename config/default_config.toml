@@ -79,6 +79,9 @@ show_compiler = false
 enable_script_execution = false
 enable_native_execution = false
 execution_token_env = "R2B_WEB_EXECUTION_TOKEN"
+# The web API only reads binaries and sources from <artifacts_dir>/uploads. List extra
+# directories here to let /api/analyze and friends use paths outside it.
+allowed_roots = []
 
 [ghidra]
 # Ghidra decompilation supports two modes:

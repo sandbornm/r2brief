@@ -16,6 +16,8 @@ from typing import Any, Callable, TypeVar
 
 from flask import Flask, Request, Response, g, request
 
+from ..utils.safety import sanitize_log
+
 # Check if debug mode is enabled (default: true)
 DEBUG_ENABLED = (
     os.environ.get("R2B_DEBUG") or os.environ.get("R2B_DEBUG", "false")
@@ -66,15 +68,17 @@ def log_request(category: str, message: str, data: dict[str, Any] | None = None)
     if not DEBUG_ENABLED:
         return
 
+    # Messages embed request-controlled values (paths, names); keep each record on one line.
+    category = sanitize_log(category, max_len=64)
+    message = sanitize_log(message, max_len=2000)
+
     timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3]
     prefix = colored(f"[{timestamp}]", "gray")
     cat = colored(f"[{category.upper()}]", "cyan")
 
     if data:
         # Format data as compact JSON
-        data_str = json.dumps(data, default=str, separators=(",", ":"))
-        if len(data_str) > 200:
-            data_str = data_str[:200] + "..."
+        data_str = sanitize_log(json.dumps(data, default=str, separators=(",", ":")), max_len=200)
         logger.debug(f"{prefix} {cat} {message} {colored(data_str, 'dim')}")
     else:
         logger.debug(f"{prefix} {cat} {message}")

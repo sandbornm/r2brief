@@ -5,6 +5,23 @@ Version source of truth: `pyproject.toml`. GitHub Releases are tags `vX.Y.Z`.
 
 ## Unreleased
 
+- Web API hardening (static-analysis findings). **Behavior change:**
+  `/api/analyze`, `/api/compile` `source_path` and Ghidra headless
+  `binary_path` now only accept files inside the upload directory
+  (`<artifacts_dir>/uploads`); the UI already only sends those. To analyze
+  binaries elsewhere over HTTP, list their directories in
+  `[web].allowed_roots`. `/api/compile` allowlists `architecture`,
+  `optimization` (`-O0`..`-Og`) and `type`, treats inline `source` as code
+  (never a path), and reduces `output_name` to a plain file stem. The Docker
+  compile path quotes every token it passes to bash. Error responses no
+  longer echo exception text (details go to server logs), debug log lines
+  cannot be split by CR/LF in request values, and download file names are
+  header-safe. The decompiler panel renders C as React text instead of
+  `dangerouslySetInnerHTML`.
+- Supply chain: GitHub Actions are pinned to commit SHAs, Dependabot and uv
+  use a 7-day cooldown, `capstone` is >=5.0.8 (uv overrides angr's exact
+  pin), and vulnerable floors for `python-dotenv`, `idna`, `pygments`,
+  `anyio`, `minimatch`, `@babel/runtime`, `debug` and others are raised.
 - Stripped Rust ARM ranking is back to user code first. On fd-find 10.5.2
   for aarch64 (`strip` and `cargostrip`), user-code p@5/p@10 goes from
   0.2/0.2 to 1.0/0.8. The causes: std's vendored `/rust/deps/` crates

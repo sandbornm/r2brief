@@ -290,7 +290,7 @@ def _add_radare_quick(acc: _GraphAccumulator, r2: Any) -> None:
         if not value:
             continue
         offset = _normalize_address(item.get("offset") or item.get("vaddr") or item.get("paddr"))
-        string_id = _node_id("string", offset or hashlib.sha1(value.encode()).hexdigest()[:12])
+        string_id = _node_id("string", offset or hashlib.sha1(value.encode(), usedforsecurity=False).hexdigest()[:12])  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
         acc.add_node(
             string_id,
             kind="string",
@@ -665,7 +665,7 @@ def _add_ghidra_deep(acc: _GraphAccumulator, ghidra: Any) -> None:
         if not value:
             continue
         address = _normalize_address(item.get("address") or item.get("offset"))
-        string_id = _node_id("string", address or hashlib.sha1(value.encode()).hexdigest()[:12])
+        string_id = _node_id("string", address or hashlib.sha1(value.encode(), usedforsecurity=False).hexdigest()[:12])  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
         acc.add_node(string_id, kind="string", label=value[:80], source="ghidra", address=address, properties={"value": value})
         acc.add_edge("contains_string", acc.binary_node_id, string_id, source_tool="ghidra")
 
@@ -740,8 +740,10 @@ def _node_id(kind: str, key: Any) -> str:
     return _stable_id(kind, text)
 
 
+# SHA-1 is only a short, stable node-id fingerprint here (not a security control), and it
+# must stay SHA-1 so ids in existing graphs and saved sessions do not change.
 def _stable_id(prefix: str, *parts: Any) -> str:
-    digest = hashlib.sha1("|".join(str(part) for part in parts).encode()).hexdigest()[:16]
+    digest = hashlib.sha1("|".join(str(part) for part in parts).encode(), usedforsecurity=False).hexdigest()[:16]  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
     return f"{prefix}:{digest}"
 
 

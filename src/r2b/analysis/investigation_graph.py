@@ -339,8 +339,10 @@ def _node_id(kind: str, key: Any) -> str:
     return _stable_id(kind, text)
 
 
+# SHA-1 is only a short, stable node-id fingerprint here (not a security control), and it
+# must stay SHA-1 so ids in existing graphs and saved sessions do not change.
 def _stable_id(prefix: str, *parts: Any) -> str:
-    digest = hashlib.sha1("|".join(str(part) for part in parts).encode()).hexdigest()[:16]
+    digest = hashlib.sha1("|".join(str(part) for part in parts).encode(), usedforsecurity=False).hexdigest()[:16]  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
     return f"{prefix}:{digest}"
 
 

@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import tempfile
+import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -20,6 +21,13 @@ DEFAULT_GHIDRA_INSTALL_ROOT = Path("~/.local/share/r2b/tools").expanduser()
 
 class GhidraSetupError(RuntimeError):
     """Raised when a Ghidra setup action cannot be completed."""
+
+
+def _require_https(url: str) -> str:
+    """urllib also opens ``file://`` and ``ftp://``; only ever fetch over HTTPS."""
+    if urllib.parse.urlsplit(url).scheme.lower() != "https":
+        raise GhidraSetupError(f"Refusing to fetch non-HTTPS URL: {url}")
+    return url
 
 
 @dataclass(slots=True)
@@ -58,14 +66,14 @@ def resolve_ghidra_release_url(version: str) -> str:
     for tag_template in GHIDRA_TAG_TEMPLATES:
         tag = tag_template.format(version=version)
         request = urllib.request.Request(
-            GHIDRA_RELEASE_API.format(tag=tag),
+            _require_https(GHIDRA_RELEASE_API.format(tag=urllib.parse.quote(tag, safe=""))),
             headers={
                 "Accept": "application/vnd.github+json",
                 "User-Agent": "r2b-ghidra-setup",
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with urllib.request.urlopen(request, timeout=15) as response:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
                 payload = json.loads(response.read().decode("utf-8"))
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             errors.append(f"{tag}: {type(exc).__name__}: {exc}")
@@ -150,9 +158,9 @@ def setup_ghidra(
 def download_archive(url: str, destination: Path) -> None:
     """Download a Ghidra archive to destination."""
 
-    request = urllib.request.Request(url, headers={"User-Agent": "r2b-ghidra-setup"})
+    request = urllib.request.Request(_require_https(url), headers={"User-Agent": "r2b-ghidra-setup"})
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=60) as response:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             with destination.open("wb") as out:
                 shutil.copyfileobj(response, out)
     except (HTTPError, URLError, TimeoutError) as exc:

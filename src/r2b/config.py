@@ -136,6 +136,18 @@ class WebSettings(BaseModel):
     enable_script_execution: bool = False
     enable_native_execution: bool = False
     execution_token_env: str = "R2B_WEB_EXECUTION_TOKEN"
+    # Extra directories (besides the upload directory) the web API may read binaries
+    # and sources from. Request paths outside these roots are rejected.
+    allowed_roots: list[Path] = Field(default_factory=list)
+
+    @field_validator("allowed_roots", mode="before")
+    @classmethod
+    def _expand_allowed_roots(cls, value: Any) -> list[Path]:
+        if value in (None, ""):
+            return []
+        if isinstance(value, (str, Path)):
+            value = [value]
+        return [Path(str(item)).expanduser() for item in value]
 
 
 class GhidraSettings(BaseModel):

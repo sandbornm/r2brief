@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,9 @@ from .compiler import (
     detect_compilers,
     get_compile_command_preview,
 )
+from ..utils.safety import UnsafeInputError
+
+_LOGGER = logging.getLogger(__name__)
 
 ARCH_LABELS: dict[str, str] = {
     "arm32": "ARM32 (armhf)",
@@ -41,9 +45,10 @@ def sniff_compiler_capabilities() -> dict[str, Any]:
     errors: list[str] = []
     try:
         compilers = detect_compilers()
-    except Exception as exc:  # pragma: no cover - defensive UI fallback
+    except Exception:  # pragma: no cover - defensive UI fallback
+        _LOGGER.exception("compiler detection failed")
         compilers = {"arm32": [], "arm64": [], "x86": [], "x86_64": []}
-        errors.append(str(exc))
+        errors.append("Compiler detection failed; see server logs")
 
     docker_available = _is_docker_available()
     docker_image_exists = docker_available and _docker_image_exists(DOCKER_COMPILER_IMAGE)
@@ -121,13 +126,22 @@ def preview_compile_with_capabilities(
                 output_name=output_name or "output",
             )
         )
-    except Exception as exc:
+    except UnsafeInputError:
         preview = {
             "command": "",
             "uses_docker": False,
             "compiler": "none",
             "available": False,
-            "error": str(exc),
+            "error": "Unsupported architecture, optimization level, or output name",
+        }
+    except Exception:
+        _LOGGER.exception("compile command preview failed")
+        preview = {
+            "command": "",
+            "uses_docker": False,
+            "compiler": "none",
+            "available": False,
+            "error": "Could not build the compile command preview",
         }
 
     snapshot = sniff_compiler_capabilities()

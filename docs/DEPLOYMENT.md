@@ -116,6 +116,10 @@ shipped services in v0.1.
   `Authorization: Bearer` value matching `R2B_WEB_EXECUTION_TOKEN`.
 - Frida or GEF requests through `/api/analyze` require the same token and
   `[web].enable_native_execution=true`.
+- The web API reads binaries and C/asm sources only from the upload
+  directory (`<artifacts_dir>/uploads`). Other directories must be listed in
+  `[web].allowed_roots`; paths outside them get the same 404 as missing
+  files. Compiler `optimization` and flags are allowlisted.
 - The reference Compose ports bind to loopback and drop Linux capabilities.
   A public deployment still needs authentication, TLS, request limits, and a
   separate disposable execution worker; do not expose this Flask service

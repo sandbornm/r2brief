@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,11 +18,25 @@ def _annotation_id(session_id: str, row: dict[str, Any]) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:24]
 
 
+_SQL_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# SQLite cannot bind identifiers or column types as parameters, so migrations interpolate
+# them. Only these code-constant values are ever accepted; request data never reaches here.
+_MIGRATABLE_TABLES = frozenset({"function_names"})
+_COLUMN_DECLARATIONS = frozenset({"TEXT"})
+
+
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, decl: str) -> None:
-    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    # Guard the f-strings below: identifiers must be plain names from the allowlist.
+    if table not in _MIGRATABLE_TABLES:
+        raise ValueError(f"table not allowed for column migration: {table!r}")
+    if not _SQL_IDENTIFIER_RE.fullmatch(column):
+        raise ValueError(f"invalid column name: {column!r}")
+    if decl not in _COLUMN_DECLARATIONS:
+        raise ValueError(f"column declaration not allowed: {decl!r}")
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()  # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
     names = {str(row[1]) for row in rows}
     if column not in names:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")  # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
 
 
 class Database:

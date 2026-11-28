@@ -59,6 +59,8 @@ def app_client(tmp_path: Path):
             test_config.output = OutputSettings(
                 artifacts_dir=tmp_path / "artifacts",
             )
+            # Test binaries live in tmp_path, outside the default upload directory.
+            test_config.web.allowed_roots = [tmp_path]
             mock_config.return_value = test_config
 
             app = create_app()

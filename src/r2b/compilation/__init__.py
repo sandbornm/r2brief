@@ -3,6 +3,7 @@
 from .compiler import (
     Compiler,
     CompilerResult,
+    InlineSource,
     detect_compilers,
     compile_c_source,
     compile_to_asm,
@@ -14,6 +15,7 @@ from .sniffer import preview_compile_with_capabilities, sniff_compiler_capabilit
 __all__ = [
     "Compiler",
     "CompilerResult",
+    "InlineSource",
     "detect_compilers",
     "compile_c_source",
     "compile_to_asm",
